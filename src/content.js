@@ -9,7 +9,15 @@
  */
 
 const EVENT = {
-  name: 'FC OSAKA×UPDATER サステナ盆踊り',
+  // タイトルは3層構造。FC大阪への提案中のため、確定したらここだけ直せばよい。
+  //   titleMain … 祭りの名前（主役）
+  //   titleSub  … 内容が分かる副題
+  //   presented … 協賛の表記
+  titleMain: '夕照祭2026',
+  titleSub:  'FC大阪サステナ盆踊り',
+  presented: 'presented by UPDATER',
+  // 1行で書くときの表記（メール件名・ページタイトル・OGPなど）
+  name: '夕照祭2026 FC大阪サステナ盆踊り',
   nameEn: 'SUSTAINA BON ODORI',
   organizer: 'FC大阪サステナ盆踊り実行委員会',
   organizerNote: 'FC大阪／UPDATER',

@@ -1,14 +1,14 @@
 /**
  * メール送信。
  *
- * すべて fcosaka_bondance@kreha-c.com（表示名「サステナ盆踊り実行委員会」）から送る。
+ * すべて fcosaka_bondance@kreha-c.com（表示名は設定シートの「送信元表示名」）から送る。
  * このアドレスは hello@kreha-c.com のエイリアスとして Gmail に登録されている必要がある。
  * 未登録のまま送ると差出人が hello@ になるため、送信前に登録状況を確認する。
  *
  * 署名は「サステナ盆踊り実行委員会（FC大阪／UPDATER）」（共同主催の見え方・monitor U5）。
  */
 
-var EVENT_NAME = 'FC OSAKA×UPDATER サステナ盆踊り';
+var EVENT_NAME = '夕照祭2026 FC大阪サステナ盆踊り';
 
 /**
  * エイリアスが Gmail に登録されているか。未登録なら null を返す。

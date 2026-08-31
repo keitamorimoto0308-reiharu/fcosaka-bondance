@@ -64,7 +64,8 @@ html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:${T.fontJa};font-size:16px;line-height:1.8;overflow-wrap:anywhere}
 img,svg{max-width:100%;display:block}
-.wrap{max-width:760px;margin:0 auto;padding:0 var(--s4)}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px}
+@media (min-width:400px){ .wrap{padding:0 24px} }
 .ic{flex:none;stroke:currentColor}
 
 /* ── ヘッダー（薄く。主役はヒーロー） */
@@ -96,11 +97,14 @@ img,svg{max-width:100%;display:block}
    テキストロゴは黒一色のため濃色背景では見えない。白抜き版が届いたら差し替える。 */
 .hero-mark{position:absolute;right:-56px;bottom:-64px;width:280px;height:280px;
   z-index:-1;opacity:.16;pointer-events:none}
-.hero-inner{position:relative;z-index:1;padding:var(--s7) 0 var(--s6)}
+.hero-inner{position:relative;z-index:1;padding-top:var(--s7);padding-bottom:var(--s6)}
 .hero .eyebrow{display:inline-block;font-size:11px;letter-spacing:.18em;font-weight:700;
   background:var(--brand);color:var(--ink);padding:6px 12px;border-radius:99px;margin:0 0 var(--s4)}
-.hero h1{margin:0 0 var(--s3);font-size:30px;line-height:1.35;font-weight:700;letter-spacing:.01em;
-  color:var(--brand)}
+.hero h1{margin:0 0 var(--s3);line-height:1.28;font-weight:700;letter-spacing:.01em;
+  color:var(--brand);font-size:34px}
+.hero h1 .sub{display:block;font-size:20px;margin-top:6px;letter-spacing:.02em}
+.hero .presented{font-family:${T.fontDisp};font-size:13px;letter-spacing:.22em;
+  color:var(--white);opacity:.82;margin:0 0 var(--s3)}
 .hero .en{font-family:${T.fontDisp};font-size:15px;letter-spacing:.34em;color:var(--brand);
   opacity:.78;margin:0 0 var(--s2)}
 .hero .place{margin:0;font-size:15px;font-weight:700;color:var(--white)}
@@ -247,13 +251,15 @@ footer a{color:var(--brand)}
 footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
 
 @media (min-width:600px){
-  .hero h1{font-size:38px}
-  .hero-inner{padding:var(--s8) 0 var(--s7)}
+  .hero h1{font-size:46px}
+  .hero h1 .sub{font-size:24px}
+  .hero-inner{padding-top:var(--s8);padding-bottom:var(--s7)}
   .facts-grid{grid-template-columns:repeat(4,1fr)}
   .fact .bg{font-size:44px}
 }
 @media (max-width:380px){
-  .hero h1{font-size:25px}
+  .hero h1{font-size:28px}
+  .hero h1 .sub{font-size:17px}
   .fact .bg{font-size:32px}
   .kv>div{grid-template-columns:1fr;gap:0}
 }
@@ -269,7 +275,8 @@ function renderHero() {
     <div class="wrap hero-inner">
       <span class="eyebrow">出店者募集</span>
       <p class="en">${esc(C.EVENT.nameEn)}</p>
-      <h1>${esc(C.EVENT.name)}</h1>
+      <h1>${esc(C.EVENT.titleMain)}<span class="sub">${esc(C.EVENT.titleSub)}</span></h1>
+      <p class="presented">${esc(C.EVENT.presented)}</p>
       <p class="place">${esc(C.EVENT.date)}／${esc(C.EVENT.venueShort)}</p>
       <p class="match">${esc(C.EVENT.match)}　KICK OFF 14:00</p>
       <div class="hero-cta">
