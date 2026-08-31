@@ -14,10 +14,10 @@
 :root{
   --brand:#7FCAF1; --brand-deep:#3E9FD1; --ink:#231816; --ink-muted:#6B6360;
   --white:#FFFFFF; --accent:#B5714C; --accent-pale:#F5EDE6;
-  --bg:#FFFFFF; --bg-subtle:#F7F9FB; --card-bg:#F7F9FB; --header-bg:#FFFFFF;
+  --bg:#FFFFFF; --bg-subtle:#F7F9FB; --card-bg:#F5EDE6; --header-bg:#FFFFFF;
   --error:#C0392B; --radius:10px;
-  --gap:40px; --card-pad:20px;
-  --rule-w:1px; --rule-c:#7FCAF1;
+  --gap:28px; --card-pad:16px;
+  --rule-w:3px; --rule-c:#B5714C;
 }
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -63,7 +63,7 @@ img{max-width:100%;height:auto;display:block}
 }
 .hero .lead{margin:0;color:var(--ink-muted);font-size:14px}
 .hero--pattern::before,.hero--hero::before{
-  content:'';position:absolute;inset:0;opacity:0;
+  content:'';position:absolute;inset:0;opacity:0.05;
   background-image:var(--asanoha);background-size:34px 60px;
 }
 .hero--hero{background:linear-gradient(135deg,var(--brand) 0%,#BFE4F7 55%,var(--accent-pale) 100%)}
@@ -206,7 +206,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 6px}
 
 <main>
 <div id="intro-area">
-  <div class="hero hero--flat">
+  <div class="hero hero--pattern">
     <div class="wrap hero-inner">
       <h1>FC OSAKA×UPDATER サステナ盆踊り<br>出店者募集</h1>
       <p class="lead">2026年10月24日（土）／東大阪市花園ラグビー場（場外エリア）</p>

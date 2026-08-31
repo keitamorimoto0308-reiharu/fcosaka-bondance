@@ -14,10 +14,10 @@
 :root{
   --brand:#7FCAF1; --brand-deep:#3E9FD1; --ink:#231816; --ink-muted:#6B6360;
   --white:#FFFFFF; --accent:#B5714C; --accent-pale:#F5EDE6;
-  --bg:#FFFFFF; --bg-subtle:#F7F9FB; --card-bg:#F7F9FB; --header-bg:#FFFFFF;
+  --bg:#FFFFFF; --bg-subtle:#F7F9FB; --card-bg:#F7F9FB; --header-bg:#231816;
   --error:#C0392B; --radius:10px;
-  --gap:40px; --card-pad:20px;
-  --rule-w:1px; --rule-c:#7FCAF1;
+  --gap:32px; --card-pad:18px;
+  --rule-w:4px; --rule-c:#B5714C;
 }
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -35,7 +35,7 @@ img{max-width:100%;height:auto;display:block}
 .logo-main{
   display:inline-block;font-family:'Oswald', 'Noto Sans JP', sans-serif;font-weight:600;letter-spacing:.04em;
   font-size:20px;line-height:1.3;
-  color:var(--ink);
+  color:var(--white);
 }
 .logo-main small{display:block;font-size:11px;letter-spacing:.18em;color:var(--brand);font-weight:400}
 .logo-placeholder{
@@ -45,25 +45,25 @@ img{max-width:100%;height:auto;display:block}
 .supported{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
 .supported .label{
   font-size:10px;letter-spacing:.12em;
-  color:var(--ink-muted);
+  color:#B9B3B0;
 }
 .supported img{height:26px;width:auto}
 .supported .textlogo{height:20px;image-rendering:auto}
 .supported .updater-tmp{
   font-size:11px;padding:3px 8px;border:1px dashed currentColor;border-radius:4px;
-  color:var(--ink-muted);
+  color:#B9B3B0;
 }
 
 /* ── ヒーロー */
 .hero{position:relative;overflow:hidden}
-.hero-inner{position:relative;z-index:1;padding:24px 0 18px}
+.hero-inner{position:relative;z-index:1;padding:34px 0 26px}
 .hero h1{
-  margin:0 0 6px;font-size:22px;line-height:1.45;
+  margin:0 0 6px;font-size:26px;line-height:1.45;
   font-weight:700;letter-spacing:.01em;
 }
 .hero .lead{margin:0;color:var(--ink-muted);font-size:14px}
 .hero--pattern::before,.hero--hero::before{
-  content:'';position:absolute;inset:0;opacity:0;
+  content:'';position:absolute;inset:0;opacity:0.08;
   background-image:var(--asanoha);background-size:34px 60px;
 }
 .hero--hero{background:linear-gradient(135deg,var(--brand) 0%,#BFE4F7 55%,var(--accent-pale) 100%)}
@@ -206,7 +206,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 6px}
 
 <main>
 <div id="intro-area">
-  <div class="hero hero--flat">
+  <div class="hero hero--hero">
     <div class="wrap hero-inner">
       <h1>FC OSAKA×UPDATER サステナ盆踊り<br>出店者募集</h1>
       <p class="lead">2026年10月24日（土）／東大阪市花園ラグビー場（場外エリア）</p>
