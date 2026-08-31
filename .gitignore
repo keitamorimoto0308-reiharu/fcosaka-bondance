@@ -1,0 +1,11 @@
+# 内部資料（仕様書・台帳URL・メールアドレス等を含むため公開しない）
+docs/internal/
+
+# 依存・ビルド作業物
+node_modules/
+.clasp.json
+.clasprc.json
+test-results/
+playwright-report/
+.DS_Store
+Thumbs.db
