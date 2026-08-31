@@ -22,6 +22,11 @@ const ENDPOINT = fs.existsSync(endpointPath)
   ? JSON.parse(fs.readFileSync(endpointPath, 'utf8'))
   : { gasUrl: '' };
 
+// 募集要項PDFは実体があるときだけリンクを出す。押しても何も出ないボタンは、
+// 「壊れている」と受け取られて離脱に直結する（モニター：飲食店主・CSR担当・営業）。
+const PDF_FILE = 'boshu-yoko.pdf';
+const PDF_EXISTS = fs.existsSync(path.join(ROOT, 'assets', PDF_FILE));
+
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -56,10 +61,7 @@ img{max-width:100%;height:auto;display:block}
   color:${v.headerBg === v.ink ? 'var(--white)' : 'var(--ink)'};
 }
 .logo-main small{display:block;font-size:11px;letter-spacing:.18em;color:var(--brand);font-weight:400}
-.logo-placeholder{
-  display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;
-  border:1px dashed var(--brand);
-}
+.logo-placeholder{display:inline-flex;align-items:center;gap:8px}
 .supported{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
 .supported .label{
   font-size:10px;letter-spacing:.12em;
@@ -68,8 +70,8 @@ img{max-width:100%;height:auto;display:block}
 .supported img{height:26px;width:auto}
 .supported .textlogo{height:20px;image-rendering:auto}
 .supported .updater-tmp{
-  font-size:11px;padding:3px 8px;border:1px dashed currentColor;border-radius:4px;
-  color:${v.headerBg === v.ink ? '#B9B3B0' : 'var(--ink-muted)'};
+  font-size:13px;font-weight:700;letter-spacing:.06em;
+  color:${v.headerBg === v.ink ? '#E8E4E2' : 'var(--ink)'};
 }
 
 /* ── ヒーロー */
@@ -80,6 +82,7 @@ img{max-width:100%;height:auto;display:block}
   font-weight:700;letter-spacing:.01em;
 }
 .hero .lead{margin:0;color:var(--ink-muted);font-size:14px}
+.notice-closed{margin:10px 0 0;font-size:12px;line-height:1.7;color:var(--ink-muted)}
 .hero--pattern::before,.hero--hero::before{
   content:'';position:absolute;inset:0;opacity:${v.patternAlpha};
   background-image:var(--asanoha);background-size:34px 60px;
@@ -94,6 +97,7 @@ img{max-width:100%;height:auto;display:block}
 .summary div{background:var(--white);padding:12px 14px}
 .summary dt{font-size:11px;color:var(--ink-muted);letter-spacing:.06em;margin:0 0 2px}
 .summary dd{margin:0;font-weight:700;font-size:15px;line-height:1.5}
+.summary .sum-note{display:block;font-size:11px;color:var(--ink-muted);margin-top:2px}
 .cta-row{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 var(--gap)}
 .btn-pdf{
   display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:var(--radius);
@@ -209,7 +213,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 6px}
 // ─────────────────────────────────────────── 概要部分
 function renderSummary() {
   const cells = C.SUMMARY.map(s => `
-      <div><dt>${esc(s.label)}</dt><dd${s.fromConfig ? ` data-config="${esc(s.fromConfig)}"` : ''}>${esc(s.value) || '—'}</dd></div>`).join('');
+      <div><dt>${esc(s.label)}</dt><dd${s.fromConfig ? ` data-config="${esc(s.fromConfig)}"` : ''}>${esc(s.value) || '—'}</dd>${s.note ? `<span class="sum-note">${esc(s.note)}</span>` : ''}</div>`).join('');
   return `<dl class="summary">${cells}\n    </dl>`;
 }
 
@@ -471,8 +475,11 @@ function updateRental(){
   var map = { tent: sizeKey ? p[sizeKey] : null, table: p.table, chair: p.chair };
 
   $$('[data-price]').forEach(function(el){
-    var unit = map[el.getAttribute('data-price')];
-    el.textContent = (unit == null) ? '単価：調整中' : '単価：' + Number(unit).toLocaleString('ja-JP') + '円';
+    var k = el.getAttribute('data-price');
+    var unit = map[k];
+    if (unit != null) { el.textContent = '単価：' + Number(unit).toLocaleString('ja-JP') + '円'; return; }
+    // 「調整中」は単価未設定の意味に限定する。区画未選択と混同させない。
+    el.textContent = (k === 'tent' && !sizeKey) ? '区画をお選びいただくと単価を表示します' : '単価：調整中';
   });
 
   var known = true, total = 0;
@@ -496,26 +503,57 @@ function updateRental(){
   }
 }
 
-/** 担当社員プルダウン（検索付き）。取得に失敗してもフォームは止めない。 */
+/**
+ * 担当社員プルダウン。取得に失敗してもフォームは止めない。
+ *
+ * 3つの罠を塞いである：
+ *  - 絞り込みのたびに選択が無言でリセットされる → 選択値を退避して復元する
+ *  - 一致0件で「わからない」まで消え、必須項目なのに何も選べなくなる → 常に残す
+ *  - 人数が少ないのに検索欄が出て、質問が2つあるように見える → 一定数を超えたときだけ出す
+ */
+var STAFF_FALLBACK = 'わからない／FC大阪以外からの紹介';
+var SEARCH_THRESHOLD = 12;
+
 function setupStaff(list){
   var sel = document.getElementById('fcosakaStaff');
   var box = document.getElementById('fcosakaStaff-search');
   if (!sel) return;
   var opts = (list && list.length ? list.map(function(s){ return s.label; }) : []);
-  var fallback = 'わからない／FC大阪以外からの紹介';
-  if (opts.indexOf(fallback) === -1) opts.push(fallback);
+
+  if (box) box.classList.toggle('hidden', opts.length < SEARCH_THRESHOLD);
 
   function render(filter){
     var f = (filter || '').trim();
-    sel.innerHTML = '<option value="">選択してください</option>';
-    opts.filter(function(o){ return !f || o.indexOf(f) !== -1; })
-        .forEach(function(o){
-          var op = document.createElement('option');
-          op.value = o; op.textContent = o; sel.appendChild(op);
-        });
+    var keep = sel.value;                       // 選択を退避
+    var hits = opts.filter(function(o){ return !f || o.indexOf(f) !== -1; });
+
+    sel.innerHTML = '';
+    var first = document.createElement('option');
+    first.value = '';
+    first.textContent = (f && !hits.length) ? '該当する担当者が見つかりません' : '選択してください';
+    sel.appendChild(first);
+
+    hits.concat([STAFF_FALLBACK]).forEach(function(o){  // 「わからない」は常に残す
+      var op = document.createElement('option');
+      op.value = o; op.textContent = o; sel.appendChild(op);
+    });
+
+    if (keep && Array.prototype.some.call(sel.options, function(o){ return o.value === keep; })) {
+      sel.value = keep;                         // 選択を復元
+    }
   }
   render('');
   if (box) box.addEventListener('input', function(){ render(box.value); });
+
+  // 営業が送るURL（?staff=...）で担当者を先に選んでおく。
+  // 実際にフォームを入力するのは、営業が名刺を渡した相手とは限らないため。
+  try {
+    var want = new URLSearchParams(location.search).get('staff');
+    if (want) {
+      var hit = opts.filter(function(o){ return o === want || o.indexOf(want) === 0; })[0];
+      if (hit) { sel.value = hit; if (box) box.value = ''; }
+    }
+  } catch(e){}
 }
 
 /** 起動時に設定を取りに行く。失敗してもフォームは表示したまま進める。 */
@@ -574,14 +612,19 @@ function submitForm(){
     return;
   }
 
+  var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (ac) ac.abort(); }, 60000);
+
   fetch(GAS_URL, {
     method:'POST',
     headers:{ 'Content-Type':'text/plain;charset=utf-8' }, // プリフライトを避ける
-    body: JSON.stringify({ action:'submit', submissionId: submissionId, values: v })
+    body: JSON.stringify({ action:'submit', submissionId: submissionId, values: v }),
+    signal: ac ? ac.signal : undefined
   })
+  .then(function(r){ clearTimeout(timer); return r; })
   .then(function(r){ return r.json(); })
   .then(function(d){
-    if (d && d.ok){ showDone(d.receiptId, d.mailWarning); return; }
+    if (d && d.ok){ clearDraft(); showDone(d.receiptId, d.mailWarning); return; }
     if (d && d.error === 'validation'){ showErrors(d.fields || []); }
     else if (d && d.error === 'closed'){ showClosed(); return; }
     else {
@@ -600,14 +643,93 @@ function submitForm(){
   });
 }
 
+/**
+ * 入力内容の自動保存。
+ * 想定利用者は店の営業中にスマホで少しずつ入力する。途中で画面を閉じたら
+ * 企業名から打ち直し、では二度目はやってもらえない（モニター：飲食店主）。
+ * 保存先はこの端末のブラウザのみ。送信が成功したら消す。
+ */
+var DRAFT_KEY = 'bondance_draft_v1';
+
+function saveDraft(){
+  try {
+    var v = collect();
+    delete v.website2;                                  // ハニーポットは保存しない
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ t: Date.now(), v: v }));
+    var el = $('#draft-note');
+    if (el) { el.textContent = '入力内容をこの端末に一時保存しました'; el.classList.remove('hidden'); }
+  } catch(e){}
+}
+
+function restoreDraft(){
+  var d;
+  try { d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch(e){ return; }
+  if (!d || !d.v) return;
+  if (Date.now() - (d.t || 0) > 1000*60*60*24*30) { clearDraft(); return; }  // 30日で破棄
+
+  FIELDS.forEach(function(f){
+    var val = d.v[f.key];
+    if (val === undefined) return;
+    if (f.type === 'checkboxes' && Array.isArray(val)){
+      $$('input[name="'+f.key+'"]').forEach(function(el){ el.checked = val.indexOf(el.value) !== -1; });
+    } else if (f.type === 'radio'){
+      $$('input[name="'+f.key+'"]').forEach(function(el){ el.checked = (el.value === val); });
+    } else if (f.type === 'consent'){
+      var c = document.getElementById(f.key); if (c) c.checked = !!val;
+    } else if (f.type !== 'honeypot'){
+      var el2 = document.getElementById(f.key); if (el2) el2.value = val;
+    }
+    if (f.unknownCheckbox && d.v[f.unknownCheckbox.key] !== undefined){
+      var u = document.getElementById(f.unknownCheckbox.key);
+      if (u) u.checked = !!d.v[f.unknownCheckbox.key];
+    }
+  });
+  var note = $('#draft-note');
+  if (note) {
+    note.textContent = '前回の入力内容を復元しました';
+    note.classList.remove('hidden');
+  }
+}
+
+function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch(e){} }
+
+/** 送信直前の確認。スマホでは「上記の内容」が画面の外にあって見えない。 */
+function renderConfirm(){
+  var box = $('#confirm-box'); if (!box) return;
+  var v = collect();
+  var pick = ['companyName','boothName','contactName','contactEmail','contactPhone',
+              'boothTypes','boothSize','power','fcosakaStaff'];
+  var rows = pick.map(function(k){
+    var f = FIELDS.filter(function(x){ return x.key === k; })[0];
+    if (!f || !isVisible(f, v)) return '';
+    var val = v[k];
+    if (Array.isArray(val)) val = val.join('、');
+    if (f.options && f.options.length && typeof f.options[0] === 'object'){
+      f.options.forEach(function(o){ if (o.value === val) val = o.label; });
+    }
+    if (!val) val = '（未入力）';
+    return '<div><dt>' + f.label + '</dt><dd>' + String(val).replace(/[<>&]/g,'') + '</dd></div>';
+  }).join('');
+  box.innerHTML = '<h3>この内容で送信します</h3><dl class="kv">' + rows + '</dl>'
+    + '<p class="inline-note">その他の項目も含めて送信されます。'
+    + '送信後、ご記入のメールアドレスに全文の控えをお送りします。</p>';
+}
+
 document.addEventListener('DOMContentLoaded', function(){
+  restoreDraft();
   applyVisibility();
   updateRental();
   loadConfig();
-  document.addEventListener('change', function(){ applyVisibility(); updateRental(); });
+  document.addEventListener('change', function(){
+    applyVisibility(); updateRental(); renderConfirm(); saveDraft();
+  });
+  var typeTimer = null;
   document.addEventListener('input',  function(e){
     if (e.target && e.target.type === 'number') updateRental();
+    clearTimeout(typeTimer);
+    typeTimer = setTimeout(function(){ renderConfirm(); saveDraft(); }, 800);
   });
+  renderConfirm();
   $('#submit-btn').addEventListener('click', function(e){ e.preventDefault(); submitForm(); });
 });
 `;
@@ -627,6 +749,13 @@ function page(theme) {
 <title>出店応募｜${esc(C.EVENT.name)}</title>
 <meta name="description" content="${esc(C.EVENT.date)}、${esc(C.EVENT.venue)}で開催する${esc(C.EVENT.name)}の出店応募フォームです。出店料無料。">
 <meta name="robots" content="noindex">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${esc(C.EVENT.name)}">
+<meta property="og:title" content="${esc(C.EVENT.name)}｜出店者募集">
+<meta property="og:description" content="${esc(C.EVENT.date)}、${esc(C.EVENT.venue)}。出店料無料。FC大阪のホームゲーム開催日にあわせた場外イベントです。">
+<meta property="og:image" content="https://bondance.kreha-c.com/assets/ogp.png">
+<meta property="og:url" content="https://bondance.kreha-c.com/">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
@@ -641,7 +770,7 @@ function page(theme) {
       <span>サステナ盆踊り<small>SUSTAINA BON ODORI</small></span>
     </span>
     <div class="supported">
-      <span class="label">SUPPORTED BY</span>
+      <span class="label">主催</span>
       <img src="assets/fcosaka_emblem.png" alt="FC大阪" width="26" height="26">
       <img class="textlogo" src="assets/fcosaka_textlogo.png" alt="FC OSAKA" width="104" height="20">
       <span class="updater-tmp">UPDATER</span>
@@ -655,14 +784,15 @@ function page(theme) {
     <div class="wrap hero-inner">
       <h1>${esc(C.EVENT.name)}<br>出店者募集</h1>
       <p class="lead">${esc(C.EVENT.date)}／${esc(C.EVENT.venue)}</p>
+      <p class="notice-closed">${esc(C.NOTICE)}</p>
     </div>
   </div>
 
   <div class="wrap">
     ${renderSummary()}
-    <div class="cta-row">
-      <a class="btn-pdf" href="assets/募集要項.pdf" download>募集要項（PDF）をダウンロード</a>
-    </div>
+    ${PDF_EXISTS ? `<div class="cta-row">
+      <a class="btn-pdf" href="assets/${PDF_FILE}" download>募集要項（PDF）をダウンロード</a>
+    </div>` : ''}
 
     <section>
       <h2>募集要項</h2>
@@ -674,13 +804,16 @@ function page(theme) {
 <div class="wrap" id="form-area">
   <section>
     <h2>応募フォーム</h2>
-    <p class="help">＊のついた項目は必ずご入力ください。所要時間の目安は5〜10分です。</p>
+    <p class="help">所要時間の目安は5〜10分です。
+      入力内容はこの端末に自動保存されるので、途中で閉じても続きから入力できます。</p>
   </section>
   <div class="form-error" role="alert"></div>
   <form id="entry" novalidate autocomplete="on">
     ${renderForm()}
+    <div class="card" id="confirm-box"></div>
+    <p class="inline-note hidden" id="draft-note"></p>
     <div class="submit-area">
-      <button type="submit" class="submit" id="submit-btn">上記の内容で応募する</button>
+      <button type="submit" class="submit" id="submit-btn">この内容で応募する</button>
       <p class="submit-note">送信後、ご記入のメールアドレスに受付確認メールをお送りします。</p>
     </div>
   </form>

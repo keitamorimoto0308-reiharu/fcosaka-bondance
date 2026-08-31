@@ -7,11 +7,12 @@
  */
 
 var SHEET = {
-  LEDGER:  '応募一覧',
-  HISTORY: '変更履歴',
-  SPACES:  '区画',
-  CONFIG:  '設定',
-  PEOPLE:  '関係者',
+  LEDGER:     '応募一覧',
+  HISTORY:    '変更履歴',
+  SPACES:     '区画',
+  CONFIG:     '設定',
+  PEOPLE:     '関係者',
+  QUARANTINE: '退避', // 台帳に書けなかった応募の受け皿。通常は空のまま
 };
 
 /** 設定シートの既定値。シートに行が無い場合はこの値が使われる。 */
@@ -20,6 +21,9 @@ var CONFIG_DEFAULTS = [
   ['管理者パスワード',     '',                 '管理ページの管理者用。空だと管理ページは開けません'],
   ['一般パスワード',       '',                 '管理ページの一般用（FC大阪営業など）'],
   ['問い合わせメール',     'fcosaka_bondance@kreha-c.com', 'フォームとメールに表示する問い合わせ先'],
+  // 差出人は問い合わせ先とは別キーにする。同じ値を共用すると、問い合わせ先を
+  // FC大阪の担当者に変えた瞬間に差出人まで静かに変わってしまう。
+  ['送信元アドレス',       'fcosaka_bondance@kreha-c.com', 'メールの差出人。Gmailにエイリアス登録が必要'],
   ['送信元表示名',         'サステナ盆踊り実行委員会',      'メールの差出人名'],
   ['ReplyTo',             'fcosaka_bondance@kreha-c.com', '返信先。空なら問い合わせメールと同じ'],
   ['単価_テント_S1',       '',                 '間口1間×奥行2間のテント単価（円・税込）。空なら「調整中」表示'],
@@ -86,20 +90,37 @@ function configBool(key) {
   return String(getConfig()[key] || '').toUpperCase() === 'ON';
 }
 
-/** 締切日時を Date で返す。未設定なら null（＝締切なし）。 */
+/**
+ * 締切日時を Date で返す。
+ * 解釈できない書き方（「9/30 18:00」「2026年9月30日 18時」など）は例外にする。
+ * ここで null を返して「締切なし」に倒すと、締切を過ぎても受付が続いてしまう。
+ */
 function getDeadline() {
   var v = getConfig()['締切日時'];
-  if (!v) return null;
+  if (v === '' || v === null || v === undefined) {
+    throw new Error('設定シートの「締切日時」が空です。「2026-09-30 18:00」の形式で入力してください。');
+  }
   if (v instanceof Date) return v;
-  // 「2026-09-30 18:00」形式を Asia/Tokyo として解釈する
   var m = String(v).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})\D+(\d{1,2}):(\d{2})/);
-  if (!m) return null;
+  if (!m) {
+    throw new Error('設定シートの「締切日時」を解釈できません（現在の値：' + v + '）。'
+      + '「2026-09-30 18:00」の形式で入力してください。');
+  }
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), 0);
 }
 
+/**
+ * 締切を過ぎているか。
+ * 設定が壊れている場合は「締切済み」に倒す（フェイルクローズ）。
+ * 受付を止めすぎる失敗は電話で回復できるが、締切後に受け続ける失敗は回復できない。
+ */
 function isClosed() {
-  var d = getDeadline();
-  return d ? (new Date() > d) : false;
+  try {
+    return new Date() > getDeadline();
+  } catch (e) {
+    console.error('[isClosed] 締切設定が不正なため受付を停止します: ' + e);
+    return true;
+  }
 }
 
 /** 備品単価をまとめて返す。未設定のものは null。 */

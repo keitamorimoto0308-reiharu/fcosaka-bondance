@@ -172,3 +172,31 @@ describe('フォームを止めない設計', () => {
     assert.equal(f.fallbackOptions.includes(f.unknownOption), true);
   });
 });
+
+describe('生成物がスキーマと同期しているか（回帰テスト）', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+
+  test('index.html に埋め込まれた FIELDS が schema.js と完全に一致する', () => {
+    // ビルドを片方しか流していない、生成を忘れた、を検出する。
+    // ここがずれると「フォームに無い項目の列が台帳にできる」等の事故になる。
+    const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    const m = html.match(/var FIELDS = (\[.*?\]);\n/s);
+    assert.ok(m, 'index.html に FIELDS が見つかりません');
+    assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify(S.FIELDS)));
+  });
+
+  test('gas/Schema.gs の FIELDS が schema.js と完全に一致する', () => {
+    const gas = fs.readFileSync(path.join(root, 'gas', 'Schema.gs'), 'utf8');
+    const m = gas.match(/var FIELDS = (\[[\s\S]*?\n\]);/);
+    assert.ok(m, 'Schema.gs に FIELDS が見つかりません');
+    assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify(S.FIELDS)));
+  });
+
+  test('台帳にメール到達状況と生データの列がある', () => {
+    const h = S.ledgerHeaders();
+    ['受付メール送信', '通知メール送信', '生データ(JSON)'].forEach(c =>
+      assert.ok(h.includes(c), '列が欠けています: ' + c));
+  });
+});

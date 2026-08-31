@@ -4,7 +4,7 @@
   "private": true,
   "description": "FC OSAKA×UPDATER サステナ盆踊り 出店応募・出展者管理システム",
   "scripts": {
-    "build": "node src/build.js",
+    "build": "node src/build.js && node src/build-form.js",
     "test": "node --test \"test/*.test.js\""
   }
 }

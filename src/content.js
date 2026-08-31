@@ -20,11 +20,16 @@ const EVENT = {
 };
 
 /** 要約カード：スマホで最初に目に入る4つ（monitor A1：知りたいのは、いつ・どこ・いくら・締切） */
+/** ページ冒頭に置く但し書き。検索に出てこない理由の説明を兼ねる。 */
+const NOTICE = 'このページは、FC大阪およびUPDATERよりご案内を差し上げた企業さま向けの募集です。';
+
 const SUMMARY = [
   { label: '開催日',   value: EVENT.date,  icon: 'calendar' },
   { label: '会場',     value: '花園ラグビー場 場外エリア', icon: 'pin' },
-  { label: '出店料',   value: '無料',      icon: 'tag' },
-  { label: '応募締切', value: '',          icon: 'clock', fromConfig: 'deadline' },
+  { label: '出店料',   value: '無料',      icon: 'tag', note: '備品レンタルは別途' },
+  // GASから取得できなければ、この静的な値がそのまま残る。
+  // 締切が「—」のまま公開されるのを構造的に防ぐ（営業が配布できない原因の1つ）。
+  { label: '応募締切', value: '2026年9月30日（火）18:00', icon: 'clock', fromConfig: 'deadline' },
 ];
 
 /**
@@ -44,7 +49,9 @@ const DETAILS = [
         label: 'タイムライン',
         value: 'イベント開始 11:00 ／ KICK OFF 14:00（FC大阪 vs 鹿児島ユナイテッドFC） ／ 盆踊り 16:15〜',
       },
-      { label: '来場について', value: '', fromConfig: 'attendanceNote' },
+      // 値が空のときは行ごと出さない（ラベルだけ残ると未完成に見える）
+      { label: '来場について', value: 'FC大阪ホームゲーム開催日。多くの来場者が場外エリアを通過します。',
+        fromConfig: 'attendanceNote' },
     ],
   },
   {
@@ -53,7 +60,7 @@ const DETAILS = [
       { label: '出店料', value: '無料' },
       {
         label: '区画',
-        value: '1区画＝間口1間×奥行2間（約1.8m×3.6m）。'
+        value: '1区画＝約1.8m×3.6m（間口1間×奥行2間）。'
              + 'テントは区画と同じサイズのものをレンタルいただくか、ご持参ください。',
       },
       { label: 'レンタル備品', value: 'テント・長机・パイプ椅子をご用意しています（有料）。', priceNote: true },
@@ -85,6 +92,12 @@ const DETAILS = [
         emphasis: true,
       },
       { label: 'ごみ', value: '出店者さまでのお持ち帰りをお願いしています。' },
+      {
+        label: '排水・廃油',
+        value: '洗い物の排水、使用済みの油も、出店者さまでのお持ち帰りをお願いしています。'
+             + '会場に流すことはできません。',
+        emphasis: true,
+      },
     ],
   },
   {
@@ -94,6 +107,11 @@ const DETAILS = [
         label: '各種届出',
         value: '飲食の出店に必要な届出（保健所の臨時営業許可、火気を使用される場合は消防への届出）は、'
              + '出店者さまご自身でお願いいたします。',
+        emphasis: true,
+      },
+      {
+        label: '消火器',
+        value: 'ガス・炭など火気を使用される場合は、消火器を1本ご持参ください。',
         emphasis: true,
       },
       {
@@ -127,6 +145,6 @@ const CONTACT = {
   emailFromConfig: 'contact',
 };
 
-const CONTENT = { EVENT, SUMMARY, DETAILS, CONTACT };
+const CONTENT = { EVENT, NOTICE, SUMMARY, DETAILS, CONTACT };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = CONTENT;
