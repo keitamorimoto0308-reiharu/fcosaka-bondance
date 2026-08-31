@@ -111,18 +111,25 @@ describe('その他の自由記述', () => {
   });
 });
 
-describe('区画サイズ（仕様書v3.1で表記を統一した項目）', () => {
-  test('3種類あり、いずれも奥行2間で、区画数が1・2・3である', () => {
+describe('区画サイズ（レンタルテントの2サイズに対応）', () => {
+  test('2種類あり、いずれも奥行2間。区画数は1と2', () => {
     const opts = field('boothSize').options;
-    assert.equal(opts.length, 3);
-    assert.deepEqual(opts.map(o => o.units), [1, 2, 3]);
+    assert.equal(opts.length, 2);
+    assert.deepEqual(opts.map(o => o.units), [1, 2]);
     for (const o of opts) {
       assert.match(o.label, /奥行2間/, '奥行が2間になっていません: ' + o.label);
     }
   });
 
   test('区画の値は台帳・マップと共有する短いキーである', () => {
-    assert.deepEqual(field('boothSize').options.map(o => o.value), ['S1', 'S2', 'S3']);
+    assert.deepEqual(field('boothSize').options.map(o => o.value), ['S1', 'S2']);
+  });
+
+  test('区画のサイズがレンタルテントのサイズと一致している', () => {
+    // 片方だけ直して食い違うのを防ぐ。区画1＝テント小、区画2＝テント大。
+    const booth = field('boothSize').options.map(o => o.label.match(/約[\d.]+m×[\d.]+m/)[0]);
+    const tent  = field('tentSize').options.map(o => o.label.match(/約[\d.]+m×[\d.]+m/)[0]);
+    assert.deepEqual(booth, tent, '区画とテントの寸法が食い違っています');
   });
 });
 

@@ -130,12 +130,12 @@ const FIELDS = [
   {
     key: 'boothSize', section: 'space', type: 'radio', required: true,
     label: 'ご希望の区画', sheet: '希望区画',
-    help: '1区画は約1.8m×3.6m（間口1間×奥行2間）です。',
+    help: '1区画は約2.7m×3.6m（間口1.5間×奥行2間）です。レンタルテントのサイズと対応しています。',
     // value は台帳・マップと共有する正規化キー。label が画面表示。
+    // units はマップ上で押さえる区画の数。1区画＝間口1.5間。
     options: [
-      { value: 'S1', label: '間口1間×奥行2間（1区画／約1.8m×3.6m）', units: 1 },
-      { value: 'S2', label: '間口2間×奥行2間（2区画／約3.6m×3.6m）', units: 2 },
-      { value: 'S3', label: '間口3間×奥行2間（3区画／約5.4m×3.6m）', units: 3 },
+      { value: 'S1', label: '間口1.5間×奥行2間（1区画／約2.7m×3.6m）', units: 1 },
+      { value: 'S2', label: '間口3間×奥行2間（2区画／約5.4m×3.6m）',   units: 2 },
     ],
   },
   {

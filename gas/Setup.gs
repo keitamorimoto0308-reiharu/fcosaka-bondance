@@ -87,6 +87,14 @@ function setupConfigSheet_(ss) {
   var MIGRATIONS = [
     ['送信元表示名', 'サステナ盆踊り実行委員会', 'FC大阪サステナ盆踊り実行委員会'],
   ];
+  // 空欄のままの項目に既定値を入れる（運用者が入力した値は触らない）
+  ['単価_テント_小', '単価_テント_大', '単価_長机', '単価_パイプ椅子'].forEach(function (key) {
+    var row = findConfigRow_(sh, key);
+    if (!row) return;
+    if (String(sh.getRange(row, 2).getValue()).trim() !== '') return;
+    var def = CONFIG_DEFAULTS.filter(function (d) { return d[0] === key; })[0];
+    if (def) { sh.getRange(row, 2).setValue(def[1]); console.log('設定「' + key + '」に ' + def[1] + ' を入れました。'); }
+  });
   MIGRATIONS.forEach(function (mg) {
     var row = findConfigRow_(sh, mg[0]);
     if (row && String(sh.getRange(row, 2).getValue()).trim() === mg[1]) {

@@ -82,23 +82,29 @@ img,svg{max-width:100%;display:block}
 .hero{position:relative;background:var(--brand);overflow:hidden;isolation:isolate}
 /* 写真。ブランド水色の膜をかぶせるので、下地として質感だけが残る */
 .hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
-/* 水色の膜。上を薄く（スタジアムの空が見える）、下を濃く（文字が乗る）。
-   濃い側で #7FCAF1 相当まで寄せるので、濃色文字のコントラストは 9.58:1 を保てる */
+/* 黒の膜。上を薄く（スタジアムが見える）、下を濃く（文字が乗る）。
+   下部は #231816 相当まで落ちるので、水色文字のコントラストは 8:1 前後を保てる */
 .hero::before{content:'';position:absolute;inset:0;z-index:-1;
   background:linear-gradient(180deg,
-    rgba(127,202,241,.34) 0%, rgba(127,202,241,.72) 46%,
-    rgba(127,202,241,.92) 78%, rgba(127,202,241,.97) 100%)}
+    rgba(20,14,13,.42) 0%, rgba(20,14,13,.66) 42%,
+    rgba(20,14,13,.82) 74%, rgba(20,14,13,.90) 100%)}
 /* 和文様。写真を潰さないよう、ごく薄く重ねるだけ */
-.hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.10;
+.hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.07;
   background-image:var(--asanoha);background-size:40px 70px}
+/* FC大阪エンブレムを背景に大きく。支給データをそのまま拡大しているだけで、
+   色も形も変えていない（§8：描き直し・変形・配色変更は禁止）。
+   テキストロゴは黒一色のため濃色背景では見えない。白抜き版が届いたら差し替える。 */
+.hero-mark{position:absolute;right:-56px;bottom:-64px;width:280px;height:280px;
+  z-index:-1;opacity:.16;pointer-events:none}
 .hero-inner{position:relative;z-index:1;padding:var(--s7) 0 var(--s6)}
 .hero .eyebrow{display:inline-block;font-size:11px;letter-spacing:.18em;font-weight:700;
-  background:var(--ink);color:var(--white);padding:6px 12px;border-radius:99px;margin:0 0 var(--s4)}
-.hero h1{margin:0 0 var(--s3);font-size:30px;line-height:1.35;font-weight:700;letter-spacing:.01em}
-.hero .en{font-family:${T.fontDisp};font-size:15px;letter-spacing:.34em;color:var(--ink);
-  opacity:.62;margin:0 0 var(--s2)}
-.hero .place{margin:0;font-size:15px;font-weight:700}
-.hero .match{margin:var(--s1) 0 0;font-size:13px;color:#1A4A63}
+  background:var(--brand);color:var(--ink);padding:6px 12px;border-radius:99px;margin:0 0 var(--s4)}
+.hero h1{margin:0 0 var(--s3);font-size:30px;line-height:1.35;font-weight:700;letter-spacing:.01em;
+  color:var(--brand)}
+.hero .en{font-family:${T.fontDisp};font-size:15px;letter-spacing:.34em;color:var(--brand);
+  opacity:.78;margin:0 0 var(--s2)}
+.hero .place{margin:0;font-size:15px;font-weight:700;color:var(--white)}
+.hero .match{margin:var(--s1) 0 0;font-size:13px;color:#CFC9C6}
 .hero-cta{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
 
 /* ── 2. ファクト帯：数字が主役。濃色の面に水色の数字（コントラスト 8:1） */
@@ -152,7 +158,8 @@ img,svg{max-width:100%;display:block}
 .btn:active{transform:scale(.985)}
 .btn-primary{background:var(--ink);color:var(--white);box-shadow:0 2px 0 rgba(0,0,0,.25)}
 .btn-primary:hover{background:#3A2B28}
-.btn-ghost{background:rgba(255,255,255,.92);color:var(--ink);box-shadow:0 1px 0 rgba(0,0,0,.12)}
+.btn-ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
+.btn-ghost:hover{background:rgba(127,202,241,.14)}
 .btn-brand{background:var(--brand);color:var(--ink);box-shadow:0 2px 0 var(--brand-deep)}
 .btn-brand:hover{filter:brightness(1.05)}
 .btn:focus-visible{outline:3px solid var(--brand-deep);outline-offset:2px}
@@ -258,6 +265,7 @@ function renderHero() {
   return `
   <section class="hero">
     <img class="hero-photo" src="assets/stadium.webp" alt="" width="1920" height="1005" fetchpriority="high">
+    <img class="hero-mark" src="assets/fcosaka_emblem.png" alt="" width="280" height="280" aria-hidden="true">
     <div class="wrap hero-inner">
       <span class="eyebrow">出店者募集</span>
       <p class="en">${esc(C.EVENT.nameEn)}</p>
@@ -265,7 +273,7 @@ function renderHero() {
       <p class="place">${esc(C.EVENT.date)}／${esc(C.EVENT.venueShort)}</p>
       <p class="match">${esc(C.EVENT.match)}　KICK OFF 14:00</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="#form-area" data-scroll>応募フォームへ</a>
+        <a class="btn btn-brand" href="#form-area" data-scroll>応募フォームへ</a>
         ${PDF_EXISTS ? `<a class="btn btn-ghost" href="assets/${PDF_FILE}" download>募集要項（PDF）</a>` : ''}
       </div>
     </div>
@@ -449,7 +457,10 @@ ${S.isRequired.toString()}
 
 var FIELDS = ${JSON.stringify(APPLY_FIELDS)};
 var GAS_URL = ${JSON.stringify(ENDPOINT.gasUrl || '')};
-var CFG = { prices:{}, closed:false, deadline:'', contact:'', staff:[] };
+// GASに接続できないとき（表示確認用ページなど）に使う仮単価。
+// 本番では設定シートの値で必ず上書きされる。
+var FALLBACK_PRICES = { tentT1:15000, tentT2:30000, table:1000, chair:500 };
+var CFG = { prices:FALLBACK_PRICES, closed:false, deadline:'', contact:'', staff:[] };
 var submissionId = (function(){
   try { return crypto.randomUUID(); }
   catch(e){ return 'sid-' + Date.now() + '-' + Math.random().toString(36).slice(2); }
@@ -706,6 +717,11 @@ function loadConfig(){
     .then(function(d){
       if (!d || !d.ok) throw new Error('bad config');
       CFG = d;
+      // 設定シートが空欄の単価だけ、仮単価で補う
+      CFG.prices = CFG.prices || {};
+      Object.keys(FALLBACK_PRICES).forEach(function(k){
+        if (CFG.prices[k] == null) CFG.prices[k] = FALLBACK_PRICES[k];
+      });
       if (d.closed){ showClosed(); return; }
       if (d.deadline){
         var m = d.deadline.match(/(\\d+)年(\\d+)月(\\d+)日.*?(\\d+:\\d+)/);
