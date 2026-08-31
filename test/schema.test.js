@@ -1,0 +1,174 @@
+/**
+ * スキーマの受け入れテスト
+ * 仕様書 §10 Phase 1 の項目 2「条件付き表示が正しく動く」に対応する。
+ *
+ * 実行: npm test
+ */
+const { test, describe } = require('node:test');
+const assert = require('node:assert');
+const S = require('../src/schema.js');
+
+const field = key => {
+  const f = S.FIELDS.find(f => f.key === key);
+  assert.ok(f, '項目が存在しません: ' + key);
+  return f;
+};
+
+/** 応募内容の最小セット（必須をすべて満たした状態）を作る */
+const baseValues = (over = {}) => Object.assign({
+  companyName: '株式会社テスト',
+  contactName: 'テスト太郎',
+  contactEmail: 'test@example.com',
+  contactPhone: '06-1234-5678',
+  fcosakaStaff: 'わからない／FC大阪以外からの紹介',
+  boothTypes: ['展示'],
+  boothDescription: '展示の内容',
+  fireUse: '使用しない',
+  boothSize: 'S1',
+  power: '不要',
+  vehicleCount: 1,
+  parkingRequest: '希望する',
+  staffCount: 2,
+  rainPolicy: '雨天でも出店する',
+  agreeTerms: true,
+  agreePrivacy: true,
+}, over);
+
+describe('飲食を選んだときの条件付き項目', () => {
+  test('飲食を選ぶと営業許可と食器・包材が表示され、必須になる', () => {
+    const v = baseValues({ boothTypes: ['飲食'] });
+    for (const key of ['foodLicense', 'tableware']) {
+      assert.equal(S.isVisible(field(key), v), true, key + ' が表示されていません');
+      assert.equal(S.isRequired(field(key), v), true, key + ' が必須になっていません');
+    }
+  });
+
+  test('飲食を含む複数選択でも表示・必須になる', () => {
+    const v = baseValues({ boothTypes: ['展示', '飲食'] });
+    assert.equal(S.isVisible(field('foodLicense'), v), true);
+    assert.equal(S.isRequired(field('tableware'), v), true);
+  });
+
+  test('飲食を選ばなければ非表示で、必須にもならない', () => {
+    const v = baseValues({ boothTypes: ['ワークショップ'] });
+    for (const key of ['foodLicense', 'tableware']) {
+      assert.equal(S.isVisible(field(key), v), false, key + ' が表示されています');
+      assert.equal(S.isRequired(field(key), v), false, key + ' が必須になっています');
+    }
+  });
+});
+
+describe('電源の条件分岐', () => {
+  test('発電機持込のとき、容量・機器・消費電力が必須になる', () => {
+    const v = baseValues({ power: '必要（発電機を持ち込む）' });
+    for (const key of ['generatorCapacity', 'powerDevices', 'powerWatt']) {
+      assert.equal(S.isRequired(field(key), v), true, key + ' が必須になっていません');
+    }
+  });
+
+  test('レンタル希望のとき、機器と消費電力は必須だが発電機容量は聞かない', () => {
+    const v = baseValues({ power: 'レンタルを希望する（要確認）' });
+    assert.equal(S.isRequired(field('powerDevices'), v), true);
+    assert.equal(S.isRequired(field('powerWatt'), v), true);
+    assert.equal(S.isVisible(field('generatorCapacity'), v), false,
+      '発電機を持ち込まないのに容量を聞いています');
+  });
+
+  test('電源が不要なら、電源まわりは一切表示されない', () => {
+    const v = baseValues({ power: '不要' });
+    for (const key of ['generatorCapacity', 'powerDevices', 'powerWatt']) {
+      assert.equal(S.isVisible(field(key), v), false, key + ' が表示されています');
+    }
+  });
+
+  test('電源が未選択の段階では、条件付き項目を表示しない', () => {
+    // op:'ne' が「未入力」を真と判定すると、開いた瞬間に全部出てしまう
+    const v = baseValues({ power: '' });
+    assert.equal(S.isVisible(field('powerDevices'), v), false);
+  });
+
+  test('「わからない」チェックの定義が消費電力に付いている', () => {
+    const f = field('powerWatt');
+    assert.ok(f.unknownCheckbox, '「わからない」チェックが定義されていません');
+    assert.equal(f.unknownCheckbox.key, 'powerWattUnknown');
+  });
+});
+
+describe('その他の自由記述', () => {
+  test('出店形態で「その他」を選ぶと自由記述が必須になる', () => {
+    const v = baseValues({ boothTypes: ['その他'] });
+    assert.equal(S.isRequired(field('boothTypeOther'), v), true);
+  });
+
+  test('火気で「その他」を選ぶと自由記述が必須になる', () => {
+    const v = baseValues({ fireUse: 'その他' });
+    assert.equal(S.isRequired(field('fireUseOther'), v), true);
+  });
+
+  test('「その他」以外なら自由記述は表示されない', () => {
+    const v = baseValues({ fireUse: 'ガス' });
+    assert.equal(S.isVisible(field('fireUseOther'), v), false);
+  });
+});
+
+describe('区画サイズ（仕様書v3.1で表記を統一した項目）', () => {
+  test('3種類あり、いずれも奥行2間で、区画数が1・2・3である', () => {
+    const opts = field('boothSize').options;
+    assert.equal(opts.length, 3);
+    assert.deepEqual(opts.map(o => o.units), [1, 2, 3]);
+    for (const o of opts) {
+      assert.match(o.label, /奥行2間/, '奥行が2間になっていません: ' + o.label);
+    }
+  });
+
+  test('区画の値は台帳・マップと共有する短いキーである', () => {
+    assert.deepEqual(field('boothSize').options.map(o => o.value), ['S1', 'S2', 'S3']);
+  });
+});
+
+describe('台帳の列', () => {
+  test('列名が重複していない（重複すると保存先がずれる）', () => {
+    const h = S.ledgerHeaders();
+    assert.equal(new Set(h).size, h.length);
+  });
+
+  test('受付IDと受付日時が先頭2列にある', () => {
+    const h = S.ledgerHeaders();
+    assert.deepEqual(h.slice(0, 2), ['受付ID', '受付日時']);
+  });
+
+  test('ハニーポットは台帳に列を作らない', () => {
+    const h = S.ledgerHeaders();
+    assert.equal(h.includes('website2'), false);
+    assert.equal(field('website2').sheet, null);
+  });
+
+  test('「わからない」チェックも台帳に列を持つ', () => {
+    assert.ok(S.ledgerHeaders().includes('消費電力不明'));
+  });
+
+  test('管理側の列がすべて含まれている', () => {
+    const h = S.ledgerHeaders();
+    for (const c of S.ADMIN_COLUMNS) {
+      assert.ok(h.includes(c), '管理列が欠けています: ' + c);
+    }
+  });
+});
+
+describe('ステータス定義', () => {
+  test('重複応募を無効化するステータスがある', () => {
+    assert.ok(S.STATUS.includes('重複（無効）'));
+  });
+
+  test('当日ステータスが4段階そろっている', () => {
+    assert.deepEqual(S.DAY_STATUS, ['未着', '搬入済', '設営完了', '撤収完了']);
+  });
+});
+
+describe('フォームを止めない設計', () => {
+  test('担当社員リストの取得に失敗しても選べる選択肢がある', () => {
+    const f = field('fcosakaStaff');
+    assert.ok(f.fallbackOptions.length > 0);
+    assert.equal(f.fallbackOptions.includes(f.unknownOption), true);
+  });
+});
