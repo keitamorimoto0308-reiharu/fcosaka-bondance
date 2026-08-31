@@ -7,6 +7,9 @@
 
 function setup() {
   var ss = ss_();
+  // 台帳のタイムゾーンを日本時間に固定する。ここがずれていると、受付日時も締切も
+  // すべて時差の分だけ狂う（しかも画面上は正しく見えるので気づけない）。
+  if (ss.getSpreadsheetTimeZone() !== 'Asia/Tokyo') ss.setSpreadsheetTimeZone('Asia/Tokyo');
   setupConfigSheet_(ss);
   setupPeopleSheet_(ss);
   setupLedgerSheet_(ss);
@@ -61,6 +64,36 @@ function setupConfigSheet_(ss) {
   if (toAppend.length) {
     sh.getRange(sh.getLastRow() + 1, 1, toAppend.length, 3).setValues(toAppend);
   }
+
+  // 「値」列は必ず文字列として扱う。
+  // Sheetsは「2026-09-30 18:00」を日時型に自動変換し、そのときシートのタイムゾーンで
+  // 絶対時刻に固定してしまう。シートのTZが日本時間でないと、入力した見た目の時刻と
+  // 実際の値がずれる（画面上は正しく見えるので気づけない）。文字列に固定して防ぐ。
+  sh.getRange(2, 2, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat('@');
+
+  // 既に日時型で入ってしまっている締切を、文字列に直す
+  var dRow = findConfigRow_(sh, '締切日時');
+  if (dRow) {
+    var cur = sh.getRange(dRow, 2).getValue();
+    if (cur instanceof Date) {
+      var fixed = CONFIG_DEFAULTS.filter(function (d) { return d[0] === '締切日時'; })[0][1];
+      sh.getRange(dRow, 2).setNumberFormat('@').setValue(fixed);
+      console.log('締切日時が日時型で保存されていたため、文字列 ' + fixed + ' に直しました。');
+    }
+  }
+
+  // 旧い既定値のまま残っている項目を、新しい既定値へ移行する。
+  // 運用者が意図して変えた値は上書きしない（旧既定値と一致するときだけ書き換える）。
+  var MIGRATIONS = [
+    ['送信元表示名', 'サステナ盆踊り実行委員会', 'FC大阪サステナ盆踊り実行委員会'],
+  ];
+  MIGRATIONS.forEach(function (mg) {
+    var row = findConfigRow_(sh, mg[0]);
+    if (row && String(sh.getRange(row, 2).getValue()).trim() === mg[1]) {
+      sh.getRange(row, 2).setValue(mg[2]);
+      console.log('設定「' + mg[0] + '」を ' + mg[2] + ' に更新しました。');
+    }
+  });
 
   styleHeader_(sh, 3);
   sh.setColumnWidth(1, 180);

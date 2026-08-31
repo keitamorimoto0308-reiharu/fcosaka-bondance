@@ -55,13 +55,8 @@ img{max-width:100%;height:auto;display:block}
 /* ── ヘッダー：サステナ盆踊りロゴを主、FC大阪／UPDATERを supported by で従える */
 .site-header{background:var(--header-bg);border-bottom:var(--rule-w) solid var(--rule-c)}
 .site-header .wrap{padding-top:18px;padding-bottom:18px}
-.logo-main{
-  display:inline-block;font-family:${v.fontDisp};font-weight:600;letter-spacing:.04em;
-  font-size:20px;line-height:1.3;
-  color:${v.headerBg === v.ink ? 'var(--white)' : 'var(--ink)'};
-}
-.logo-main small{display:block;font-size:11px;letter-spacing:.18em;color:var(--brand);font-weight:400}
-.logo-placeholder{display:inline-flex;align-items:center;gap:8px}
+.logo-main-img{width:auto;height:78px}
+@media (max-width:380px){ .logo-main-img{height:66px} }
 .supported{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
 .supported .label{
   font-size:10px;letter-spacing:.12em;
@@ -765,10 +760,10 @@ function page(theme) {
 
 <header class="site-header">
   <div class="wrap">
-    <!-- サステナ盆踊りロゴは制作中。確定後 assets/ の画像に差し替えるだけで入れ替わる -->
-    <span class="logo-main logo-placeholder">
-      <span>サステナ盆踊り<small>SUSTAINA BON ODORI</small></span>
-    </span>
+    <!-- ロゴは assets/logo/ の SVG を差し替えるだけで入れ替わる。
+         濃色ヘッダーのテーマでは白版を使う。 -->
+    <img class="logo-main-img" src="assets/logo/logo-${theme.logo}${v.headerBg === v.ink ? '-white' : ''}.svg"
+         alt="${esc(C.EVENT.organizer)}" width="230" height="128">
     <div class="supported">
       <span class="label">主催</span>
       <img src="assets/fcosaka_emblem.png" alt="FC大阪" width="26" height="26">

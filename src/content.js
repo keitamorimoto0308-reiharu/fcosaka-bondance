@@ -11,7 +11,7 @@
 
 const EVENT = {
   name: 'FC OSAKA×UPDATER サステナ盆踊り',
-  organizer: 'サステナ盆踊り実行委員会',
+  organizer: 'FC大阪サステナ盆踊り実行委員会',
   organizerNote: 'FC大阪／UPDATER',
   date: '2026年10月24日（土）',
   venue: '東大阪市花園ラグビー場（場外エリア）',
@@ -141,7 +141,7 @@ const DETAILS = [
 
 /** 問い合わせ先。実値は設定シートから受け取る。 */
 const CONTACT = {
-  name: 'サステナ盆踊り実行委員会',
+  name: 'FC大阪サステナ盆踊り実行委員会',
   emailFromConfig: 'contact',
 };
 

@@ -63,7 +63,7 @@ function formConfig_() {
   return {
     ok: true,
     closed: isClosed(),
-    deadline: deadline ? Utilities.formatDate(deadline, 'Asia/Tokyo', 'yyyy年M月d日（E）HH:mm') : '',
+    deadline: formatJa(deadline),
     prices: getPrices(),
     staff: getStaffOptions(),          // 氏名と部署のみ。メールアドレスは含めない
     contact: configText('問い合わせメール', ''),

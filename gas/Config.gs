@@ -24,7 +24,7 @@ var CONFIG_DEFAULTS = [
   // 差出人は問い合わせ先とは別キーにする。同じ値を共用すると、問い合わせ先を
   // FC大阪の担当者に変えた瞬間に差出人まで静かに変わってしまう。
   ['送信元アドレス',       'fcosaka_bondance@kreha-c.com', 'メールの差出人。Gmailにエイリアス登録が必要'],
-  ['送信元表示名',         'サステナ盆踊り実行委員会',      'メールの差出人名'],
+  ['送信元表示名',         'FC大阪サステナ盆踊り実行委員会', 'メールの差出人名。メール署名とフォームの主催表記にも使われます'],
   ['ReplyTo',             'fcosaka_bondance@kreha-c.com', '返信先。空なら問い合わせメールと同じ'],
   ['単価_テント_S1',       '',                 '間口1間×奥行2間のテント単価（円・税込）。空なら「調整中」表示'],
   ['単価_テント_S2',       '',                 '間口2間×奥行2間のテント単価'],
@@ -100,13 +100,37 @@ function getDeadline() {
   if (v === '' || v === null || v === undefined) {
     throw new Error('設定シートの「締切日時」が空です。「2026-09-30 18:00」の形式で入力してください。');
   }
-  if (v instanceof Date) return v;
-  var m = String(v).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})\D+(\d{1,2}):(\d{2})/);
+  // Sheetsは「2026-09-30 18:00」を日時型に自動変換する。その値をGASが読むと
+  // 「スプレッドシートのタイムゾーンでの18:00」という絶対時刻になるため、
+  // シートのタイムゾーンが日本時間でないと最大で丸1日ずれる。
+  // 型に関わらず「人が入力した見た目の時刻」を取り出し、それを日本時間として解釈し直す。
+  var text = (v instanceof Date)
+    ? Utilities.formatDate(v, ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm')
+    : String(v);
+
+  var m = text.match(/(\d{4})\D(\d{1,2})\D(\d{1,2})\D+(\d{1,2}):(\d{2})/);
   if (!m) {
     throw new Error('設定シートの「締切日時」を解釈できません（現在の値：' + v + '）。'
       + '「2026-09-30 18:00」の形式で入力してください。');
   }
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), 0);
+  // new Date(y, m, d, h, min) は「実行環境のタイムゾーンの時刻」として解釈される。
+  // GASの実行環境はUTCのことがあり、その場合 18:00 が翌日03:00（JST）にずれる。
+  // 実行環境に依存しないよう、UTCの絶対時刻として組み立てる（JST = UTC+9）。
+  return new Date(Date.UTC(
+    Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+    Number(m[4]) - 9, Number(m[5]), 0
+  ));
+}
+
+var WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
+
+/** 日本語の曜日つきで日時を整形する。Utilities.formatDate の E は英語になるため自前で持つ。 */
+function formatJa(date) {
+  if (!date) return '';
+  var w = Number(Utilities.formatDate(date, 'Asia/Tokyo', 'u')) % 7; // u: 1=月〜7=日
+  return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy年M月d日')
+       + '（' + WEEKDAY_JA[w] + '）'
+       + Utilities.formatDate(date, 'Asia/Tokyo', 'HH:mm');
 }
 
 /**

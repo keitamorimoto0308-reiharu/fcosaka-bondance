@@ -34,7 +34,7 @@ function resolveAlias_() {
 function mailOptions_() {
   var alias = resolveAlias_();
   var opt = {
-    name: configText('送信元表示名', 'サステナ盆踊り実行委員会'),
+    name: configText('送信元表示名', 'FC大阪サステナ盆踊り実行委員会'),
     replyTo: configText('ReplyTo', configText('問い合わせメール', '')),
   };
   if (alias) opt.from = alias;
@@ -46,7 +46,8 @@ function signature_() {
   return [
     '',
     '──────────────────────',
-    'サステナ盆踊り実行委員会（FC大阪／UPDATER）',
+    configText('送信元表示名', 'FC大阪サステナ盆踊り実行委員会'),
+    '主催：FC大阪／UPDATER',
     'お問い合わせ：' + contact,
     configText('公開URL', 'https://bondance.kreha-c.com/'),
     '──────────────────────',
@@ -61,7 +62,7 @@ function signature_() {
 function eventFactsBlock_() {
   var deadline = '';
   try {
-    deadline = Utilities.formatDate(getDeadline(), 'Asia/Tokyo', 'yyyy年M月d日 HH:mm');
+    deadline = formatJa(getDeadline());
   } catch (e) { deadline = '（別途ご案内）'; }
   return [
     '───────────────────────',

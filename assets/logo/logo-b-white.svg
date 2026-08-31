@@ -1,0 +1,46 @@
+<!-- 濃色背景用。logo-b.svg から自動生成。編集は元ファイル側で -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 200" width="360" height="200" role="img" aria-label="サステナ盆踊り">
+  <!--
+    B案：家紋
+    日本の家紋の作図法（正円の中に対称形を収める）でまとめた案。
+    麻の葉文様の一単位を芯に置き、その六方に葉を配してサステナビリティを示唆する。
+    水色と暖色を面で対比させ、和の印象を中くらいまで上げている。
+    小さく使っても形が潰れないよう、線は太く、抜きは大きく取っている。
+  -->
+  <defs>
+    <style>
+      .ink { fill: #FFFFFF; }
+      .brand { fill: #7FCAF1; }
+      .accent { fill: #E0A882; }
+      .ja { font-family: 'Noto Sans JP', system-ui, sans-serif; font-weight: 700; }
+      .en { font-family: 'Oswald', 'Noto Sans JP', sans-serif; font-weight: 400; }
+    </style>
+  </defs>
+
+  <!-- 家紋の地：正円 -->
+  <circle cx="180" cy="70" r="54" fill="#7FCAF1"/>
+
+  <!-- 麻の葉：六方向の菱形。中心から放射する構成で「広がり」を表す -->
+  <g fill="#FFFFFF">
+    <g transform="translate(180 70)">
+      <g id="ba-petal">
+        <path d="M0 -40 L11 -20 L0 -6 L-11 -20 Z"/>
+      </g>
+      <use href="#ba-petal" transform="rotate(60)"/>
+      <use href="#ba-petal" transform="rotate(120)"/>
+      <use href="#ba-petal" transform="rotate(180)"/>
+      <use href="#ba-petal" transform="rotate(240)"/>
+      <use href="#ba-petal" transform="rotate(300)"/>
+    </g>
+  </g>
+
+  <!-- 芯：暖色の一点。祭りの灯 -->
+  <circle cx="180" cy="70" r="7.5" class="accent"/>
+
+  <!-- 外縁の細い輪（家紋の「輪」） -->
+  <circle cx="180" cy="70" r="54" fill="none" stroke="#FFFFFF" stroke-width="2.4"/>
+
+  <!-- ロゴタイプ：家紋に合わせて字間を締める -->
+  <text x="180" y="163" text-anchor="middle" class="ja ink" font-size="27" letter-spacing="1">サステナ盆踊り</text>
+  <text x="180" y="184" text-anchor="middle" class="en" fill="#E0A882" font-size="11" letter-spacing="4.6">SUSTAINA BON ODORI</text>
+</svg>
