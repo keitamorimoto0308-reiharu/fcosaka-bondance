@@ -66,6 +66,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
 img,svg{max-width:100%;display:block}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px}
 @media (min-width:400px){ .wrap{padding:0 24px} }
+/* .wrap と同じ要素に付くクラスは、上下だけを指定すること。
+   padding の一括指定は4辺すべてを書き換えるため、左右の余白が0に潰れる。 */
 .ic{flex:none;stroke:currentColor}
 
 /* ── ヘッダー（薄く。主役はヒーロー） */
@@ -122,12 +124,13 @@ img,svg{max-width:100%;display:block}
 .fact .nt{font-size:11px;color:#B9B3B0;margin:var(--s2) 0 0;line-height:1.6}
 
 /* ── 3. 募集要項：アコーディオン */
-.section{padding:var(--s8) 0}
+.section{padding-top:var(--s8);padding-bottom:var(--s8)}
 .sec-head{display:flex;align-items:baseline;gap:var(--s3);margin:0 0 var(--s5)}
 .sec-head h2{margin:0;font-size:22px;font-weight:700;letter-spacing:.02em}
 .sec-head .en{font-family:${T.fontDisp};font-size:13px;letter-spacing:.2em;color:var(--ink-faint)}
 .notice-closed{margin:0 0 var(--s5);font-size:12.5px;line-height:1.8;color:var(--ink-muted);
   border-left:3px solid var(--brand);padding-left:var(--s3)}
+.lead-note{margin:0 0 var(--s5);font-size:13.5px;line-height:1.85;color:var(--ink-muted)}
 
 .acc{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin:0 0 var(--s3);
   background:var(--white)}
@@ -228,7 +231,8 @@ input:focus,textarea:focus,select:focus{outline:3px solid var(--brand);outline-o
 /* ── 送信 */
 .submit-area{text-align:center;padding:var(--s2) 0 var(--s8)}
 .submit-area .btn{width:100%;max-width:440px;min-height:58px;font-size:17px}
-.submit-note{font-size:13px;color:var(--ink-muted);margin:var(--s3) 0 0}
+.submit-note{font-size:13px;color:var(--ink-muted);margin:var(--s3) auto 0;
+  max-width:32em;line-height:1.85}
 .form-error{display:none;background:#FDF4F3;border:1px solid var(--error);color:var(--error);
   border-radius:10px;padding:var(--s4);margin:0 0 var(--s4);font-size:14px;font-weight:700}
 .form-error.show{display:block}
@@ -237,10 +241,11 @@ input:focus,textarea:focus,select:focus{outline:3px solid var(--brand);outline-o
 #confirm-box h4{margin:0 0 var(--s3);font-size:14px}
 
 /* ── 完了・受付終了 */
-.notice-page{padding:var(--s8) 0;text-align:center}
+.notice-page{padding-top:var(--s8);padding-bottom:var(--s8);text-align:center}
 .notice-page .mark{width:64px;height:64px;border-radius:50%;background:var(--brand);
   margin:0 auto var(--s4);display:grid;place-items:center;color:var(--ink)}
 .notice-page h2{font-size:21px;margin:0 0 var(--s3)}
+.notice-page p{max-width:34em;margin-left:auto;margin-right:auto;line-height:1.9}
 .receipt{display:inline-block;margin:var(--s4) 0;padding:var(--s4) var(--s6);background:var(--bg-subtle);
   border-radius:var(--r);border:2px solid var(--brand)}
 .receipt .num{font-family:${T.fontDisp};font-size:36px;letter-spacing:.06em;display:block;line-height:1.1}
@@ -971,7 +976,7 @@ function page() {
 
 <div class="wrap section" id="form-area">
   <div class="sec-head"><h2>応募フォーム</h2><span class="en">ENTRY</span></div>
-  <p class="help">所要時間の目安は5分です。
+  <p class="lead-note">所要時間の目安は5分です。<br>
     入力内容はこの端末に自動保存されるので、途中で閉じても続きから入力できます。</p>
   <div class="form-error" role="alert"></div>
   <form id="entry" novalidate autocomplete="on">
