@@ -52,23 +52,29 @@ img,svg{max-width:100%;display:block}
 .hero{position:relative;background:var(--brand);overflow:hidden;isolation:isolate}
 /* 写真。ブランド水色の膜をかぶせるので、下地として質感だけが残る */
 .hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
-/* 水色の膜。上を薄く（スタジアムの空が見える）、下を濃く（文字が乗る）。
-   濃い側で #7FCAF1 相当まで寄せるので、濃色文字のコントラストは 9.58:1 を保てる */
+/* 黒の膜。上を薄く（スタジアムが見える）、下を濃く（文字が乗る）。
+   下部は #231816 相当まで落ちるので、水色文字のコントラストは 8:1 前後を保てる */
 .hero::before{content:'';position:absolute;inset:0;z-index:-1;
   background:linear-gradient(180deg,
-    rgba(127,202,241,.34) 0%, rgba(127,202,241,.72) 46%,
-    rgba(127,202,241,.92) 78%, rgba(127,202,241,.97) 100%)}
+    rgba(20,14,13,.42) 0%, rgba(20,14,13,.66) 42%,
+    rgba(20,14,13,.82) 74%, rgba(20,14,13,.90) 100%)}
 /* 和文様。写真を潰さないよう、ごく薄く重ねるだけ */
-.hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.10;
+.hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.07;
   background-image:var(--asanoha);background-size:40px 70px}
+/* FC大阪エンブレムを背景に大きく。支給データをそのまま拡大しているだけで、
+   色も形も変えていない（§8：描き直し・変形・配色変更は禁止）。
+   テキストロゴは黒一色のため濃色背景では見えない。白抜き版が届いたら差し替える。 */
+.hero-mark{position:absolute;right:-56px;bottom:-64px;width:280px;height:280px;
+  z-index:-1;opacity:.16;pointer-events:none}
 .hero-inner{position:relative;z-index:1;padding:var(--s7) 0 var(--s6)}
 .hero .eyebrow{display:inline-block;font-size:11px;letter-spacing:.18em;font-weight:700;
-  background:var(--ink);color:var(--white);padding:6px 12px;border-radius:99px;margin:0 0 var(--s4)}
-.hero h1{margin:0 0 var(--s3);font-size:30px;line-height:1.35;font-weight:700;letter-spacing:.01em}
-.hero .en{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:15px;letter-spacing:.34em;color:var(--ink);
-  opacity:.62;margin:0 0 var(--s2)}
-.hero .place{margin:0;font-size:15px;font-weight:700}
-.hero .match{margin:var(--s1) 0 0;font-size:13px;color:#1A4A63}
+  background:var(--brand);color:var(--ink);padding:6px 12px;border-radius:99px;margin:0 0 var(--s4)}
+.hero h1{margin:0 0 var(--s3);font-size:30px;line-height:1.35;font-weight:700;letter-spacing:.01em;
+  color:var(--brand)}
+.hero .en{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:15px;letter-spacing:.34em;color:var(--brand);
+  opacity:.78;margin:0 0 var(--s2)}
+.hero .place{margin:0;font-size:15px;font-weight:700;color:var(--white)}
+.hero .match{margin:var(--s1) 0 0;font-size:13px;color:#CFC9C6}
 .hero-cta{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
 
 /* ── 2. ファクト帯：数字が主役。濃色の面に水色の数字（コントラスト 8:1） */
@@ -122,7 +128,8 @@ img,svg{max-width:100%;display:block}
 .btn:active{transform:scale(.985)}
 .btn-primary{background:var(--ink);color:var(--white);box-shadow:0 2px 0 rgba(0,0,0,.25)}
 .btn-primary:hover{background:#3A2B28}
-.btn-ghost{background:rgba(255,255,255,.92);color:var(--ink);box-shadow:0 1px 0 rgba(0,0,0,.12)}
+.btn-ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
+.btn-ghost:hover{background:rgba(127,202,241,.14)}
 .btn-brand{background:var(--brand);color:var(--ink);box-shadow:0 2px 0 var(--brand-deep)}
 .btn-brand:hover{filter:brightness(1.05)}
 .btn:focus-visible{outline:3px solid var(--brand-deep);outline-offset:2px}
@@ -242,6 +249,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
   
   <section class="hero">
     <img class="hero-photo" src="assets/stadium.webp" alt="" width="1920" height="1005" fetchpriority="high">
+    <img class="hero-mark" src="assets/fcosaka_emblem.png" alt="" width="280" height="280" aria-hidden="true">
     <div class="wrap hero-inner">
       <span class="eyebrow">出店者募集</span>
       <p class="en">SUSTAINA BON ODORI</p>
@@ -249,7 +257,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
       <p class="place">2026年10月24日（土）／花園ラグビー場 場外エリア</p>
       <p class="match">FC大阪 vs 鹿児島ユナイテッドFC　KICK OFF 14:00</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="#form-area" data-scroll>応募フォームへ</a>
+        <a class="btn btn-brand" href="#form-area" data-scroll>応募フォームへ</a>
         
       </div>
     </div>
@@ -338,7 +346,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
     aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
           <span class="acc-txt">
             <span class="t">区画とレンタル備品</span>
-            <span class="l">1区画は約1.8m×3.6m。テント・長机・椅子のレンタルをご用意しています（有料）。</span>
+            <span class="l">1区画は約2.7m×3.6m。テント・長机・椅子のレンタルをご用意しています（有料）。</span>
           </span>
           <svg class="acc-chev" width="20" height="20" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -348,15 +356,15 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
           <dl class="kv">
         <div>
           <dt>区画</dt>
-          <dd class="">1区画＝約1.8m×3.6m（間口1間×奥行2間）。間口2間・3間もお選びいただけます（奥行はいずれも2間）。</dd>
+          <dd class="">1区画＝約2.7m×3.6m（間口1.5間×奥行2間）。2区画（間口3間×奥行2間／約5.4m×3.6m）もお選びいただけます。</dd>
         </div>
         <div>
           <dt>テント</dt>
-          <dd class="">区画と同じサイズのものをレンタルいただくか、ご持参ください。ご持参の場合、会場は吹きさらしのため重り（ウェイト）が必ず必要です。</dd>
+          <dd class="">レンタル（間口1.5間×奥行2間／間口3間×奥行2間の2サイズ）、またはご持参のいずれかをお選びください。ご持参の場合、会場は吹きさらしのため重り（ウェイト）が必ず必要です。</dd>
         </div>
         <div>
           <dt>レンタル備品</dt>
-          <dd class="">テント・長机（1800×450）・パイプ椅子。単価は追ってご案内します。</dd>
+          <dd class="">テント（2サイズ）・長机（1800×450）・パイプ椅子。その他のご要望は応募フォームでお伺いし、別途お見積もりをお送りします。</dd>
         </div>
         <div>
           <dt>お支払い</dt>
@@ -564,7 +572,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
       
       <div class="field" data-field="boothSize">
         <label class="q" id="boothSize-label" for="boothSize">ご希望の区画<span class="req">必須</span></label>
-        <p class="help" id="boothSize-help">1区画は約1.8m×3.6m（間口1間×奥行2間）です。</p><div class="choices" role="radiogroup" aria-labelledby="boothSize-label"><label class="choice"><input type="radio" name="boothSize" value="S1"><span>間口1間×奥行2間（1区画／約1.8m×3.6m）</span></label><label class="choice"><input type="radio" name="boothSize" value="S2"><span>間口2間×奥行2間（2区画／約3.6m×3.6m）</span></label><label class="choice"><input type="radio" name="boothSize" value="S3"><span>間口3間×奥行2間（3区画／約5.4m×3.6m）</span></label></div>
+        <p class="help" id="boothSize-help">1区画は約2.7m×3.6m（間口1.5間×奥行2間）です。レンタルテントのサイズと対応しています。</p><div class="choices" role="radiogroup" aria-labelledby="boothSize-label"><label class="choice"><input type="radio" name="boothSize" value="S1"><span>間口1.5間×奥行2間（1区画／約2.7m×3.6m）</span></label><label class="choice"><input type="radio" name="boothSize" value="S2"><span>間口3間×奥行2間（2区画／約5.4m×3.6m）</span></label></div>
         <p class="err" data-err="boothSize"></p>
       </div>
       <div class="field" data-field="power">
@@ -724,9 +732,12 @@ function isRequired(field, values) {
   return testCondition(field.required, values);
 }
 
-var FIELDS = [{"key":"companyName","section":"applicant","type":"text","required":true,"label":"企業名","sheet":"企業名","maxLength":100,"autocomplete":"organization"},{"key":"boothName","section":"applicant","type":"text","required":false,"label":"出店名","sheet":"出店名","maxLength":100,"help":"企業名と異なる場合のみご記入ください。当日の掲示や告知に使用します。"},{"key":"contactName","section":"applicant","type":"text","required":true,"label":"ご担当者さまのお名前","sheet":"担当者氏名","maxLength":50,"autocomplete":"name"},{"key":"contactEmail","section":"applicant","type":"email","required":true,"label":"ご担当者さまのメールアドレス","sheet":"担当者メール","maxLength":254,"help":"このアドレスに受付確認メールと出店可否のご連絡をお送りします。","autocomplete":"email"},{"key":"contactPhone","section":"applicant","type":"tel","required":true,"label":"ご担当者さまの電話番号","sheet":"担当者電話","maxLength":20,"help":"当日ご連絡のつく番号をご記入ください。","autocomplete":"tel"},{"key":"fcosakaStaff","section":"applicant","type":"select","required":true,"label":"FC大阪の担当社員","sheet":"FC大阪担当社員","help":"お声がけした担当者をお選びください。","searchable":true,"fallbackOptions":["わからない／FC大阪以外からの紹介"],"unknownOption":"わからない／FC大阪以外からの紹介"},{"key":"boothTypes","section":"content","type":"checkboxes","required":true,"label":"出店の形態","sheet":"出店形態","help":"当てはまるものをすべてお選びください。","options":["飲食","ワークショップ","展示","体験コンテンツ","その他"]},{"key":"boothTypeOther","section":"content","type":"text","label":"出店形態（その他の内容）","sheet":"出店形態その他","maxLength":100,"showIf":{"field":"boothTypes","op":"includes","value":"その他"},"required":{"field":"boothTypes","op":"includes","value":"その他"}},{"key":"boothDescription","section":"content","type":"textarea","required":true,"label":"出店内容のご説明","sheet":"出店内容","maxLength":1000,"rows":5,"help":"販売商品・メニュー・価格帯・体験の内容をご記入ください。体験系の場合は、所要時間・同時参加人数・対象年齢もあわせてご記載ください。"},{"key":"foodLicense","section":"content","type":"radio","label":"飲食の営業許可","sheet":"営業許可","help":"飲食の出店には保健所の臨時営業許可が必要です。取得は出店者さまでお願いしております。","options":["取得済み","取得予定","不要","不明"],"showIf":{"field":"boothTypes","op":"includes","value":"飲食"},"required":{"field":"boothTypes","op":"includes","value":"飲食"}},{"key":"tableware","section":"content","type":"radio","label":"食器・包材の持込予定","sheet":"食器・包材","help":"サステナビリティをテーマとするイベントのため、包材等について主催側からご相談させていただく場合があります。","options":["リユース食器","紙・木・バイオマス等の環境配慮素材","プラスチック","未定"],"showIf":{"field":"boothTypes","op":"includes","value":"飲食"},"required":{"field":"boothTypes","op":"includes","value":"飲食"}},{"key":"sustainability","section":"content","type":"textarea","required":false,"label":"サステナビリティに関する取り組み（PR用）","sheet":"サステナ取り組み","maxLength":1000,"rows":4,"help":"環境や地域への取り組みがあればご記入ください。イベントの告知や実施報告でご紹介させていただく場合があります。"},{"key":"boothSize","section":"space","type":"radio","required":true,"label":"ご希望の区画","sheet":"希望区画","help":"1区画は約1.8m×3.6m（間口1間×奥行2間）です。","options":[{"value":"S1","label":"間口1間×奥行2間（1区画／約1.8m×3.6m）","units":1},{"value":"S2","label":"間口2間×奥行2間（2区画／約3.6m×3.6m）","units":2},{"value":"S3","label":"間口3間×奥行2間（3区画／約5.4m×3.6m）","units":3}]},{"key":"power","section":"space","type":"radio","required":true,"label":"電源","sheet":"電源","help":"レンタルの可否・料金は追ってご案内します。","options":["必要（発電機を持ち込む）","レンタルを希望する（要確認）","不要"]},{"key":"generatorCapacity","section":"space","type":"text","label":"持ち込む発電機の容量（kVA）","sheet":"発電機容量","maxLength":30,"help":"発電機本体のシールに書かれている数字です（例：2.8kVA）。おわかりにならない場合は「不明」とご記入ください。","showIf":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"},"required":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"}},{"key":"generatorFuel","section":"space","type":"radio","label":"発電機の燃料","sheet":"発電機燃料","options":["ガソリン（携行缶の持込あり）","ガソリン（携行缶の持込なし）","カセットガス","ポータブル蓄電池","その他"],"showIf":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"},"required":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"}},{"key":"powerDevices","section":"space","type":"text","label":"使用予定の機器","sheet":"使用機器","maxLength":200,"help":"例：冷蔵ショーケース、電気フライヤー、照明","showIf":{"field":"power","op":"ne","value":"不要"},"required":{"field":"power","op":"ne","value":"不要"}},{"key":"powerWatt","section":"space","type":"number","label":"合計消費電力（W）","sheet":"合計消費電力(W)","min":0,"max":100000,"showIf":{"field":"power","op":"ne","value":"不要"},"required":{"field":"power","op":"ne","value":"不要"},"unknownCheckbox":{"key":"powerWattUnknown","label":"わからない","sheet":"消費電力不明"}},{"key":"tentChoice","section":"rental","type":"radio","required":true,"label":"テント","sheet":"テント","options":["レンタルする","持ち込む"]},{"key":"tentSize","section":"rental","type":"radio","label":"レンタルするテントのサイズ","sheet":"テントサイズ","options":[{"value":"T1","label":"間口1.5間×奥行2間（約2.7m×3.6m）","priceKey":"tentT1"},{"value":"T2","label":"間口3間×奥行2間（約5.4m×3.6m）","priceKey":"tentT2"}],"showIf":{"field":"tentChoice","op":"eq","value":"レンタルする"},"required":{"field":"tentChoice","op":"eq","value":"レンタルする"}},{"key":"tentOwnWidth","section":"rental","type":"number","label":"お持ち込みテントの間口（m）","sheet":"持込テント間口(m)","min":0.5,"max":20,"help":"区画に収まるサイズかを確認します。","showIf":{"field":"tentChoice","op":"eq","value":"持ち込む"},"required":{"field":"tentChoice","op":"eq","value":"持ち込む"}},{"key":"tentOwnDepth","section":"rental","type":"number","label":"お持ち込みテントの奥行（m）","sheet":"持込テント奥行(m)","min":0.5,"max":20,"showIf":{"field":"tentChoice","op":"eq","value":"持ち込む"},"required":{"field":"tentChoice","op":"eq","value":"持ち込む"}},{"key":"tentWeight","section":"rental","type":"radio","label":"テントの重り（ウェイト）","sheet":"テント重り","help":"ウエイト（重り）の持ち込みも必ずお願いいたします。会場は吹きさらしのため、ペグでの固定ができない場合があります。","options":["持参する","持っていない（要相談）"],"showIf":{"field":"tentChoice","op":"eq","value":"持ち込む"},"required":{"field":"tentChoice","op":"eq","value":"持ち込む"}},{"key":"rentalTable","section":"rental","type":"number","required":false,"label":"長机（1800×450）","sheet":"長机","min":0,"max":20,"default":0,"priceKey":"table","unitLabel":"台"},{"key":"rentalChair","section":"rental","type":"number","required":false,"label":"パイプ椅子","sheet":"パイプ椅子","min":0,"max":40,"default":0,"priceKey":"chair","unitLabel":"脚"},{"key":"rentalOther","section":"rental","type":"textarea","required":false,"label":"その他のご要望","sheet":"その他備品要望","maxLength":500,"rows":3,"help":"その他ご要望があればご記載ください。別途お見積もりをお送りします。"},{"key":"agreeAll","section":"consent","type":"consent","required":true,"label":"上記の出店条件（営業時間・車両の進入・ごみの持ち帰り・包材・天候・各種届出）を確認し、ご記入いただいた情報を本イベントの運営および告知・実施報告での紹介に使用することに同意します","sheet":"同意"},{"key":"website2","section":"consent","type":"honeypot","sheet":null,"label":"この欄は入力しないでください"}];
+var FIELDS = [{"key":"companyName","section":"applicant","type":"text","required":true,"label":"企業名","sheet":"企業名","maxLength":100,"autocomplete":"organization"},{"key":"boothName","section":"applicant","type":"text","required":false,"label":"出店名","sheet":"出店名","maxLength":100,"help":"企業名と異なる場合のみご記入ください。当日の掲示や告知に使用します。"},{"key":"contactName","section":"applicant","type":"text","required":true,"label":"ご担当者さまのお名前","sheet":"担当者氏名","maxLength":50,"autocomplete":"name"},{"key":"contactEmail","section":"applicant","type":"email","required":true,"label":"ご担当者さまのメールアドレス","sheet":"担当者メール","maxLength":254,"help":"このアドレスに受付確認メールと出店可否のご連絡をお送りします。","autocomplete":"email"},{"key":"contactPhone","section":"applicant","type":"tel","required":true,"label":"ご担当者さまの電話番号","sheet":"担当者電話","maxLength":20,"help":"当日ご連絡のつく番号をご記入ください。","autocomplete":"tel"},{"key":"fcosakaStaff","section":"applicant","type":"select","required":true,"label":"FC大阪の担当社員","sheet":"FC大阪担当社員","help":"お声がけした担当者をお選びください。","searchable":true,"fallbackOptions":["わからない／FC大阪以外からの紹介"],"unknownOption":"わからない／FC大阪以外からの紹介"},{"key":"boothTypes","section":"content","type":"checkboxes","required":true,"label":"出店の形態","sheet":"出店形態","help":"当てはまるものをすべてお選びください。","options":["飲食","ワークショップ","展示","体験コンテンツ","その他"]},{"key":"boothTypeOther","section":"content","type":"text","label":"出店形態（その他の内容）","sheet":"出店形態その他","maxLength":100,"showIf":{"field":"boothTypes","op":"includes","value":"その他"},"required":{"field":"boothTypes","op":"includes","value":"その他"}},{"key":"boothDescription","section":"content","type":"textarea","required":true,"label":"出店内容のご説明","sheet":"出店内容","maxLength":1000,"rows":5,"help":"販売商品・メニュー・価格帯・体験の内容をご記入ください。体験系の場合は、所要時間・同時参加人数・対象年齢もあわせてご記載ください。"},{"key":"foodLicense","section":"content","type":"radio","label":"飲食の営業許可","sheet":"営業許可","help":"飲食の出店には保健所の臨時営業許可が必要です。取得は出店者さまでお願いしております。","options":["取得済み","取得予定","不要","不明"],"showIf":{"field":"boothTypes","op":"includes","value":"飲食"},"required":{"field":"boothTypes","op":"includes","value":"飲食"}},{"key":"tableware","section":"content","type":"radio","label":"食器・包材の持込予定","sheet":"食器・包材","help":"サステナビリティをテーマとするイベントのため、包材等について主催側からご相談させていただく場合があります。","options":["リユース食器","紙・木・バイオマス等の環境配慮素材","プラスチック","未定"],"showIf":{"field":"boothTypes","op":"includes","value":"飲食"},"required":{"field":"boothTypes","op":"includes","value":"飲食"}},{"key":"sustainability","section":"content","type":"textarea","required":false,"label":"サステナビリティに関する取り組み（PR用）","sheet":"サステナ取り組み","maxLength":1000,"rows":4,"help":"環境や地域への取り組みがあればご記入ください。イベントの告知や実施報告でご紹介させていただく場合があります。"},{"key":"boothSize","section":"space","type":"radio","required":true,"label":"ご希望の区画","sheet":"希望区画","help":"1区画は約2.7m×3.6m（間口1.5間×奥行2間）です。レンタルテントのサイズと対応しています。","options":[{"value":"S1","label":"間口1.5間×奥行2間（1区画／約2.7m×3.6m）","units":1},{"value":"S2","label":"間口3間×奥行2間（2区画／約5.4m×3.6m）","units":2}]},{"key":"power","section":"space","type":"radio","required":true,"label":"電源","sheet":"電源","help":"レンタルの可否・料金は追ってご案内します。","options":["必要（発電機を持ち込む）","レンタルを希望する（要確認）","不要"]},{"key":"generatorCapacity","section":"space","type":"text","label":"持ち込む発電機の容量（kVA）","sheet":"発電機容量","maxLength":30,"help":"発電機本体のシールに書かれている数字です（例：2.8kVA）。おわかりにならない場合は「不明」とご記入ください。","showIf":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"},"required":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"}},{"key":"generatorFuel","section":"space","type":"radio","label":"発電機の燃料","sheet":"発電機燃料","options":["ガソリン（携行缶の持込あり）","ガソリン（携行缶の持込なし）","カセットガス","ポータブル蓄電池","その他"],"showIf":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"},"required":{"field":"power","op":"eq","value":"必要（発電機を持ち込む）"}},{"key":"powerDevices","section":"space","type":"text","label":"使用予定の機器","sheet":"使用機器","maxLength":200,"help":"例：冷蔵ショーケース、電気フライヤー、照明","showIf":{"field":"power","op":"ne","value":"不要"},"required":{"field":"power","op":"ne","value":"不要"}},{"key":"powerWatt","section":"space","type":"number","label":"合計消費電力（W）","sheet":"合計消費電力(W)","min":0,"max":100000,"showIf":{"field":"power","op":"ne","value":"不要"},"required":{"field":"power","op":"ne","value":"不要"},"unknownCheckbox":{"key":"powerWattUnknown","label":"わからない","sheet":"消費電力不明"}},{"key":"tentChoice","section":"rental","type":"radio","required":true,"label":"テント","sheet":"テント","options":["レンタルする","持ち込む"]},{"key":"tentSize","section":"rental","type":"radio","label":"レンタルするテントのサイズ","sheet":"テントサイズ","options":[{"value":"T1","label":"間口1.5間×奥行2間（約2.7m×3.6m）","priceKey":"tentT1"},{"value":"T2","label":"間口3間×奥行2間（約5.4m×3.6m）","priceKey":"tentT2"}],"showIf":{"field":"tentChoice","op":"eq","value":"レンタルする"},"required":{"field":"tentChoice","op":"eq","value":"レンタルする"}},{"key":"tentOwnWidth","section":"rental","type":"number","label":"お持ち込みテントの間口（m）","sheet":"持込テント間口(m)","min":0.5,"max":20,"help":"区画に収まるサイズかを確認します。","showIf":{"field":"tentChoice","op":"eq","value":"持ち込む"},"required":{"field":"tentChoice","op":"eq","value":"持ち込む"}},{"key":"tentOwnDepth","section":"rental","type":"number","label":"お持ち込みテントの奥行（m）","sheet":"持込テント奥行(m)","min":0.5,"max":20,"showIf":{"field":"tentChoice","op":"eq","value":"持ち込む"},"required":{"field":"tentChoice","op":"eq","value":"持ち込む"}},{"key":"tentWeight","section":"rental","type":"radio","label":"テントの重り（ウェイト）","sheet":"テント重り","help":"ウエイト（重り）の持ち込みも必ずお願いいたします。会場は吹きさらしのため、ペグでの固定ができない場合があります。","options":["持参する","持っていない（要相談）"],"showIf":{"field":"tentChoice","op":"eq","value":"持ち込む"},"required":{"field":"tentChoice","op":"eq","value":"持ち込む"}},{"key":"rentalTable","section":"rental","type":"number","required":false,"label":"長机（1800×450）","sheet":"長机","min":0,"max":20,"default":0,"priceKey":"table","unitLabel":"台"},{"key":"rentalChair","section":"rental","type":"number","required":false,"label":"パイプ椅子","sheet":"パイプ椅子","min":0,"max":40,"default":0,"priceKey":"chair","unitLabel":"脚"},{"key":"rentalOther","section":"rental","type":"textarea","required":false,"label":"その他のご要望","sheet":"その他備品要望","maxLength":500,"rows":3,"help":"その他ご要望があればご記載ください。別途お見積もりをお送りします。"},{"key":"agreeAll","section":"consent","type":"consent","required":true,"label":"上記の出店条件（営業時間・車両の進入・ごみの持ち帰り・包材・天候・各種届出）を確認し、ご記入いただいた情報を本イベントの運営および告知・実施報告での紹介に使用することに同意します","sheet":"同意"},{"key":"website2","section":"consent","type":"honeypot","sheet":null,"label":"この欄は入力しないでください"}];
 var GAS_URL = "";
-var CFG = { prices:{}, closed:false, deadline:'', contact:'', staff:[] };
+// GASに接続できないとき（表示確認用ページなど）に使う仮単価。
+// 本番では設定シートの値で必ず上書きされる。
+var FALLBACK_PRICES = { tentT1:15000, tentT2:30000, table:1000, chair:500 };
+var CFG = { prices:FALLBACK_PRICES, closed:false, deadline:'', contact:'', staff:[] };
 var submissionId = (function(){
   try { return crypto.randomUUID(); }
   catch(e){ return 'sid-' + Date.now() + '-' + Math.random().toString(36).slice(2); }
@@ -983,6 +994,11 @@ function loadConfig(){
     .then(function(d){
       if (!d || !d.ok) throw new Error('bad config');
       CFG = d;
+      // 設定シートが空欄の単価だけ、仮単価で補う
+      CFG.prices = CFG.prices || {};
+      Object.keys(FALLBACK_PRICES).forEach(function(k){
+        if (CFG.prices[k] == null) CFG.prices[k] = FALLBACK_PRICES[k];
+      });
       if (d.closed){ showClosed(); return; }
       if (d.deadline){
         var m = d.deadline.match(/(\d+)年(\d+)月(\d+)日.*?(\d+:\d+)/);
