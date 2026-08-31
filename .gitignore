@@ -9,3 +9,9 @@ test-results/
 playwright-report/
 .DS_Store
 Thumbs.db
+
+# 生成物。公開は gh-pages ブランチへ明示的に deploy する
+/index.html
+/design-a.html
+/design-b.html
+/design-c.html
