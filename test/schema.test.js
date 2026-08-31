@@ -23,7 +23,7 @@ const baseValues = (over = {}) => Object.assign({
   fcosakaStaff: 'わからない／FC大阪以外からの紹介',
   boothTypes: ['展示'],
   boothDescription: '展示の内容',
-  fireUse: '使用しない',
+  fireUse: ['使用しない'],
   boothSize: 'S1',
   power: '不要',
   vehicleCount: 1,
@@ -101,12 +101,12 @@ describe('その他の自由記述', () => {
   });
 
   test('火気で「その他」を選ぶと自由記述が必須になる', () => {
-    const v = baseValues({ fireUse: 'その他' });
+    const v = baseValues({ fireUse: ['その他'] });
     assert.equal(S.isRequired(field('fireUseOther'), v), true);
   });
 
   test('「その他」以外なら自由記述は表示されない', () => {
-    const v = baseValues({ fireUse: 'ガス' });
+    const v = baseValues({ fireUse: ['ガス'] });
     assert.equal(S.isVisible(field('fireUseOther'), v), false);
   });
 });
@@ -178,13 +178,15 @@ describe('生成物がスキーマと同期しているか（回帰テスト）'
   const path = require('node:path');
   const root = path.join(__dirname, '..');
 
-  test('index.html に埋め込まれた FIELDS が schema.js と完全に一致する', () => {
+  test('index.html に埋め込まれた FIELDS が schema.js の応募段階と一致する', () => {
     // ビルドを片方しか流していない、生成を忘れた、を検出する。
-    // ここがずれると「フォームに無い項目の列が台帳にできる」等の事故になる。
+    // index.html に入るのは応募段階（stage:'apply'）の項目だけ。
+    // 採択後に聞く項目まで入っていたら、応募フォームに漏れている。
     const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     const m = html.match(/var FIELDS = (\[.*?\]);\n/s);
     assert.ok(m, 'index.html に FIELDS が見つかりません');
-    assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify(S.FIELDS)));
+    const applyFields = S.applyFields();
+    assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify(applyFields)));
   });
 
   test('gas/Schema.gs の FIELDS が schema.js と完全に一致する', () => {
@@ -198,5 +200,76 @@ describe('生成物がスキーマと同期しているか（回帰テスト）'
     const h = S.ledgerHeaders();
     ['受付メール送信', '通知メール送信', '生データ(JSON)'].forEach(c =>
       assert.ok(h.includes(c), '列が欠けています: ' + c));
+  });
+});
+
+describe('二段階収集（列は今作り、聞くタイミングを分ける）', () => {
+  test('採択後に聞く項目は「出店確定情報」シート側に列を持つ', () => {
+    // 応募一覧とは別シートなので、ここへの項目追加は運用開始後でもできる。
+    const h = S.confirmHeaders();
+    for (const f of S.confirmFields()) {
+      assert.ok(h.includes(f.sheet), '列が欠けています: ' + f.sheet);
+    }
+  });
+
+  test('採択後の項目が応募一覧の列に混ざっていない', () => {
+    const led = S.ledgerHeaders();
+    for (const f of S.confirmFields()) {
+      assert.equal(led.includes(f.sheet), false, '応募一覧に混ざっています: ' + f.sheet);
+    }
+  });
+
+  test('応募フォームの項目が増えすぎていない', () => {
+    // 全員が全問答えるわけではない（多くは条件表示）が、定義の総数が
+    // 膨らむと画面も必ず長くなる。上限を決めて歯止めにする。
+    const n = S.applyFields().filter(f => f.type !== 'honeypot').length;
+    assert.ok(n <= 30, '応募フォームの項目が増えすぎています: ' + n + '項目');
+  });
+
+  test('採択後に聞く項目は応募フォームに出さない', () => {
+    const fs = require('node:fs'), path = require('node:path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    for (const f of S.FIELDS.filter(f => f.stage === 'confirm')) {
+      assert.equal(html.includes('data-field="' + f.key + '"'), false,
+        '応募フォームに出てしまっています: ' + f.key);
+    }
+  });
+
+  test('火気は複数選択で、併用（炭＋ガス）を表現できる', () => {
+    const f = S.FIELDS.find(x => x.key === 'fireUse');
+    assert.equal(f.type, 'checkboxes');
+    const v = { fireUse: ['ガス', '炭'] };
+    const ext = S.FIELDS.find(x => x.key === 'fireExtinguisher');
+    assert.equal(S.isRequired(ext, v), true, '消火器が必須になっていません');
+  });
+
+  test('火気を使わないなら消火器は聞かない', () => {
+    const v = { fireUse: ['使用しない'] };
+    const ext = S.FIELDS.find(x => x.key === 'fireExtinguisher');
+    assert.equal(S.isVisible(ext, v), false);
+  });
+
+  test('テントは、レンタルならサイズを・持ち込みなら寸法と重りを聞く', () => {
+    const f = k => S.FIELDS.find(x => x.key === k);
+    const rent = { tentChoice: 'レンタルする' };
+    const own  = { tentChoice: '持ち込む' };
+
+    assert.equal(S.isVisible(f('tentSize'), rent), true, 'レンタル時にサイズを聞いていません');
+    assert.equal(S.isVisible(f('tentOwnWidth'), rent), false, 'レンタルなのに寸法を聞いています');
+    assert.equal(S.isVisible(f('tentWeight'), rent), false, 'レンタルなのに重りを聞いています');
+
+    assert.equal(S.isVisible(f('tentSize'), own), false, '持ち込みなのにサイズを聞いています');
+    assert.equal(S.isVisible(f('tentOwnWidth'), own), true);
+    assert.equal(S.isVisible(f('tentOwnDepth'), own), true);
+    assert.equal(S.isVisible(f('tentWeight'), own), true, '持ち込み時に重りを聞いていません');
+  });
+
+  test('レンタルテントは2サイズあり、それぞれ別の単価キーを持つ', () => {
+    const opts = S.FIELDS.find(x => x.key === 'tentSize').options;
+    assert.equal(opts.length, 2);
+    assert.deepEqual(opts.map(o => o.priceKey), ['tentT1', 'tentT2']);
+    // メートル表記が間口×奥行の順になっていること
+    assert.match(opts[0].label, /約2\.7m×3\.6m/);
+    assert.match(opts[1].label, /約5\.4m×3\.6m/);
   });
 });

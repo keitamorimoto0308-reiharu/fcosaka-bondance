@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 140" width="360" height="140" role="img" aria-label="サステナ盆踊り">
+  <!-- 濃色背景用。logo-main.svg の濃色部分を白に置き換えたもの。 -->
+  <rect x="24" y="34" width="6" height="52" fill="#7FCAF1"/>
+  <text x="44" y="62" fill="#FFFFFF" font-size="30" font-weight="700" letter-spacing="1.5"
+        font-family="'Noto Sans JP', system-ui, sans-serif">サステナ盆踊り</text>
+  <text x="46" y="84" fill="#CFC9C6" font-size="11" letter-spacing="4.4"
+        font-family="'Oswald', 'Noto Sans JP', sans-serif">SUSTAINA BON ODORI</text>
+  <rect x="46" y="96" width="34" height="3" fill="#E0A882"/>
+</svg>

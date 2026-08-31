@@ -92,23 +92,13 @@ var FIELDS = [
     "autocomplete": "tel"
   },
   {
-    "key": "websiteUrl",
-    "section": "applicant",
-    "type": "url",
-    "required": false,
-    "label": "会社HP・SNSのURL",
-    "sheet": "HP・SNS",
-    "maxLength": 300,
-    "help": "イベント告知でご紹介する際に使用します。"
-  },
-  {
     "key": "fcosakaStaff",
     "section": "applicant",
     "type": "select",
     "required": true,
     "label": "FC大阪の担当社員",
     "sheet": "FC大阪担当社員",
-    "help": "お声がけした担当者をお選びください。お名前の一部を入力すると絞り込めます。",
+    "help": "お声がけした担当者をお選びください。",
     "searchable": true,
     "fallbackOptions": [
       "わからない／FC大阪以外からの紹介"
@@ -159,39 +149,6 @@ var FIELDS = [
     "maxLength": 1000,
     "rows": 5,
     "help": "販売商品・メニュー・価格帯・体験の内容をご記入ください。体験系の場合は、所要時間・同時参加人数・対象年齢もあわせてご記載ください。"
-  },
-  {
-    "key": "fireUse",
-    "section": "content",
-    "type": "radio",
-    "required": true,
-    "label": "火気の使用",
-    "sheet": "火気使用",
-    "options": [
-      "使用しない",
-      "ガス",
-      "炭",
-      "IH・電気調理器",
-      "その他"
-    ]
-  },
-  {
-    "key": "fireUseOther",
-    "section": "content",
-    "type": "text",
-    "label": "火気（その他の内容）",
-    "sheet": "火気その他",
-    "maxLength": 100,
-    "showIf": {
-      "field": "fireUse",
-      "op": "eq",
-      "value": "その他"
-    },
-    "required": {
-      "field": "fireUse",
-      "op": "eq",
-      "value": "その他"
-    }
   },
   {
     "key": "foodLicense",
@@ -259,7 +216,7 @@ var FIELDS = [
     "required": true,
     "label": "ご希望の区画",
     "sheet": "希望区画",
-    "help": "1区画は間口1間×奥行2間（約1.8m×3.6m）です。",
+    "help": "1区画は約1.8m×3.6m（間口1間×奥行2間）です。",
     "options": [
       {
         "value": "S1",
@@ -299,6 +256,31 @@ var FIELDS = [
     "label": "持ち込む発電機の容量（kVA）",
     "sheet": "発電機容量",
     "maxLength": 30,
+    "help": "発電機本体のシールに書かれている数字です（例：2.8kVA）。おわかりにならない場合は「不明」とご記入ください。",
+    "showIf": {
+      "field": "power",
+      "op": "eq",
+      "value": "必要（発電機を持ち込む）"
+    },
+    "required": {
+      "field": "power",
+      "op": "eq",
+      "value": "必要（発電機を持ち込む）"
+    }
+  },
+  {
+    "key": "generatorFuel",
+    "section": "space",
+    "type": "radio",
+    "label": "発電機の燃料",
+    "sheet": "発電機燃料",
+    "options": [
+      "ガソリン（携行缶の持込あり）",
+      "ガソリン（携行缶の持込なし）",
+      "カセットガス",
+      "ポータブル蓄電池",
+      "その他"
+    ],
     "showIf": {
       "field": "power",
       "op": "eq",
@@ -354,14 +336,106 @@ var FIELDS = [
     }
   },
   {
-    "key": "rentalTent",
+    "key": "tentChoice",
     "section": "rental",
-    "type": "consent",
-    "label": "テントをレンタルする",
-    "sheet": "テントレンタル",
-    "help": "お選びいただいた区画と同じサイズのテントをご用意します（1張り）。レンタルされない場合はご持参ください。",
-    "priceKey": "tent",
-    "quantityFixed": 1
+    "type": "radio",
+    "required": true,
+    "label": "テント",
+    "sheet": "テント",
+    "options": [
+      "レンタルする",
+      "持ち込む"
+    ]
+  },
+  {
+    "key": "tentSize",
+    "section": "rental",
+    "type": "radio",
+    "label": "レンタルするテントのサイズ",
+    "sheet": "テントサイズ",
+    "options": [
+      {
+        "value": "T1",
+        "label": "間口1.5間×奥行2間（約2.7m×3.6m）",
+        "priceKey": "tentT1"
+      },
+      {
+        "value": "T2",
+        "label": "間口3間×奥行2間（約5.4m×3.6m）",
+        "priceKey": "tentT2"
+      }
+    ],
+    "showIf": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "レンタルする"
+    },
+    "required": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "レンタルする"
+    }
+  },
+  {
+    "key": "tentOwnWidth",
+    "section": "rental",
+    "type": "number",
+    "label": "お持ち込みテントの間口（m）",
+    "sheet": "持込テント間口(m)",
+    "min": 0.5,
+    "max": 20,
+    "help": "区画に収まるサイズかを確認します。",
+    "showIf": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "持ち込む"
+    },
+    "required": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "持ち込む"
+    }
+  },
+  {
+    "key": "tentOwnDepth",
+    "section": "rental",
+    "type": "number",
+    "label": "お持ち込みテントの奥行（m）",
+    "sheet": "持込テント奥行(m)",
+    "min": 0.5,
+    "max": 20,
+    "showIf": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "持ち込む"
+    },
+    "required": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "持ち込む"
+    }
+  },
+  {
+    "key": "tentWeight",
+    "section": "rental",
+    "type": "radio",
+    "label": "テントの重り（ウェイト）",
+    "sheet": "テント重り",
+    "help": "ウエイト（重り）の持ち込みも必ずお願いいたします。会場は吹きさらしのため、ペグでの固定ができない場合があります。",
+    "options": [
+      "持参する",
+      "持っていない（要相談）"
+    ],
+    "showIf": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "持ち込む"
+    },
+    "required": {
+      "field": "tentChoice",
+      "op": "eq",
+      "value": "持ち込む"
+    }
   },
   {
     "key": "rentalTable",
@@ -390,8 +464,151 @@ var FIELDS = [
     "unitLabel": "脚"
   },
   {
+    "key": "rentalOther",
+    "section": "rental",
+    "type": "textarea",
+    "required": false,
+    "label": "その他のご要望",
+    "sheet": "その他備品要望",
+    "maxLength": 500,
+    "rows": 3,
+    "help": "その他ご要望があればご記載ください。別途お見積もりをお送りします。"
+  },
+  {
+    "key": "agreeAll",
+    "section": "consent",
+    "type": "consent",
+    "required": true,
+    "label": "上記の出店条件（営業時間・車両の進入・ごみの持ち帰り・包材・天候・各種届出）を確認し、ご記入いただいた情報を本イベントの運営および告知・実施報告での紹介に使用することに同意します",
+    "sheet": "同意"
+  },
+  {
+    "key": "website2",
+    "section": "consent",
+    "type": "honeypot",
+    "sheet": null,
+    "label": "この欄は入力しないでください"
+  },
+  {
+    "key": "fireUse",
+    "section": "content",
+    "stage": "confirm",
+    "type": "checkboxes",
+    "label": "火気の使用",
+    "sheet": "火気使用",
+    "help": "使用するものをすべてお選びください。",
+    "options": [
+      "使用しない",
+      "ガス",
+      "炭",
+      "薪",
+      "アルコール・固形燃料",
+      "IH・電気調理器",
+      "その他"
+    ],
+    "exclusiveOption": "使用しない",
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    },
+    "required": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    }
+  },
+  {
+    "key": "fireUseOther",
+    "section": "content",
+    "stage": "confirm",
+    "type": "text",
+    "label": "火気（その他の内容）",
+    "sheet": "火気その他",
+    "maxLength": 100,
+    "showIf": {
+      "field": "fireUse",
+      "op": "includes",
+      "value": "その他"
+    },
+    "required": {
+      "field": "fireUse",
+      "op": "includes",
+      "value": "その他"
+    }
+  },
+  {
+    "key": "fireExtinguisher",
+    "section": "content",
+    "stage": "confirm",
+    "type": "radio",
+    "label": "消火器のご持参",
+    "sheet": "消火器",
+    "help": "火気を使用される場合は、消火器を1本ご持参ください。",
+    "options": [
+      "持参する",
+      "持参できない（要相談）"
+    ],
+    "showIf": {
+      "field": "fireUse",
+      "op": "includesAny",
+      "value": [
+        "ガス",
+        "炭",
+        "薪",
+        "アルコール・固形燃料",
+        "その他"
+      ]
+    },
+    "required": {
+      "field": "fireUse",
+      "op": "includesAny",
+      "value": [
+        "ガス",
+        "炭",
+        "薪",
+        "アルコール・固形燃料",
+        "その他"
+      ]
+    }
+  },
+  {
+    "key": "siteManagerName",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "text",
+    "required": true,
+    "label": "当日の現場責任者",
+    "sheet": "現場責任者",
+    "maxLength": 50,
+    "help": "当日、会場にいらっしゃる方のお名前。応募ご担当者と同じ場合はそのままで結構です。"
+  },
+  {
+    "key": "siteManagerPhone",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "tel",
+    "required": true,
+    "label": "現場責任者の携帯番号",
+    "sheet": "現場責任者携帯",
+    "maxLength": 20,
+    "help": "当日、会場で必ずつながる携帯番号をご記入ください。"
+  },
+  {
+    "key": "backupPhone",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "tel",
+    "required": false,
+    "label": "緊急時の第2連絡先",
+    "sheet": "第2連絡先",
+    "maxLength": 20,
+    "help": "現場責任者に連絡がつかないときにおかけします。会社の代表番号でも構いません。"
+  },
+  {
     "key": "vehicleCount",
     "section": "operation",
+    "stage": "confirm",
     "type": "number",
     "required": true,
     "label": "搬入車両の台数",
@@ -399,11 +616,54 @@ var FIELDS = [
     "min": 0,
     "max": 20,
     "default": 0,
-    "help": "搬入は8:30〜10:30です。搬入後の駐車場所は別途ご案内します。"
+    "help": "搬入は8:30〜10:30です。"
+  },
+  {
+    "key": "vehicleType",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "radio",
+    "required": true,
+    "label": "搬入車両の種類",
+    "sheet": "車両種別",
+    "help": "一番大きい車両をお選びください。搬入の誘導計画に使います。",
+    "options": [
+      "軽自動車・軽トラック",
+      "普通乗用車・バン",
+      "1.5t〜2tトラック",
+      "2t超・箱車"
+    ]
+  },
+  {
+    "key": "vehicleHeight",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "radio",
+    "required": true,
+    "label": "車両の全高",
+    "sheet": "車両全高",
+    "help": "ゲートに高さ制限があるため確認しています。",
+    "options": [
+      "2.1m以下",
+      "2.1mを超える",
+      "わからない"
+    ]
+  },
+  {
+    "key": "vehiclePlate",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "text",
+    "required": false,
+    "label": "ナンバー（下4桁）",
+    "sheet": "ナンバー下4桁",
+    "maxLength": 20,
+    "help": "当日、車両の移動をお願いする際に持ち主をすぐ特定するために使います。"
   },
   {
     "key": "parkingRequest",
     "section": "operation",
+    "stage": "confirm",
     "type": "radio",
     "required": true,
     "label": "駐車場の利用",
@@ -414,8 +674,54 @@ var FIELDS = [
     ]
   },
   {
+    "key": "loadInSlot1",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "radio",
+    "required": true,
+    "label": "搬入希望時間帯（第1希望）",
+    "sheet": "搬入希望1",
+    "options": [
+      "8:30〜9:00",
+      "9:00〜9:30",
+      "9:30〜10:00",
+      "10:00〜10:30",
+      "指定なし"
+    ]
+  },
+  {
+    "key": "loadInSlot2",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "radio",
+    "required": false,
+    "label": "搬入希望時間帯（第2希望）",
+    "sheet": "搬入希望2",
+    "options": [
+      "8:30〜9:00",
+      "9:00〜9:30",
+      "9:30〜10:00",
+      "10:00〜10:30",
+      "指定なし"
+    ]
+  },
+  {
+    "key": "loadOutEarly",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "radio",
+    "required": false,
+    "label": "17:30より前の撤収",
+    "sheet": "早期撤収希望",
+    "options": [
+      "希望しない",
+      "希望する（要相談）"
+    ]
+  },
+  {
     "key": "staffCount",
     "section": "operation",
+    "stage": "confirm",
     "type": "number",
     "required": true,
     "label": "当日のスタッフ人数",
@@ -426,6 +732,7 @@ var FIELDS = [
   {
     "key": "rainPolicy",
     "section": "operation",
+    "stage": "confirm",
     "type": "radio",
     "required": true,
     "label": "雨天時の対応",
@@ -439,36 +746,13 @@ var FIELDS = [
   {
     "key": "notes",
     "section": "operation",
+    "stage": "confirm",
     "type": "textarea",
     "required": false,
     "label": "備考・ご質問",
     "sheet": "備考",
     "maxLength": 1000,
-    "rows": 4,
-    "help": "搬入・撤収時間のご相談もこちらにご記入ください。"
-  },
-  {
-    "key": "agreeTerms",
-    "section": "consent",
-    "type": "consent",
-    "required": true,
-    "label": "上記の出店条件（営業時間・車両の進入・ごみの持ち帰り・包材・天候・各種届出）を確認し、同意します",
-    "sheet": "条件同意"
-  },
-  {
-    "key": "agreePrivacy",
-    "section": "consent",
-    "type": "consent",
-    "required": true,
-    "label": "ご記入いただいた情報を本イベントの運営目的以外には使用しないことを確認しました",
-    "sheet": "個人情報同意"
-  },
-  {
-    "key": "website2",
-    "section": "consent",
-    "type": "honeypot",
-    "sheet": null,
-    "label": "この欄は入力しないでください"
+    "rows": 4
   }
 ];
 
@@ -511,25 +795,27 @@ var DAY_STATUS = [
 ];
 
 function ledgerHeaders() {
-  const cols = [];
-  for (const f of FIELDS) {
-    if (!f.sheet) continue;
-    cols.push(f.sheet);
-    if (f.unknownCheckbox) cols.push(f.unknownCheckbox.sheet);
-  }
   return ['受付ID', '受付日時']
-    .concat(cols)
-    .concat(ADMIN_COLUMNS.filter(c => c !== '受付ID' && c !== '受付日時'));
+    .concat(columnsFor_(applyFields()))
+    .concat(ADMIN_COLUMNS.filter(function (c) { return c !== '受付ID' && c !== '受付日時'; }));
 }
 
 function testCondition(cond, values) {
   if (!cond) return true;
-  const v = values[cond.field];
+  var v = values[cond.field];
   switch (cond.op) {
     case 'eq':       return v === cond.value;
     case 'ne':       return v !== undefined && v !== '' && v !== cond.value;
     case 'includes': return Array.isArray(v) && v.indexOf(cond.value) !== -1;
+    // 複数の候補のいずれかを含むか（例：ガス・炭・薪のどれかを使う）
+    case 'includesAny':
+      if (!Array.isArray(v)) return false;
+      for (var i = 0; i < cond.value.length; i++) {
+        if (v.indexOf(cond.value[i]) !== -1) return true;
+      }
+      return false;
     case 'truthy':   return !!v;
+    case 'falsy':    return !v;
     default:         return true;
   }
 }

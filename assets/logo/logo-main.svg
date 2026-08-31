@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 140" width="360" height="140" role="img" aria-label="サステナ盆踊り">
+  <!--
+    暫定ロゴ（けいたの制作分が届くまで）。
+    図案を持たない文字組みだけの構成にしている。将来のロゴと競合せず、
+    かつ「作りかけ」にも見えないことを狙った。差し替えは
+    このファイルと logo-main-white.svg を置き換えるだけでよい。
+    仕様は docs/ロゴ支給仕様.md を参照。
+  -->
+  <!-- ブランド水色の罫。ロゴタイプの重心を支える -->
+  <rect x="24" y="34" width="6" height="52" fill="#7FCAF1"/>
+  <text x="44" y="62" fill="#231816" font-size="30" font-weight="700" letter-spacing="1.5"
+        font-family="'Noto Sans JP', system-ui, sans-serif">サステナ盆踊り</text>
+  <text x="46" y="84" fill="#6B6360" font-size="11" letter-spacing="4.4"
+        font-family="'Oswald', 'Noto Sans JP', sans-serif">SUSTAINA BON ODORI</text>
+  <!-- 和のアクセントは、この短い一本のみ -->
+  <rect x="46" y="96" width="34" height="3" fill="#B5714C"/>
+</svg>
