@@ -130,6 +130,10 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .pgrid input{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
   border-radius:6px;font-size:14px;font-family:inherit}
 .pgrid .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
+.pgrid select{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:6px;font-size:14px;font-family:inherit;background:#fff}
+.pwstate{margin-left:8px;font-size:11px;color:var(--muted);font-weight:400}
+.pwstate.warn{color:#B5714C;font-weight:700}
 .pchecks{margin-top:12px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
 .pchecks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
 .pchecks select{padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-family:inherit}
@@ -371,6 +375,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <button data-tab="day"  aria-selected="false">当日運営</button>
     <button data-tab="history" aria-selected="false">変更履歴</button>
     <button data-tab="people" aria-selected="false" class="admin-only" hidden>関係者</button>
+    <button data-tab="settings" aria-selected="false" class="admin-only" hidden>設定</button>
   </div></nav>
 
   <main>
@@ -515,6 +520,54 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         <p class="pnote">
           退職・異動の方は<b>消さずに、両方のチェックを外して</b>ください。
           過去の応募に残っている担当社員名の行き先が分からなくなるためです。
+        </p>
+      </div>
+    </section>
+    <!-- ── 設定（管理者のみ） ───────────────── -->
+    <section class="view" id="v-settings">
+      <div class="panel">
+        <h3>イベントの設定</h3>
+        <div class="pgrid" id="setFields"></div>
+        <p class="perr" id="setErr" hidden></p>
+        <div class="pbtns">
+          <button class="print" id="setSave">保存する</button>
+          <span class="msg" id="setMsg"></span>
+        </div>
+        <p class="pnote">
+          <b>応募の締切</b>は「2026-09-30 18:00」の形でご入力ください。
+          読み取れない書き方だと、その時点で<b>受付が止まります</b>（安全側に倒す作りのため）。
+        </p>
+      </div>
+
+      <div class="panel pform">
+        <h3>管理ページのパスワード</h3>
+        <p class="pnote" style="margin-top:0">
+          いま設定されている値は、この画面からは見られません（見られると、
+          一般パスワードで入った人が管理者パスワードを読めてしまうため）。
+          <b>変えたいものだけ</b>入力してください。空欄のものは変わりません。
+        </p>
+        <div class="pgrid" id="setPasswords"></div>
+        <p class="pnote" style="background:#FFF3E8;border:1px solid #f0d9c2">
+          <b>パスワードを変えると、いま入っている方は全員（ご自身を含めて）入り直しになります。</b>
+          新しいパスワードを配ってから変更してください。
+        </p>
+        <p class="perr" id="setPwErr" hidden></p>
+        <div class="pbtns">
+          <button class="print" id="setPwSave">パスワードを変更する</button>
+          <span class="msg" id="setPwMsg"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>レンタル品目の単価</h3>
+        <p class="pnote" style="margin-top:0">
+          レンタル備品の品目と単価は、台帳の<b>「レンタル品目」シート</b>で管理しています。
+          行を足すと応募フォームの欄が増えます。
+          単価が空欄・0円のあいだは、その品目はフォームに出ません。
+        </p>
+        <p class="pnote">
+          品目を足したときは、<b>募集要項PDFの料金表も直す必要があります</b>。
+          紙とフォームで違うことを言わないよう、食い違ったままではPDFを作れない仕組みにしています。
         </p>
       </div>
     </section>
@@ -1348,6 +1401,7 @@ function showTab(name, keepHash){
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
   if (name === 'history' && !S.history) loadHistory();
+  if (name === 'settings' && !S.settings) loadSettings();
   if (!keepHash && location.hash.slice(1).split('/')[0] !== name){
     history.replaceState(null, '', '#' + name);
   }
@@ -1357,7 +1411,7 @@ function showTab(name, keepHash){
 function applyHash(){
   var parts = location.hash.replace(/^#/, '').split('/');
   var tab = parts[0];
-  if (['dash','list','map','day','people','history'].indexOf(tab) < 0) return;
+  if (['dash','list','map','day','people','history','settings'].indexOf(tab) < 0) return;
   showTab(tab, true);
   if (tab === 'list' && parts[1]){
     var wait = setInterval(function(){
@@ -1598,6 +1652,120 @@ function saveApplicant(){
   });
 }
 
+// ─────────────────────────── 設定（管理者のみ）
+function loadSettings(){
+  api('adminSettings').then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '設定を取得できませんでした', true); return; }
+    S.settings = r;
+    renderSettings();
+  }, function(){ toast('設定を取得できませんでした', true); });
+}
+
+function renderSettings(){
+  var r = S.settings || {};
+  var v = r.values || {};
+
+  $('#setFields').innerHTML = (r.fields || []).map(function(f){
+    var val = v[f.key] == null ? '' : String(v[f.key]);
+    var input;
+    if (f.type === 'onoff'){
+      input = '<select id="set-' + esc(f.key) + '">'
+        + ['ON','OFF'].map(function(o){
+            return '<option' + (val === o ? ' selected' : '') + '>' + o + '</option>';
+          }).join('') + '</select>';
+    } else {
+      input = '<input id="set-' + esc(f.key) + '" value="' + esc(val) + '"'
+        + (f.type === 'deadline' ? ' placeholder="2026-09-30 18:00"' : '')
+        + (f.type === 'int' ? ' inputmode="numeric"' : '') + '>';
+    }
+    return '<label>' + esc(f.label) + input + '</label>';
+  }).join('');
+
+  $('#setPasswords').innerHTML = (r.passwords || []).map(function(pw){
+    var state = !pw.set ? '未設定'
+      : (pw.weak ? '短すぎます（' + r.minPasswordLength + '文字以上に）' : '設定済み');
+    return '<label>' + esc(pw.label)
+      + '<span class="pwstate' + (pw.weak || !pw.set ? ' warn' : '') + '">' + esc(state) + '</span>'
+      + '<input type="password" id="pw-' + esc(pw.key) + '" autocomplete="new-password"'
+      + ' placeholder="変えるときだけ入力（' + r.minPasswordLength + '文字以上）"></label>';
+  }).join('');
+}
+
+function saveSettings(){
+  var r = S.settings || {};
+  var values = {};
+  (r.fields || []).forEach(function(f){
+    var el = document.getElementById('set-' + f.key);
+    if (el) values[f.key] = el.value;
+  });
+
+  $('#setErr').hidden = true;
+  $('#setSave').disabled = true;
+  $('#setMsg').className = 'msg';
+  $('#setMsg').textContent = '保存しています…';
+
+  api('adminSettingsSave', { values: values }).then(function(res){
+    $('#setSave').disabled = false;
+    if (!res || !res.ok){
+      $('#setMsg').textContent = '';
+      $('#setErr').textContent = (res && res.message) || '保存できませんでした。';
+      $('#setErr').hidden = false;
+      return;
+    }
+    $('#setMsg').textContent = res.changed ? '保存しました（' + res.changed + '件）' : '変更はありません';
+    toast('設定を保存しました');
+    loadSettings(); loadSummary();
+    if (S.history) loadHistory();
+  }, function(){
+    $('#setSave').disabled = false;
+    $('#setMsg').textContent = '';
+    $('#setErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#setErr').hidden = false;
+  });
+}
+
+function savePasswords(){
+  var r = S.settings || {};
+  var passwords = {};
+  var any = false;
+  (r.passwords || []).forEach(function(pw){
+    var el = document.getElementById('pw-' + pw.key);
+    if (el && el.value){ passwords[pw.key] = el.value; any = true; }
+  });
+  if (!any){
+    $('#setPwErr').textContent = '変えたいパスワードをご入力ください。';
+    $('#setPwErr').hidden = false;
+    return;
+  }
+  if (!confirm('パスワードを変更します。' + String.fromCharCode(10) + String.fromCharCode(10)
+    + 'いま入っている方は全員（ご自身を含めて）入り直しになります。' + String.fromCharCode(10)
+    + '新しいパスワードは配り終えていますか。')) return;
+
+  $('#setPwErr').hidden = true;
+  $('#setPwSave').disabled = true;
+  $('#setPwMsg').className = 'msg';
+  $('#setPwMsg').textContent = '変更しています…';
+
+  api('adminSettingsSave', { values: {}, passwords: passwords }).then(function(res){
+    $('#setPwSave').disabled = false;
+    if (!res || !res.ok){
+      $('#setPwMsg').textContent = '';
+      $('#setPwErr').textContent = (res && res.message) || '変更できませんでした。';
+      $('#setPwErr').hidden = false;
+      return;
+    }
+    // 変えた瞬間に自分のトークンも失効している。入り直してもらう
+    alert('パスワードを変更しました。' + String.fromCharCode(10)
+      + '新しいパスワードで入り直してください。');
+    signOut('パスワードが変更されました。新しいパスワードでお入りください。');
+  }, function(){
+    $('#setPwSave').disabled = false;
+    $('#setPwMsg').textContent = '';
+    $('#setPwErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#setPwErr').hidden = false;
+  });
+}
+
 // ─────────────────────────── 起動
 document.addEventListener('DOMContentLoaded', function(){
   // 2つの段階が同じ form の中にあるので、いま出ている方で振り分ける
@@ -1619,6 +1787,8 @@ document.addEventListener('DOMContentLoaded', function(){
   $$('.tabs button').forEach(function(b){
     b.addEventListener('click', function(){ showTab(b.getAttribute('data-tab')); });
   });
+  $('#setSave').addEventListener('click', saveSettings);
+  $('#setPwSave').addEventListener('click', savePasswords);
   $('#hQ').addEventListener('input', renderHistory);
   $('#hReload').addEventListener('click', loadHistory);
   $('#apUnlock').addEventListener('click', unlockApplicant);
