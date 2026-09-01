@@ -131,6 +131,18 @@ h2.sec .ic{color:var(--brand-deep);width:17px;height:17px}
 .todoitem .edit{flex:none;background:none;border:0;color:var(--muted);font-size:12px;
   text-decoration:underline;cursor:pointer;padding:2px 0;margin-top:2px}
 .todo-empty{font-size:13px;color:var(--muted);padding:6px 0}
+.mailrow{display:flex;gap:10px;align-items:flex-start;padding:10px 0;
+  border-top:1px solid var(--border)}
+.mailrow:first-child{border-top:0}
+.mailrow .st{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;
+  white-space:nowrap;margin-top:2px;background:#FDF0E4;color:#8a4f24}
+.mailrow .st.done{background:#EFF6EC;color:#3d6b30}
+.mailrow .body{flex:1;min-width:0}
+.mailrow .subj{font-size:13.5px;font-weight:700;line-height:1.6}
+.mailrow .meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.mailrow .snip{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.7;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mailrow a.open{flex:none;font-size:12px;margin-top:2px;white-space:nowrap}
 .memolog{margin:6px 0 0;padding:10px 12px;background:var(--subtle);border-radius:6px;
   font-size:12.5px;line-height:1.9;white-space:pre-wrap;max-height:200px;overflow:auto}
 .memolog:empty{display:none}
@@ -436,6 +448,14 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
       <h2 class="sec"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
     aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>直近の応募</h2>
+      <div class="panel admin-only" id="inboxPanel" hidden>
+        <div class="todohead">
+          <h3>問い合わせメール</h3>
+          <button class="ghost" id="inboxReload">読み込み直す</button>
+        </div>
+        <div id="inboxList"></div>
+        <p class="pnote" id="inboxNote"></p>
+      </div>
       <div class="panel"><div class="rows2" id="recent"></div></div>
     </section>
 
@@ -814,6 +834,7 @@ function start(){
   loadSummary();
   loadList();
   loadTodos();
+  loadInbox();
 }
 
 // ─────────────────────────── ダッシュボード
@@ -828,16 +849,16 @@ function bars(obj, order){
   }).join('') + '</div>';
 }
 
-function loadSummary(){
-  api('adminSummary').then(function(r){
-    if (!r || !r.ok){ toast((r && r.message) || '集計を取得できませんでした', true); return; }
-    S.role = r.role; $('#role').textContent = r.role; applyRole();
-    var c = r.counts;
+/**
+ * 要対応の一覧。応募の状態から出るものに加えて、
+ * 人が入れた確認事項と、外から届いた問い合わせも、ここで拾う。
+ * 見落としはここから起きるので、入口は1つにまとめている。
+ */
+function renderAlerts(){
+  var r = S.summary;
+  if (!r) return;
+  var c = r.counts;
 
-    S.summary = r;
-    $('#asOf').textContent = r.asOf ? r.asOf + ' 時点' : '';
-
-    // 要対応
     var todo = [];
     if (c.unconfirmed) todo.push(['未確認の応募', c.unconfirmed, 'status:未確認']);
     if (r.todo.stale.length) todo.push(['審査中のまま日数が経過', r.todo.stale.length, 'status:審査中']);
@@ -849,10 +870,19 @@ function loadSummary(){
     if (r.todo.toCheckPower && r.todo.toCheckPower.length)
       todo.push(['発電機の持ち込みが未確認', r.todo.toCheckPower.length, 'power']);
     if (c.dup) todo.push(['重複の可能性', c.dup, 'dup']);
+    // 応募の状態から出るものだけでなく、人が入れた確認事項と
+    // 外から届いた問い合わせも、ここで拾う。見落としはここから起きる
+    var over = (S.todos || []).filter(function(t){
+      return t.state !== '完了' && t.due && t.due < todayText();
+    }).length;
+    if (over) todo.push(['期日を過ぎた確認事項', over, '']);
+    var unreplied = ((S.inbox && S.inbox.rows) || []).filter(function(m){ return !m.replied; }).length;
+    if (unreplied) todo.push(['未返信の問い合わせ', unreplied, '']);
     $('#todo').innerHTML = todo.length
       ? '<h3>要対応</h3><ul>' + todo.map(function(t){
           return '<li><b>'+t[1]+'</b><span>'+esc(t[0])+'</span>'
-               + '<a href="#" data-jump="'+esc(t[2])+'">一覧で見る →</a></li>';
+               + (t[2] ? '<a href="#" data-jump="'+esc(t[2])+'">一覧で見る →</a>' : '')
+               + '</li>';
         }).join('') + '</ul>'
       : '<h3>要対応</h3><p class="none">いま対応が必要なものはありません。</p>';
     $('#todo').classList.toggle('clear', !todo.length);
@@ -862,6 +892,18 @@ function loadSummary(){
         jumpToList(a.getAttribute('data-jump'));
       });
     });
+}
+
+function loadSummary(){
+  api('adminSummary').then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '集計を取得できませんでした', true); return; }
+    S.role = r.role; $('#role').textContent = r.role; applyRole();
+    var c = r.counts;
+
+    S.summary = r;
+    $('#asOf').textContent = r.asOf ? r.asOf + ' 時点' : '';
+
+    renderAlerts();
 
     // 数字
     var yen = function(n){ return '¥' + Number(n||0).toLocaleString('ja-JP'); };
@@ -1820,6 +1862,7 @@ function loadTodos(){
     if (!r || !r.ok) return;
     S.todos = r.rows || [];
     renderTodos();
+    renderAlerts();
   }, function(){});
 }
 
@@ -1917,6 +1960,62 @@ function saveTodo(){
   });
 }
 
+// ─────────────────────────── 問い合わせメール（管理者のみ）
+/**
+ * 実行委員会アドレス宛のメールを、この画面で一覧する。
+ * 本文の全文は持ってこない（冒頭の抜粋とGmailへのリンクだけ）。
+ * 公開URLの画面に全文を流し込む必要はないし、流すと戻せない。
+ */
+function loadInbox(){
+  if (S.role !== '管理者') return;
+  api('adminInbox').then(function(r){
+    if (!r || !r.ok){
+      $('#inboxNote').textContent = (r && r.message) || 'メールを読み取れませんでした。';
+      $('#inboxList').innerHTML = '';
+      return;
+    }
+    S.inbox = r;
+    renderInbox();
+    renderAlerts();
+  }, function(){
+    $('#inboxNote').textContent = 'メールを読み取れませんでした。';
+  });
+}
+
+function renderInbox(){
+  var r = S.inbox || {};
+  var rows = r.rows || [];
+  var box = $('#inboxList');
+
+  if (!rows.length){
+    box.innerHTML = '<p class="todo-empty">直近' + (r.days || 60) + '日間に届いた問い合わせはありません。</p>';
+    $('#inboxNote').textContent = r.message || ('宛先：' + (r.address || ''));
+    return;
+  }
+
+  // 未返信を上に。返信済みは後ろへ
+  var open = rows.filter(function(m){ return !m.replied; });
+  var done = rows.filter(function(m){ return m.replied; });
+
+  box.innerHTML = open.concat(done).map(function(m){
+    return '<div class="mailrow">'
+      + '<span class="st' + (m.replied ? ' done' : '') + '">'
+      + (m.replied ? '返信済' : '未返信') + '</span>'
+      + '<span class="body">'
+      + '<span class="subj">' + esc(m.subject) + '</span>'
+      + '<span class="meta">' + esc(m.from) + '　' + esc(m.at)
+      + (m.count > 1 ? '　' + m.count + '通' : '') + '</span>'
+      + '<span class="snip">' + esc(m.snippet) + '</span>'
+      + '</span>'
+      + '<a class="open" href="' + esc(m.url) + '" target="_blank" rel="noopener">Gmailで開く</a>'
+      + '</div>';
+  }).join('');
+
+  $('#inboxNote').textContent = '宛先：' + (r.address || '')
+    + '　直近' + (r.days || 60) + '日間の' + rows.length + '件を表示しています。'
+    + '返信はGmailで行ってください。';
+}
+
 // ─────────────────────────── 起動
 document.addEventListener('DOMContentLoaded', function(){
   // 2つの段階が同じ form の中にあるので、いま出ている方で振り分ける
@@ -1938,6 +2037,7 @@ document.addEventListener('DOMContentLoaded', function(){
   $$('.tabs button').forEach(function(b){
     b.addEventListener('click', function(){ showTab(b.getAttribute('data-tab')); });
   });
+  $('#inboxReload').addEventListener('click', loadInbox);
   $('#todoNew').addEventListener('click', function(){ editTodo(0); });
   $('#todoSave').addEventListener('click', saveTodo);
   $('#todoCancel').addEventListener('click', function(){ $('#todoForm').hidden = true; });
