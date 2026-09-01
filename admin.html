@@ -722,9 +722,9 @@ function loadSummary(){
       ['締切まで', r.daysLeft == null ? '—' : r.daysLeft, r.daysLeft == null ? '' : '日', 'dark'],
       ['区画の充足', r.spaces.rate + '%', r.spaces.assigned + ' / ' + r.spaces.total + ' 区画'],
       ['備品の概算', r.pricesKnown ? yen(r.revenue) : '調整中', r.pricesKnown ? '' : '単価未設定'],
-      ['火気の使用', c.fire, '件'],
-      ['搬入車両', c.vehicles, '台'],
-      ['スタッフ合計', c.staffTotal, '名'],
+      // 火気・搬入車両・スタッフ人数は採択後の「出店確定情報」で集める項目。
+      // 応募段階のここに置くと、値が来ないので空欄のカードが3枚並ぶ。
+      // 出店確定情報フォームができたら、そちらの集計として戻す。
       ['消費電力の合計', Number(c.powerWatt||0).toLocaleString('ja-JP'), 'W' + (c.powerUnknown ? '（不明 '+c.powerUnknown+'件）' : '')],
     ].map(function(x){
       return '<div class="card '+(x[3]||'')+'"><div class="k">'+esc(x[0])+'</div>'
@@ -737,8 +737,9 @@ function loadSummary(){
       ['希望区画別', bars(c.bySize)],
       ['電源', bars(c.byPower)],
       ['担当社員別', bars(c.byStaff)],
-      ['レンタル備品', bars({ 'テント（小）': r.rental.tentT1, 'テント（大）': r.rental.tentT2,
-                              '長机': r.rental.table, 'パイプ椅子': r.rental.chair })],
+      ['レンタル備品', bars(Object.assign(
+        { 'テント（1区画）': r.rental.tentT1, 'テント（2区画）': r.rental.tentT2 },
+        r.rentalQty || {}))],
       ['テント', bars(c.byTent || {})],
       // 仕様書§6-2「食器・包材の持込予定の内訳（サステナ報告用）」
       ['食器・包材（サステナ報告用）', bars(c.byPack || {})],
