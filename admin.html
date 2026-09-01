@@ -39,7 +39,8 @@ button{cursor:pointer}
 .gate label{display:block;font-size:12px;font-weight:700;color:var(--muted);
   letter-spacing:.06em;margin-bottom:6px}
 .pwrow{position:relative}
-.pwrow #gShow{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+/* .gate button の width:100% に負けて中央に出てしまうので、幅を戻す */
+.pwrow #gShow{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:auto;
   background:transparent;border:0;color:var(--muted);font-size:12.5px;font-family:inherit;
   padding:8px 10px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .pwrow #gShow:hover{color:var(--ink)}
