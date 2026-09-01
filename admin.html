@@ -38,6 +38,12 @@ button{cursor:pointer}
 .gate .sub{margin:0 0 22px;font-size:13px;color:var(--muted)}
 .gate label{display:block;font-size:12px;font-weight:700;color:var(--muted);
   letter-spacing:.06em;margin-bottom:6px}
+.pwrow{position:relative}
+.pwrow #gShow{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  background:transparent;border:0;color:var(--muted);font-size:12.5px;font-family:inherit;
+  padding:8px 10px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.pwrow #gShow:hover{color:var(--ink)}
+.pwrow input{padding-right:64px!important}
 .gate input,.gate select{width:100%;padding:12px 14px;border:1px solid var(--border);
   background:#fff;margin-bottom:16px;border-radius:var(--r)}
 .gate input:focus,.gate select:focus{outline:2px solid var(--brand-deep);outline-offset:1px}
@@ -319,7 +325,10 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <div id="step1">
       <label for="gPw">パスワード</label>
-      <input type="password" id="gPw" autocomplete="current-password">
+      <div class="pwrow">
+        <input type="password" id="gPw" autocomplete="current-password">
+        <button type="button" id="gShow" aria-label="パスワードを表示">表示</button>
+      </div>
       <button id="gNext">次へ</button>
     </div>
 
@@ -1344,6 +1353,14 @@ function savePerson(){
 // ─────────────────────────── 起動
 document.addEventListener('DOMContentLoaded', function(){
   $('#gNext').addEventListener('click', submitPassword);
+  $('#gShow').addEventListener('click', function(){
+    var i = $('#gPw');
+    var show = (i.type === 'password');
+    i.type = show ? 'text' : 'password';
+    this.textContent = show ? '隠す' : '表示';
+    this.setAttribute('aria-label', show ? 'パスワードを隠す' : 'パスワードを表示');
+    i.focus();
+  });
   $('#gPw').addEventListener('keydown', function(e){ if (e.key === 'Enter') submitPassword(); });
   $('#gIn').addEventListener('click', submitPerson);
   $('#gBack').addEventListener('click', function(){ gateStep(1); gateError(''); });
