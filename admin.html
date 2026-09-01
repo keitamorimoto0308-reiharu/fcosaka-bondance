@@ -113,6 +113,16 @@ h2.sec .ic{color:var(--brand-deep);width:17px;height:17px}
 .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
 .panel{background:#fff;border:1px solid var(--border);padding:14px 16px}
 .pcount{font-size:13px;color:var(--muted)}
+.memolog{margin:6px 0 0;padding:10px 12px;background:var(--subtle);border-radius:6px;
+  font-size:12.5px;line-height:1.9;white-space:pre-wrap;max-height:200px;overflow:auto}
+.memolog:empty{display:none}
+.applicant-lock{background:var(--subtle);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;margin-bottom:12px}
+.applicant-lock p{margin:0 0 10px;font-size:12.5px;line-height:1.9;color:var(--muted)}
+.applicant-lock .ghost{background:#fff}
+#apFields .editrow input,#apFields .editrow textarea{width:100%}
+#apEdit .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
+table.list td.wrapcell{white-space:normal;max-width:22em}
 .pform{margin-top:12px}
 .pform h3{margin:0 0 10px;font-size:14px}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
@@ -359,6 +369,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <button data-tab="list" aria-selected="false">出店者一覧</button>
     <button data-tab="map"  aria-selected="false">出店エリアマップ</button>
     <button data-tab="day"  aria-selected="false">当日運営</button>
+    <button data-tab="history" aria-selected="false">変更履歴</button>
     <button data-tab="people" aria-selected="false" class="admin-only" hidden>関係者</button>
   </div></nav>
 
@@ -436,6 +447,28 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
       </div>
     </section>
 
+    <!-- ── 変更履歴 ─────────────────────────── -->
+    <section class="view" id="v-history">
+      <div class="toolbar">
+        <input id="hQ" placeholder="受付ID・項目・操作者で絞り込み" style="min-width:240px">
+        <span class="pcount" id="hCount"></span>
+        <button class="ghost" id="hReload">読み込み直す</button>
+      </div>
+      <div class="panel" style="padding:0;overflow-x:auto">
+        <table class="list" id="hTable">
+          <thead><tr>
+            <th>日時</th><th>操作者</th><th>受付ID</th><th>項目</th>
+            <th>変更前</th><th>変更後</th><th>理由</th>
+          </tr></thead>
+          <tbody id="hBody"></tbody>
+        </table>
+      </div>
+      <p class="pnote">
+        応募内容の修正・ステータスの変更・担当メモの追記は、すべてここに残ります。
+        事業者さまご本人による修正は、操作者が「出店者（本人）」になります。
+      </p>
+    </section>
+
     <!-- ── 関係者（管理者のみ） ─────────────── -->
     <section class="view" id="v-people">
       <div class="toolbar">
@@ -507,14 +540,34 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         <div class="editrow"><label for="eDay">当日ステータス</label><select id="eDay"></select></div>
         <div class="editrow"><label for="eIn">搬入予定時刻</label><input id="eIn" placeholder="例：9:00"></div>
         <div class="editrow"><label for="eOut">撤収予定時刻</label><input id="eOut" placeholder="例：18:00"></div>
-        <div class="editrow"><label for="eMemo">担当メモ</label><textarea id="eMemo"></textarea></div>
+        <div class="editrow"><label for="eMemo">担当メモを追記</label><textarea id="eMemo" placeholder="ここに書いた内容が、日付とお名前付きで上に積まれます"></textarea></div>
+        <div class="memolog" id="dMemoLog"></div>
         <div class="savebar">
           <button id="dSave">保存する</button>
           <span class="msg" id="dMsg"></span>
         </div>
       </div>
+
       <div class="grp">
         <h4>応募内容</h4>
+        <div class="applicant-lock" id="apLock">
+          <p><b>ここから下は、事業者さまが申告された内容です。</b>
+             お電話などで訂正のご連絡をいただいた場合にかぎり、こちらで直せます。
+             変更すると、変更前の内容とあわせて変更履歴に残ります。</p>
+          <button class="ghost" id="apUnlock">応募内容を修正する</button>
+        </div>
+        <div id="apEdit" hidden>
+          <div id="apFields"></div>
+          <div class="editrow">
+            <label for="apReason">変更の理由<span class="req">必須</span></label>
+            <input id="apReason" maxlength="200" placeholder="例：お電話で訂正のご連絡あり">
+          </div>
+          <div class="savebar">
+            <button id="apSave">この内容で修正する</button>
+            <button class="ghost" id="apCancel">やめる</button>
+            <span class="msg" id="apMsg"></span>
+          </div>
+        </div>
         <div id="dRead"></div>
       </div>
     </div>
@@ -915,7 +968,16 @@ function openDetail(id){
     $('#eDay').innerHTML = '<option value="">（未設定）</option>' + S.list.dayStatuses.map(function(s){
       return '<option'+(d['当日ステータス']===s?' selected':'')+'>'+esc(s)+'</option>';
     }).join('');
-    $('#eMemo').value = d['担当メモ'] || '';
+    // メモは追記式。いまの中身は下に読み取り専用で出す
+    $('#eMemo').value = '';
+    $('#dMemoLog').textContent = d['担当メモ'] || '';
+    S.detail = d; S.detailId = id;
+    applicantLock();
+    if (!S.applicantFields){
+      api('adminApplicantFields').then(function(r){
+        if (r && r.ok) S.applicantFields = r.fields || [];
+      }, function(){});
+    }
     $('#eIn').value = d['搬入予定時刻'] || '';
     $('#eOut').value = d['撤収予定時刻'] || '';
     $('#dSave').setAttribute('data-id', id);
@@ -925,6 +987,9 @@ function openDetail(id){
 }
 
 function closeDetail(){ $('.drawer').classList.remove('on'); }
+
+/** 後戻りしにくいステータス。サーバー側（Admin.gs の STATUS_NEEDS_REASON_）と同じ並び */
+var NEEDS_REASON = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
 
 function saveDetail(){
   var id = $('#dSave').getAttribute('data-id');
@@ -937,13 +1002,25 @@ function saveDetail(){
   };
   // ステータスは後戻りしにくい操作なので、変えるときだけ確認する（仕様書§6-2 S6）
   var before = S.list.rows.filter(function(x){ return x['受付ID'] === id; })[0];
+  var reason = '';
   if (before && before['ステータス'] !== patch['ステータス']){
     if (!confirm('ステータスを「' + (before['ステータス']||'未確認') + '」から「'
                  + patch['ステータス'] + '」に変更します。よろしいですか。')) return;
+    // 後戻りしにくい先へ変えるときは、理由を残す。
+    // 申告内容の修正には理由が要るのに、採否の変更には要らないのは筋が通らない
+    if (NEEDS_REASON.indexOf(patch['ステータス']) >= 0){
+      reason = (prompt('「' + patch['ステータス'] + '」に変更する理由をご記入ください（5文字以上）。'
+        + String.fromCharCode(10) + '変更履歴に残ります。') || '').trim();
+      if (reason.length < 5){
+        $('#dMsg').className = 'msg err';
+        $('#dMsg').textContent = '理由が必要です（5文字以上）。変更は保存していません。';
+        return;
+      }
+    }
   }
   $('#dSave').disabled = true;
   $('#dMsg').className = 'msg'; $('#dMsg').textContent = '保存しています…';
-  api('adminUpdate', { id: id, patch: patch }).then(function(r){
+  api('adminUpdate', { id: id, patch: patch, reason: reason }).then(function(r){
     $('#dSave').disabled = false;
     if (!r || !r.ok){
       $('#dMsg').className = 'msg err';
@@ -952,7 +1029,11 @@ function saveDetail(){
     }
     $('#dMsg').textContent = r.changed ? '保存しました（' + r.changed + '件）' : '変更はありません';
     toast('保存しました');
+    // 担当メモは積み上げ式なので、保存しただけでは画面の履歴が古いままになる。
+    // 読み直して、いま積まれた内容をその場で見せる
+    openDetail(id);
     loadList(); loadSummary();
+    if (S.history) loadHistory();
   }, function(e){
     $('#dSave').disabled = false;
     $('#dMsg').className = 'msg err';
@@ -1266,6 +1347,7 @@ function showTab(name, keepHash){
   if (name === 'map' && !S.spaces) loadSpaces();
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
+  if (name === 'history' && !S.history) loadHistory();
   if (!keepHash && location.hash.slice(1).split('/')[0] !== name){
     history.replaceState(null, '', '#' + name);
   }
@@ -1275,7 +1357,7 @@ function showTab(name, keepHash){
 function applyHash(){
   var parts = location.hash.replace(/^#/, '').split('/');
   var tab = parts[0];
-  if (['dash','list','map','day','people'].indexOf(tab) < 0) return;
+  if (['dash','list','map','day','people','history'].indexOf(tab) < 0) return;
   showTab(tab, true);
   if (tab === 'list' && parts[1]){
     var wait = setInterval(function(){
@@ -1391,6 +1473,131 @@ function savePerson(){
   });
 }
 
+// ─────────────────────────── 変更履歴
+function loadHistory(){
+  api('adminHistory', { limit: 300 }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '変更履歴を取得できませんでした', true); return; }
+    S.history = r.rows || [];
+    S.historyTotal = r.total || 0;
+    renderHistory();
+  }, function(){ toast('変更履歴を取得できませんでした', true); });
+}
+
+function renderHistory(){
+  var q = ($('#hQ').value || '').trim().toLowerCase();
+  var rows = (S.history || []).filter(function(h){
+    if (!q) return true;
+    return [h.id, h.item, h.operator, h.reason].join(' ').toLowerCase().indexOf(q) >= 0;
+  });
+  $('#hCount').textContent = rows.length + '件'
+    + (S.historyTotal > (S.history || []).length ? '（直近' + (S.history || []).length + '件を表示）' : '');
+  $('#hBody').innerHTML = rows.map(function(h){
+    return '<tr>'
+      + '<td>' + esc(h.at) + '</td>'
+      + '<td>' + esc(h.operator) + '</td>'
+      + '<td>' + esc(h.id) + '</td>'
+      + '<td>' + esc(h.item) + '</td>'
+      + '<td class="wrapcell">' + esc(h.before) + '</td>'
+      + '<td class="wrapcell">' + esc(h.after) + '</td>'
+      + '<td class="wrapcell">' + esc(h.reason) + '</td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="7">まだ変更はありません。</td></tr>';
+}
+
+// ─────────────────────────── 応募内容の修正（3段階）
+/**
+ * 段階を分けているのは、これが**事業者さまの申告内容**を書き換える操作だから。
+ *   1) 触る前に、それが何かを伝える（既定では触れない）
+ *   2) なぜ変えたのかを必ず書かせる
+ *   3) 記録したことを伝え、もう一度伏せる
+ */
+function applicantLock(){
+  $('#apLock').hidden = false;
+  $('#apEdit').hidden = true;
+  $('#apReason').value = '';
+  $('#apMsg').textContent = '';
+}
+
+function unlockApplicant(){
+  if (!confirm(
+    'ここから先は、事業者さまが申告された内容の修正です。' + String.fromCharCode(10) + String.fromCharCode(10)
+    + '・お電話などで訂正のご連絡をいただいた場合にかぎってください' + String.fromCharCode(10)
+    + '・変更前の内容とあわせて、変更履歴に残ります' + String.fromCharCode(10)
+    + '・選択式の項目は、事業者さまご本人に直していただいてください' + String.fromCharCode(10) + String.fromCharCode(10)
+    + '続けますか。')) return;
+
+  $('#apLock').hidden = true;
+  $('#apEdit').hidden = false;
+  renderApplicantFields();
+  $('#apReason').focus();
+}
+
+function renderApplicantFields(){
+  var d = S.detail || {};
+  var box = $('#apFields');
+  box.innerHTML = (S.applicantFields || []).map(function(f){
+    var v = d[f.sheet] == null ? '' : String(d[f.sheet]);
+    var input = (f.type === 'textarea')
+      ? '<textarea id="ap-' + esc(f.key) + '" rows="3">' + esc(v) + '</textarea>'
+      : '<input id="ap-' + esc(f.key) + '" value="' + esc(v) + '"'
+        + (f.maxLength ? ' maxlength="' + Number(f.maxLength) + '"' : '') + '>';
+    return '<div class="editrow"><label for="ap-' + esc(f.key) + '">' + esc(f.label) + '</label>'
+         + input + '</div>';
+  }).join('');
+}
+
+function saveApplicant(){
+  var d = S.detail || {};
+  var reason = $('#apReason').value.trim();
+  if (reason.length < 5){
+    $('#apMsg').className = 'msg err';
+    $('#apMsg').textContent = 'なぜ変更したのかを、5文字以上でご記入ください。';
+    $('#apReason').focus();
+    return;
+  }
+
+  var patch = {};
+  (S.applicantFields || []).forEach(function(f){
+    var el = document.getElementById('ap-' + f.key);
+    if (!el) return;
+    var before = d[f.sheet] == null ? '' : String(d[f.sheet]);
+    if (el.value === before) return;
+    patch[f.key] = el.value;
+  });
+  var keys = Object.keys(patch);
+  if (!keys.length){
+    $('#apMsg').className = 'msg';
+    $('#apMsg').textContent = '変更された項目がありません。';
+    return;
+  }
+
+  $('#apSave').disabled = true;
+  $('#apMsg').className = 'msg';
+  $('#apMsg').textContent = '保存しています…';
+
+  api('adminApplicantUpdate', { id: S.detailId, patch: patch, reason: reason }).then(function(r){
+    $('#apSave').disabled = false;
+    if (!r || !r.ok){
+      $('#apMsg').className = 'msg err';
+      $('#apMsg').textContent = (r && r.message)
+        || ((r && r.error === 'validation')
+            ? '入力内容に不備があります：' + (r.fields || []).map(function(f){ return f.message; }).join(' ')
+            : '保存できませんでした。');
+      return;
+    }
+    // 3段階目：何をしたかを伝え、もう一度伏せる
+    toast('変更履歴に記録しました（' + (r.items || []).join('、') + '）');
+    applicantLock();
+    openDetail(S.detailId);
+    loadList();
+    if (S.history) loadHistory();
+  }, function(){
+    $('#apSave').disabled = false;
+    $('#apMsg').className = 'msg err';
+    $('#apMsg').textContent = '通信に失敗しました。もう一度お試しください。';
+  });
+}
+
 // ─────────────────────────── 起動
 document.addEventListener('DOMContentLoaded', function(){
   // 2つの段階が同じ form の中にあるので、いま出ている方で振り分ける
@@ -1412,6 +1619,11 @@ document.addEventListener('DOMContentLoaded', function(){
   $$('.tabs button').forEach(function(b){
     b.addEventListener('click', function(){ showTab(b.getAttribute('data-tab')); });
   });
+  $('#hQ').addEventListener('input', renderHistory);
+  $('#hReload').addEventListener('click', loadHistory);
+  $('#apUnlock').addEventListener('click', unlockApplicant);
+  $('#apSave').addEventListener('click', saveApplicant);
+  $('#apCancel').addEventListener('click', applicantLock);
   $('#pNew').addEventListener('click', function(){ editPerson(0); });
   $('#pSave').addEventListener('click', savePerson);
   $('#pCancel').addEventListener('click', function(){ $('#pForm').hidden = true; });
