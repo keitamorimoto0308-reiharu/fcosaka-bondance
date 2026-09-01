@@ -93,9 +93,14 @@ img,svg{max-width:100%;display:block}
 
 /* ── 2. ファクト帯：数字が主役。濃色の面に水色の数字（コントラスト 8:1） */
 .facts{background:var(--ink);color:var(--white)}
-.fact.strong{background:rgba(127,202,241,.10)}
-.fact.strong .bg{color:var(--brand)}
 .facts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(255,255,255,.14)}
+.applied-banner{background:var(--ink);color:#fff;padding:12px 0}
+.applied-banner p{margin:0;font-size:13.5px;line-height:1.9}
+.applied-banner .rc{display:inline-block;margin:0 10px;font-weight:700;color:var(--brand)}
+.applied-banner a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+/* 受付が済んだあとは、応募へ誘う導線を出さない（二度送りを防ぐ） */
+body.applied .hero-cta .btn-brand{display:none}
+.done-back{margin:22px 0 0}
 .fact{background:var(--ink);padding:var(--s5) var(--s3);text-align:center}
 .fact .lb{font-size:11px;letter-spacing:.12em;color:#B9B3B0;margin:0 0 var(--s2)}
 .fact .bg{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:38px;line-height:1;color:var(--brand);
@@ -149,6 +154,8 @@ img,svg{max-width:100%;display:block}
 .btn-ghost:hover{background:rgba(127,202,241,.14)}
 .btn-brand{background:var(--brand);color:var(--ink);box-shadow:0 2px 0 var(--brand-deep)}
 .btn-brand:hover{filter:brightness(1.05)}
+.btn-ghost-dark{background:transparent;border:1.5px solid var(--ink);color:var(--ink)}
+.btn-ghost-dark:hover{background:var(--ink);color:#fff}
 .btn:focus-visible{outline:3px solid var(--brand-deep);outline-offset:2px}
 .btn:disabled{background:#D6D1CE;color:#8A8481;box-shadow:none;cursor:not-allowed}
 
@@ -241,7 +248,8 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
   .hero h1{font-size:46px}
   .hero h1 .sub{font-size:24px}
   .hero-inner{padding-top:var(--s8);padding-bottom:var(--s7)}
-  .facts-grid{grid-template-columns:repeat(4,1fr)}
+  /* 6項目なので3列×2段。4列だと 4+2 に割れて右下が空く（PDFも3列×2段） */
+  .facts-grid{grid-template-columns:repeat(3,1fr)}
   .fact .bg{font-size:44px}
 }
 @media (max-width:380px){
@@ -268,6 +276,13 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
 </header>
 
 <main>
+<div class="applied-banner hidden" id="applied-banner">
+  <div class="wrap">
+    <p><b>ご応募は受け付けております。</b>
+       <span class="rc">受付ID <span id="applied-receipt">SB-0000</span></span>
+       <a href="#" id="to-done">受付画面をもう一度見る</a></p>
+  </div>
+</div>
 <div id="intro-area">
   
   <section class="hero">
@@ -300,7 +315,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
         <div><span class="bg">11:00</span><span class="sm">〜17:30</span></div>
         <p class="nt">搬入 8:30〜10:30 ／ 撤収 17:30〜19:30</p>
       </div>
-      <div class="fact strong">
+      <div class="fact">
         <p class="lb">試合開始</p>
         <div><span class="bg">14:00</span><span class="sm">KICK OFF</span></div>
         <p class="nt">FC大阪 vs 鹿児島ユナイテッドFC</p>
@@ -738,6 +753,9 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
   <p class="after-submit">ご応募のあとに記入内容の誤りや変更が見つかった場合は、ご紹介いただいた担当社員、または実行委員会までメールでお知らせください。こちらで修正いたします。</p>
   <p class="submit-note">メールが届かない場合は、迷惑メールフォルダをご確認のうえ、
      <a data-contact href="#">お問い合わせ先</a> までご連絡ください。</p>
+  <p class="done-back">
+    <button type="button" class="btn btn-ghost-dark" id="back-to-intro">募集要項に戻る</button>
+  </p>
 </div>
 
 <div class="wrap notice-page hidden" id="closed-area">
@@ -863,7 +881,7 @@ function wireStickyCta(){
   var heroVisible = true, formVisible = false;
 
   function apply(){
-    var show = !heroVisible && !formVisible && !CFG.closed;
+    var show = !heroVisible && !formVisible && !CFG.closed && !SUBMITTED;
     cta.classList.toggle('show', show);
     document.body.classList.toggle('cta-on', show);
   }
@@ -1142,15 +1160,50 @@ function showClosed(){
   document.body.classList.remove('cta-on');
 }
 
+/**
+ * 応募が受け付けられたあとの画面まわり。
+ *
+ * ■ なぜ「戻る」を素直に作らないか
+ *   完了画面から入力画面へそのまま戻せると、同じ方が二度送れてしまう。
+ *   受付IDは発行済みなので、二通目は台帳に別の行として増える。
+ *   そこで戻り先は**募集要項だけ**にし、入力欄は伏せたままにする。
+ *   代わりに受付済みであることと受付IDを、画面の先頭に出し続ける。
+ */
+var SUBMITTED = false;   // 受付が済んだか（応募ボタン類を出さない判断に使う）
+var RECEIPT   = '';      // 受付ID。募集要項に戻ってもここから読み直せる
+var donePushed = false;  // 履歴に完了画面を積んだか（ブラウザバックの受け皿）
+
 function showDone(receiptId, mailWarning){
+  SUBMITTED = true;
+  if (receiptId) RECEIPT = receiptId;
+
   $('#form-area').classList.add('hidden');
   $('#intro-area').classList.add('hidden');
+  $('#applied-banner').classList.add('hidden');
   var cta = $('#sticky-cta'); if (cta) cta.classList.remove('show');
   document.body.classList.remove('cta-on');
+  document.body.classList.add('applied');
   $('#done-area').classList.remove('hidden');
-  $('#receipt-number').textContent = receiptId;
+  $('#receipt-number').textContent = RECEIPT;
+  var ar = $('#applied-receipt'); if (ar) ar.textContent = RECEIPT;
   if (mailWarning) $('#mail-warning').classList.remove('hidden');
+
+  // ブラウザの「戻る」で募集要項に戻れるよう、履歴を1つ積む。
+  // 使えない環境でも画面内のボタンで戻れるので、失敗しても黙って進める。
+  if (!donePushed) {
+    try { history.pushState({ bondance:'done' }, ''); donePushed = true; } catch (e) {}
+  }
   window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+/** 募集要項だけを見せる状態。入力欄は伏せたまま。 */
+function showIntroOnly(){
+  $('#done-area').classList.add('hidden');
+  $('#form-area').classList.add('hidden');
+  $('#intro-area').classList.remove('hidden');
+  $('#applied-banner').classList.remove('hidden');
+  var ar = $('#applied-receipt'); if (ar) ar.textContent = RECEIPT;
+  window.scrollTo({ top:0 });
 }
 
 /**
@@ -1301,6 +1354,21 @@ document.addEventListener('DOMContentLoaded', function(){
     typeTimer = setTimeout(function(){ renderConfirm(); saveDraft(); }, 800);
   });
   $('#submit-btn').addEventListener('click', function(e){ e.preventDefault(); submitForm(); });
+
+  // 完了画面 → 募集要項。履歴を積んであるなら戻るを使い、
+  // ブラウザの「戻る」と画面のボタンで同じ動きになるようにする
+  var back = $('#back-to-intro');
+  if (back) back.addEventListener('click', function(){
+    if (donePushed) history.back(); else showIntroOnly();
+  });
+
+  // 募集要項 → 完了画面（受付IDを見返したいとき）
+  var toDone = $('#to-done');
+  if (toDone) toDone.addEventListener('click', function(e){ e.preventDefault(); showDone(RECEIPT, ''); });
+
+  window.addEventListener('popstate', function(){
+    if (SUBMITTED) { donePushed = false; showIntroOnly(); }
+  });
 });
 </script>
 </body>
