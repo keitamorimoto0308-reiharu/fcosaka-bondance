@@ -94,6 +94,23 @@ img,svg{max-width:100%;display:block}
 /* ── 2. ファクト帯：数字が主役。濃色の面に水色の数字（コントラスト 8:1） */
 .facts{background:var(--ink);color:var(--white)}
 .facts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(255,255,255,.14)}
+.egrid{margin:18px 0 0;text-align:left}
+.eg-label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}
+#eg-mail{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:8px;
+  font-size:16px;font-family:inherit}
+.idblocks{display:flex;align-items:center;gap:8px}
+.idprefix{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:22px;letter-spacing:.04em;color:var(--ink-muted)}
+.idbox{width:46px;height:56px;text-align:center;font-size:24px;font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;
+  border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--ink)}
+.idbox:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
+.eg-hint{margin:10px 0 0;font-size:12.5px;color:var(--ink-muted);line-height:1.8}
+.edit-entry{margin:14px 0 0;font-size:13px;color:var(--ink-muted);line-height:1.9}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--link,#2b6f95);
+  text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.changed-list{text-align:left;margin:10px auto 0;max-width:32em;font-size:14px;line-height:2}
+.editing-banner{background:#B5714C;color:#fff;padding:12px 0}
+.editing-banner p{margin:0;font-size:13.5px;line-height:1.9}
+.editing-banner .rc{font-weight:700;margin:0 8px}
 .applied-banner{background:var(--ink);color:#fff;padding:12px 0}
 .applied-banner p{margin:0;font-size:13.5px;line-height:1.9}
 .applied-banner .rc{display:inline-block;margin:0 10px;font-weight:700;color:var(--brand)}
@@ -277,6 +294,13 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
 </header>
 
 <main>
+<div class="editing-banner hidden" id="editing-banner">
+  <div class="wrap">
+    <p><b>応募済み内容の修正中です。</b>
+       <span class="rc">受付ID <span id="editing-receipt">SB-0000</span></span>
+       保存すると、いまの内容で上書きされます。</p>
+  </div>
+</div>
 <div class="applied-banner hidden" id="applied-banner">
   <div class="wrap">
     <p><b>ご応募は受け付けております。</b>
@@ -728,9 +752,59 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
     <div class="submit-area">
       <button type="submit" class="btn btn-brand" id="submit-btn">この内容で応募する</button>
       <p class="after-submit">ご応募のあとに記入内容の誤りや変更が見つかった場合は、ご紹介いただいた担当社員、または実行委員会までメールでお知らせください。こちらで修正いたします。</p>
+      <p class="edit-entry">
+        すでにご応募いただいた内容を直したい場合は、
+        <button type="button" class="linkbtn" id="open-edit">応募済み情報の修正</button>
+        からお手続きいただけます。
+      </p>
       <p class="submit-note">送信後、ご記入のメールアドレスに受付確認メールをお送りします。</p>
     </div>
   </form>
+</div>
+
+<!-- ── 応募済み情報の修正：本人確認 ─────────── -->
+<div class="wrap notice-page hidden" id="edit-gate">
+  <h2>応募済み情報の修正</h2>
+  <p>ご応募時にお送りした<b>自動返信メール</b>に記載の、
+     メールアドレスと受付IDをご入力ください。</p>
+
+  <div class="egrid">
+    <label class="eg-label" for="eg-mail">ご応募に使ったメールアドレス</label>
+    <input type="email" id="eg-mail" inputmode="email" autocomplete="email"
+           placeholder="example@company.co.jp">
+
+    <label class="eg-label" id="eg-id-label">受付ID</label>
+    <div class="idblocks" role="group" aria-labelledby="eg-id-label">
+      <span class="idprefix">SB-</span>
+      <input class="idbox" data-idpos="0" inputmode="numeric" maxlength="1" aria-label="受付IDの1桁目">
+      <input class="idbox" data-idpos="1" inputmode="numeric" maxlength="1" aria-label="受付IDの2桁目">
+      <input class="idbox" data-idpos="2" inputmode="numeric" maxlength="1" aria-label="受付IDの3桁目">
+      <input class="idbox" data-idpos="3" inputmode="numeric" maxlength="1" aria-label="受付IDの4桁目">
+    </div>
+    <p class="eg-hint">受付IDをお忘れの場合は、応募時の自動返信メールをご確認ください。</p>
+  </div>
+
+  <p class="form-error" id="eg-err"></p>
+  <p class="done-back">
+    <button type="button" class="btn btn-brand" id="eg-go">内容を呼び出す</button>
+    <button type="button" class="btn btn-ghost-dark" id="eg-cancel">やめる</button>
+  </p>
+</div>
+
+<div class="wrap notice-page hidden" id="edit-done">
+  <div class="mark">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+  </div>
+  <h2>修正を保存しました</h2>
+  <div class="receipt"><span class="cap">受付ID</span><span class="num" id="edit-receipt">SB-0000</span></div>
+  <p>変更された項目は次のとおりです。</p>
+  <ul class="changed-list" id="edit-changed"></ul>
+  <p class="submit-note">ご担当者にも変更をお知らせしました。<br>
+     さらに修正が必要な場合は、もう一度この画面からお手続きいただけます。</p>
+  <p class="done-back">
+    <button type="button" class="btn btn-ghost-dark" id="edit-back">募集要項に戻る</button>
+  </p>
 </div>
 
 <div class="wrap notice-page hidden" id="done-area">
@@ -1303,8 +1377,18 @@ function restoreDraft(){
   try { d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch(e){ return; }
   if (!d || !d.v) return;
   if (Date.now() - (d.t || 0) > 1000*60*60*24*30){ clearDraft(); return; }
+  fillForm(d.v);
+  var note = $('#draft-note');
+  if (note){ note.textContent = '前回の入力内容を復元しました'; note.classList.remove('hidden'); }
+}
+
+/**
+ * 値をフォームに書き戻す。下書きの復元と、応募済み情報の修正で共有する。
+ * 片方だけ直すとズレるので、1か所にまとめている。
+ */
+function fillForm(v){
   FIELDS.forEach(function(f){
-    var val = d.v[f.key];
+    var val = v[f.key];
     if (val === undefined) return;
     if (f.type === 'checkboxes' && Array.isArray(val)){
       $$('input[name="'+f.key+'"]').forEach(function(el){ el.checked = val.indexOf(el.value) !== -1; });
@@ -1315,13 +1399,19 @@ function restoreDraft(){
     } else if (f.type !== 'honeypot'){
       var el2 = document.getElementById(f.key); if (el2) el2.value = val;
     }
-    if (f.unknownCheckbox && d.v[f.unknownCheckbox.key] !== undefined){
+    if (f.unknownCheckbox && v[f.unknownCheckbox.key] !== undefined){
       var u = document.getElementById(f.unknownCheckbox.key);
-      if (u) u.checked = !!d.v[f.unknownCheckbox.key];
+      if (u) u.checked = !!v[f.unknownCheckbox.key];
     }
   });
-  var note = $('#draft-note');
-  if (note){ note.textContent = '前回の入力内容を復元しました'; note.classList.remove('hidden'); }
+
+  // レンタルの数量。欄は取得後に作られるので、まだ無いこともある
+  var q = (v.rentalItems && typeof v.rentalItems === 'object') ? v.rentalItems : {};
+  $$('[data-rental-qty]').forEach(function(el){
+    el.value = Number(q[el.getAttribute('data-rental-qty')] || 0);
+  });
+
+  applyVisibility(); updateRental(); renderConfirm();
 }
 
 function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch(e){} }
@@ -1410,6 +1500,171 @@ function submitForm(){
   });
 }
 
+// ─────────────────────────── 応募済み情報の修正
+/**
+ * 修正中かどうか。ここが立っていると、送信は「新しい応募」ではなく
+ * 「既存の上書き」になる。取り違えると、同じ会社の応募が2件立つ。
+ */
+var EDIT = { on: false, token: '', receiptId: '' };
+
+function showEditGate(){
+  $('#intro-area').classList.add('hidden');
+  $('#form-area').classList.add('hidden');
+  $('#done-area').classList.add('hidden');
+  $('#edit-done').classList.add('hidden');
+  var cta = $('#sticky-cta'); if (cta) cta.classList.remove('show');
+  document.body.classList.remove('cta-on');
+  $('#edit-gate').classList.remove('hidden');
+  editError('');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  var m = $('#eg-mail'); if (m) m.focus();
+}
+
+function closeEditGate(){
+  $('#edit-gate').classList.add('hidden');
+  $('#intro-area').classList.remove('hidden');
+  $('#form-area').classList.remove('hidden');
+  window.scrollTo({ top: 0 });
+}
+
+/** 受付IDのブロック入力。1文字入れたら次へ、消したら前へ戻る */
+function wireIdBlocks(){
+  var boxes = $$('.idbox');
+  if (!boxes.length) return;
+  boxes.forEach(function(box, i){
+    box.addEventListener('input', function(){
+      // 数字以外は受け付けない
+      var v = box.value.replace(/[^0-9]/g, '');
+      box.value = v.slice(-1);
+      if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+    });
+    box.addEventListener('keydown', function(e){
+      if (e.key === 'Backspace' && !box.value && i > 0){
+        boxes[i - 1].focus();
+        boxes[i - 1].value = '';
+        e.preventDefault();
+      }
+      if (e.key === 'Enter') lookupApplication();
+    });
+    // 「SB-0007」や「0007」をまとめて貼り付けられるように
+    box.addEventListener('paste', function(e){
+      var t = (e.clipboardData || window.clipboardData).getData('text') || '';
+      var digits = t.replace(/[^0-9]/g, '').slice(-4);
+      if (!digits) return;
+      e.preventDefault();
+      boxes.forEach(function(b, j){ b.value = digits[j] || ''; });
+      boxes[Math.min(digits.length, boxes.length) - 1].focus();
+    });
+  });
+  var mail = $('#eg-mail');
+  if (mail) mail.addEventListener('keydown', function(e){
+    if (e.key === 'Enter'){ e.preventDefault(); boxes[0].focus(); }
+  });
+}
+
+function readReceiptId(){
+  var d = $$('.idbox').map(function(b){ return b.value; }).join('');
+  return d.length === 4 ? 'SB-' + d : '';
+}
+
+function editError(msg){
+  var el = $('#eg-err');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('show', !!msg);
+}
+
+function lookupApplication(){
+  var email = $('#eg-mail').value.trim();
+  var receiptId = readReceiptId();
+  if (!email){ editError('メールアドレスをご入力ください。'); return; }
+  if (!receiptId){ editError('受付IDを4桁すべてご入力ください。'); return; }
+  if (!GAS_URL){ editError('これは表示確認用のページです。'); return; }
+
+  editError('');
+  var btn = $('#eg-go');
+  btn.disabled = true; btn.textContent = '確認しています…';
+  var restore = function(){ btn.disabled = false; btn.textContent = '内容を呼び出す'; };
+
+  api_('selfLookup', { email: email, receiptId: receiptId })
+    .then(function(d){
+      restore();
+      if (!d || !d.ok){ editError((d && d.message) || '確認できませんでした。'); return; }
+      EDIT.on = true; EDIT.token = d.token; EDIT.receiptId = d.receiptId;
+      startEditing(d.values || {});
+    }, function(){
+      restore();
+      editError('通信に失敗しました。電波の良い場所で、もう一度お試しください。');
+    });
+}
+
+/** 呼び出した内容をフォームに戻し、画面を「上書きする」形に切り替える */
+function startEditing(values){
+  $('#edit-gate').classList.add('hidden');
+  $('#intro-area').classList.add('hidden');
+  $('#form-area').classList.remove('hidden');
+  $('#editing-banner').classList.remove('hidden');
+  $('#editing-receipt').textContent = EDIT.receiptId;
+
+  fillForm(values);
+
+  // 送信の意味が変わるので、ボタンの文言もそろえる。
+  // 「この内容で応募する」のままだと、二重に応募したと思われる
+  $('#submit-btn').textContent = 'この内容で上書きする';
+  var entry = $('.edit-entry'); if (entry) entry.classList.add('hidden');
+  var draft = $('#draft-note'); if (draft) draft.classList.add('hidden');
+
+  $('#form-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function saveEdit(){
+  var v = collect();
+  var errs = validate(v);
+  if (errs.length){ showErrors(errs); return; }
+
+  var btn = $('#submit-btn');
+  btn.disabled = true; btn.textContent = '保存しています…';
+  var restore = function(){ btn.disabled = false; btn.textContent = 'この内容で上書きする'; };
+
+  api_('selfSave', { token: EDIT.token, values: v })
+    .then(function(d){
+      if (d && d.ok){
+        clearDraft();
+        $('#form-area').classList.add('hidden');
+        $('#editing-banner').classList.add('hidden');
+        $('#edit-receipt').textContent = d.receiptId || EDIT.receiptId;
+        var list = $('#edit-changed');
+        list.innerHTML = (d.changed || []).length
+          ? d.changed.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('')
+          : '<li>変更はありませんでした。</li>';
+        $('#edit-done').classList.remove('hidden');
+        EDIT.on = false; EDIT.token = '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      restore();
+      if (d && d.error === 'validation'){ showErrors(d.fields || []); return; }
+      $('.form-error').textContent = (d && d.message)
+        || '保存できませんでした。お手数ですが、もう一度お試しください。';
+      $('.form-error').classList.add('show');
+    }, function(){
+      restore();
+      $('.form-error').textContent = '通信に失敗しました。もう一度お試しください。';
+      $('.form-error').classList.add('show');
+    });
+}
+
+/** 修正まわりの呼び出し。プリフライトを避けるため text/plain で送る */
+function api_(action, body){
+  var payload = { action: action };
+  Object.keys(body || {}).forEach(function(k){ payload[k] = body[k]; });
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+  }).then(function(r){ return r.json(); });
+}
+
 document.addEventListener('DOMContentLoaded', function(){
   wireAccordion();
   wireStickyCta();
@@ -1431,7 +1686,21 @@ document.addEventListener('DOMContentLoaded', function(){
     clearTimeout(typeTimer);
     typeTimer = setTimeout(function(){ renderConfirm(); saveDraft(); }, 800);
   });
-  $('#submit-btn').addEventListener('click', function(e){ e.preventDefault(); submitForm(); });
+  $('#submit-btn').addEventListener('click', function(e){
+    e.preventDefault();
+    // 修正中は新しい応募を作らない。取り違えると同じ会社の行が2本立つ
+    if (EDIT.on) saveEdit(); else submitForm();
+  });
+
+  wireIdBlocks();
+  var openEdit = $('#open-edit');
+  if (openEdit) openEdit.addEventListener('click', showEditGate);
+  var egGo = $('#eg-go');
+  if (egGo) egGo.addEventListener('click', lookupApplication);
+  var egCancel = $('#eg-cancel');
+  if (egCancel) egCancel.addEventListener('click', closeEditGate);
+  var editBack = $('#edit-back');
+  if (editBack) editBack.addEventListener('click', function(){ location.reload(); });
 
   // 完了画面 → 募集要項。履歴を積んであるなら戻るを使い、
   // ブラウザの「戻る」と画面のボタンで同じ動きになるようにする
