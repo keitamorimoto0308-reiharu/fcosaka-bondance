@@ -47,9 +47,13 @@ img,svg{max-width:100%;display:block}
    上に小さなロゴをもう一枚置いても、同じ絵が2回出るだけだった（けいた判断）。
    ロゴ自体が FC大阪 と みんな電力 を含むので、ここでロゴは再掲しない。
    主催者の正式名（UPDATER）はロゴに入っていないため、文字でだけ補う。 */
+/* 区切りの「／」も同じ理由で墨色にする（430px で 4.28:1 だった）。
+   小さい文字ほど写真の濃淡に負けやすい。 */
 .supported{margin:0;display:flex;align-items:center;gap:var(--s2);
-  font-size:11px;color:var(--ink-muted);white-space:nowrap}
-.supported .label{font-size:10px;letter-spacing:.14em;color:var(--ink-faint)}
+  font-size:11px;color:var(--ink);white-space:nowrap}
+/* --ink-faint(#9A928F) は白地で 2.98:1。10px の文字には使えない。
+   ヘッダーにあった頃から不足していたが、旧の実測ツールでは見えていなかった */
+.supported .label{font-size:10px;letter-spacing:.14em;color:var(--ink-muted)}
 .supported b{font-weight:700;color:var(--ink)}
 
 /* ── 1. ヒーロー：白い膜。ロゴそのものを見出しにする面
@@ -97,9 +101,13 @@ img,svg{max-width:100%;display:block}
       rgba(255,255,255,.76) 56%, rgba(255,255,255,.46) 80%,
       rgba(255,255,255,.14) 100%),
     linear-gradient(160deg, rgba(255,255,255,.34) 0%, rgba(255,255,255,.10) 100%)}
-/* 和文様。白地なので、濃色時代より薄く敷かないと網戸のように見える */
+/* 和文様。ASANOHA は**白い細線**なので、白い膜の上では文様として成立しない。
+   検証役が実測したところ、有りと無しで1画素も差が出なかった。
+   濃色ヒーロー時代の資産をそのまま残していた。
+   ここでは墨色に染めて、ごく薄く敷く（白線のままなら消したほうがまし）。 */
 .hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.05;
-  background-image:var(--asanoha);background-size:40px 70px}
+  background-image:var(--asanoha);background-size:40px 70px;
+  filter:invert(1) brightness(.16)}
 .hero-inner{position:relative;z-index:1;padding-top:var(--s5);padding-bottom:var(--s6)}
 /* ヘッダーを廃したので、この行がページの一番上になる。
    左に「出店者募集」、右に主催表記。狭い画面でも実測で収まる（約210px） */
@@ -118,10 +126,20 @@ img,svg{max-width:100%;display:block}
  *   狭い画面は縦組み（エンブレムが上・文字が下／縦横比 0.71）、
  *   広い画面は横組み（エンブレムが左・文字が右／2.87）に入れ替える。
  *   1枚で通すと、どちらかの幅で文字が読めない大きさになる。 */
-.hero h1{margin:0 0 var(--s4)}
+/* ロゴの背後だけ白を敷く。
+   スタジアムの照明塔とスタンド屋根の白い線が、ちょうど「盆踊り」の真後ろを
+   通っていた（390〜500px幅）。水色の文字と照明塔の比は 1.23:1 で、
+   ロゴが構造物に串刺しにされて見える。
+   **ロゴは WCAG の対象外なので、文字のコントラスト実測では検出できない。**
+   角のある白いプレートを敷くと箱に見えるので、輪郭の出ない放射状のぼかしにする。
+   closest-side なので、ロゴの大きさが変わっても追随する。 */
+.hero h1{margin:0 0 var(--s4);width:max-content;max-width:100%;
+  background:radial-gradient(closest-side at 50% 50%,
+    rgba(255,255,255,.94) 0%, rgba(255,255,255,.88) 62%, rgba(255,255,255,0) 100%)}
 .hero h1 img{display:block;height:auto}
-.hero .logo-stack{width:min(228px,60vw)}
-.hero .logo-row{display:none}
+/* 380px以上で 228px 固定だと、599px あたりで右の6割が空の写真になって間延びする。
+   clamp で中間の幅でも育つようにし、600px の切り替わりの段差も緩める。 */
+.hero .logo-stack{width:clamp(196px,46vw,300px)}
 /* 「夕照」を「せきしょう」と読まれる。営業が口で言えないと困る（決定 G14）。
    ロゴの中の YŪSHŌ-SAI は小さすぎて読ませられないので、1行だけ添える */
 .hero .yomi{margin:0 0 var(--s4);font-size:12px;letter-spacing:.2em;color:var(--ink-muted)}
@@ -136,15 +154,17 @@ img,svg{max-width:100%;display:block}
   font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:19px;letter-spacing:.04em;padding:2px 12px;margin-right:10px;
   vertical-align:1px}
 .hero .match span{display:inline-block}
-.hero .match{margin:var(--s2) 0 0;font-size:13px;color:var(--ink-muted)}
+/* 膜を薄くした結果、写真の暗い部分にかかる幅（実測430px）で 4.24:1 まで落ちた。
+   マスクは薄いまま保ちたいので、文字側を濃くして写真の濃淡に依存しなくする。 */
+.hero .match{margin:var(--s2) 0 0;font-size:13px;color:var(--ink)}
 /* 白地なので下線リンクも墨色にする。白のままだと消える */
 .btn-dl{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-size:13px;
   text-decoration:underline;text-underline-offset:3px;padding:8px 4px;white-space:nowrap}
 .btn-dl:hover{opacity:.7}
 .hero-cta{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
 @media (min-width:600px){
-  .hero .logo-stack{display:none}
-  .hero .logo-row{display:block;width:min(440px,56%)}
+  /* picture が横組みに差し替わる。縦横比が変わるので幅も指定し直す */
+  .hero .logo-stack{width:min(440px,56%)}
   .hero-inner{padding-top:var(--s7);padding-bottom:var(--s7)}
 }
 
@@ -227,6 +247,8 @@ body.applied .hero-cta .btn-brand{display:none}
 .btn:active{transform:scale(.985)}
 .btn-primary{background:var(--ink);color:var(--white);box-shadow:0 2px 0 rgba(0,0,0,.25)}
 .btn-primary:hover{background:#3A2B28}
+/* ⚠ 白い面では使わないこと。水色の文字は白地に対して 1.81:1 で読めない。
+   濃色の面（フッター等）専用。ヒーローで使っていないことをテストが検査する。 */
 .btn-ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
 .btn-ghost:hover{background:rgba(127,202,241,.14)}
 .btn-brand{background:var(--brand);color:var(--ink);box-shadow:0 2px 0 var(--brand-deep)}
@@ -331,20 +353,39 @@ footer a{color:var(--brand)}
 footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
 
 @media (min-width:600px){
-  .hero h1{font-size:46px}
-  .hero h1 .sub{font-size:24px}
   .hero-inner{padding-top:var(--s8);padding-bottom:var(--s7)}
   /* 6項目なので3列×2段。4列だと 4+2 に割れて右下が空く（PDFも3列×2段） */
   .facts-grid{grid-template-columns:repeat(3,1fr)}
   .fact .bg{font-size:44px}
 }
 @media (max-width:380px){
-  .hero h1{font-size:28px}
-  .hero h1 .sub{font-size:17px}
   .fact .bg{font-size:32px}
   .kv>div{grid-template-columns:1fr;gap:0}
 }
-@media print{.form-section,.submit-area,.sticky-cta,.hero-cta{display:none}.acc-body{display:block!important}}</style>
+/* ── 印刷
+ * ■ 写真は消すこと
+ *   ヒーローは「写真（<img>）＋白い膜（CSSの背景）」で成り立っている。
+ *   ブラウザは既定で**背景を印刷しない**ので、膜だけが消えて写真が残る。
+ *   その結果、青空と芝の上に濃色の文字が乗り、ほぼ読めない紙が出てくる。
+ *   画面では正常なので、刷ってみるまで誰も気づかない。
+ *   紙では写真も膜も要らない（白地に墨色のロゴが、むしろ紙に向いている）。
+ *
+ * ■ 濃色の面も同じ理由で反転する
+ *   ファクト帯は「濃色の地＋水色の数字」。地が印刷されないと
+ *   白地に水色の数字だけが残り 1.81:1 になる。紙では墨色に落とす。 */
+@media print{
+  .form-section,.submit-area,.sticky-cta,.hero-cta{display:none}
+  .acc-body{display:block!important}
+  .hero-photo{display:none}
+  .hero::before,.hero::after{display:none}
+  .hero{background:#fff}
+  .facts{background:#fff;color:var(--ink)}
+  .facts-grid{background:var(--border)}
+  .fact .bg,.fact .sm,.fact .lb{color:var(--ink)}
+  .fact .nt{color:var(--ink-muted)}
+  footer{background:#fff;color:var(--ink)}
+  footer .org,footer a{color:var(--ink)}
+}</style>
 </head>
 <body>
 
@@ -381,10 +422,12 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
            alt にイベント名を持たせて、検索エンジンと読み上げには残す。
            狭い画面＝縦組み／広い画面＝横組み（CSSで入れ替え）。 -->
       <h1>
-        <img class="logo-stack" src="assets/logo/event-logo-box.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り"
-             width="340" height="480" fetchpriority="high">
-        <img class="logo-row" src="assets/logo/event-logo-wide.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り"
-             width="689" height="240" fetchpriority="high">
+        <picture>
+          <source media="(min-width:600px)" srcset="assets/logo/event-logo-wide.png"
+                  width="689" height="240">
+          <img class="logo-stack" src="assets/logo/event-logo-box.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り"
+               width="707" height="1000" fetchpriority="high">
+        </picture>
       </h1>
       <p class="yomi">夕照祭2026／ゆうしょうさい</p>
       <p class="place"><span>2026年10月24日（土）</span><span>花園ラグビー場 場外エリア</span></p>
