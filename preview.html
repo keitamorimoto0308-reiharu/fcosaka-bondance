@@ -4,16 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="format-detection" content="telephone=no">
-<title>出店者募集｜夕照祭2026 FC大阪サステナ盆踊り</title>
-<meta name="description" content="2026年10月24日（土）、東大阪市花園ラグビー場（場外エリア）で開催する夕照祭2026 FC大阪サステナ盆踊りの出店者募集ページです。出店料無料。">
+<title>出店者募集｜夕照祭2026 FC大阪 秋のサステナ盆踊り</title>
+<meta name="description" content="2026年10月24日（土）、東大阪市花園ラグビー場（場外エリア）で開催する夕照祭2026 FC大阪 秋のサステナ盆踊りの出店者募集ページです。出店料無料。">
 <meta name="robots" content="noindex">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="夕照祭2026 FC大阪サステナ盆踊り">
-<meta property="og:title" content="夕照祭2026 FC大阪サステナ盆踊り｜出店者募集">
+<meta property="og:site_name" content="夕照祭2026 FC大阪 秋のサステナ盆踊り">
+<meta property="og:title" content="夕照祭2026 FC大阪 秋のサステナ盆踊り｜出店者募集">
 <meta property="og:description" content="2026年10月24日（土）／花園ラグビー場 場外エリア。出店料無料。FC大阪のホームゲーム開催日にあわせた場外イベントです。">
 <meta property="og:image" content="https://bondance.kreha-c.com/assets/ogp.png">
 <meta property="og:url" content="https://bondance.kreha-c.com/">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/logo/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/logo/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
@@ -40,16 +42,29 @@ img,svg{max-width:100%;display:block}
    padding の一括指定は4辺すべてを書き換えるため、左右の余白が0に潰れる。 */
 .ic{flex:none;stroke:currentColor}
 
-/* ── ヘッダー（薄く。主役はヒーロー） */
+/* ── ヘッダー（薄く。主役はヒーロー）
+   ロゴタイプが墨色（#221816）なので、この帯は白のままにしておくこと。
+   濃色にするとロゴの上半分が読めなくなる。 */
 .site-header{background:var(--white);border-bottom:1px solid var(--border)}
 .site-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);
   padding-top:var(--s3);padding-bottom:var(--s3);flex-wrap:wrap}
-.logo-main-img{height:40px;width:auto}
-.supported{display:flex;align-items:center;gap:var(--s3)}
-.supported .label{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);white-space:nowrap}
-.supported img{height:22px;width:auto}
-.supported .textlogo{height:15px}
-.supported .updater{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--ink)}
+/* ヘッダーは「文字のみ版」を使う。横組み版にはエンブレムが入っているが、
+   直下のヒーローにも同じエンブレムを置いているため、同じ絵が縦に2つ並んで見える。
+   文字のみ版なら重複が消え、同じ高さでも文字が約25%大きくなる（縦横比 2.87→2.40）。
+   ロゴの中は3行（F.C.☆OSAKA／秋のサステナ盆踊り／presented by みんな電力）。
+   40pxまで下げると最下段が潰れて読めないので、52pxを下限にする。 */
+.logo-main-img{height:52px;width:auto}
+/* ロゴ自体が FC大阪 と みんな電力 を含むので、ここでロゴを再掲しない。
+   主催者の正式名（UPDATER）はロゴに入っていないため、文字でだけ補う。 */
+.supported{margin:0;display:flex;align-items:center;gap:var(--s2);
+  font-size:11px;color:var(--ink-muted);white-space:nowrap}
+.supported .label{font-size:10px;letter-spacing:.14em;color:var(--ink-faint)}
+.supported b{font-weight:700;color:var(--ink)}
+/* 実測：430px幅ならロゴ149px＋主催表記120pxで収まる。
+   ここで消すと右が6割空いて「読み込みに失敗した」ように見えるので、
+   本当に入らない幅（〜359px）でだけ隠す。情報はヒーローとフッターにも出ている。 */
+@media (max-width:359px){ .supported{display:none} }
+@media (min-width:600px){ .logo-main-img{height:64px} }
 
 /* ── 1. ヒーロー：水色の面。ブランドカラーを最大面積で使う場所 */
 .hero{position:relative;background:var(--brand);overflow:hidden;isolation:isolate}
@@ -64,11 +79,16 @@ img,svg{max-width:100%;display:block}
 /* 和文様。写真を潰さないよう、ごく薄く重ねるだけ */
 .hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.07;
   background-image:var(--asanoha);background-size:40px 70px}
-/* FC大阪エンブレムを背景に大きく。支給データをそのまま拡大しているだけで、
-   色も形も変えていない（§8：描き直し・変形・配色変更は禁止）。
-   テキストロゴは黒一色のため濃色背景では見えない。白抜き版が届いたら差し替える。 */
+/* 夕照祭のエンブレム。濃色の上に置けるのはこれだけ
+   （横組み・縦組みのロゴはロゴタイプが墨色 #221816 なので、ここでは読めない）。
+   支給データをそのまま縮小しているだけで、色も形も変えていない
+   （§8：描き直し・変形・配色変更は禁止）。 */
+.hero-badge{width:92px;height:92px;margin:0 0 var(--s4)}
+@media (min-width:600px){ .hero-badge{width:112px;height:112px} }
+/* FC大阪エンブレムの透かし。エンブレムが2つ重なって見えないよう、
+   バッジを置いた側とは反対の下端に、ごく薄く敷くだけにする。 */
 .hero-mark{position:absolute;right:-56px;bottom:-64px;width:280px;height:280px;
-  z-index:-1;opacity:.16;pointer-events:none}
+  z-index:-1;opacity:.10;pointer-events:none}
 .hero-inner{position:relative;z-index:1;padding-top:var(--s7);padding-bottom:var(--s6)}
 .hero .eyebrow{display:inline-block;font-size:11px;letter-spacing:.18em;font-weight:700;
   background:var(--brand);color:var(--ink);padding:6px 12px;border-radius:99px;margin:0 0 var(--s4)}
@@ -286,14 +306,12 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
 
 <header class="site-header">
   <div class="wrap">
-    <!-- ロゴは assets/logo/ の SVG を差し替えるだけで入れ替わる -->
-    <img class="logo-main-img" src="assets/logo/logo-main.svg" alt="FC大阪サステナ盆踊り実行委員会" width="230" height="90">
-    <div class="supported">
-      <span class="label">主催</span>
-      <img src="assets/fcosaka_emblem.png" alt="FC大阪" width="22" height="22">
-      <img class="textlogo" src="assets/fcosaka_textlogo.png" alt="FC OSAKA" width="80" height="15">
-      <span class="updater">UPDATER</span>
-    </div>
+    <!-- ロゴは content.js の BRAND を差し替えるだけで入れ替わる -->
+    <img class="logo-main-img" src="assets/logo/event-logo-text.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り"
+         width="479" height="200" fetchpriority="high">
+    <p class="supported">
+      <span class="label">主催</span><b>FC大阪</b>／<b>UPDATER</b>
+    </p>
   </div>
 </header>
 
@@ -318,10 +336,11 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
     <img class="hero-photo" src="assets/stadium.webp" alt="" width="1920" height="1005" fetchpriority="high">
     <img class="hero-mark" src="assets/fcosaka_emblem.png" alt="" width="280" height="280" aria-hidden="true">
     <div class="wrap hero-inner">
+      <img class="hero-badge" src="assets/logo/event-mark.png" alt="" width="384" height="384" aria-hidden="true">
       <span class="eyebrow">出店者募集</span>
       <p class="en">SUSTAINA BON ODORI</p>
-      <h1>夕照祭2026<span class="yomi">ゆうしょうさい</span><span class="sub">FC大阪サステナ盆踊り</span></h1>
-      <p class="presented">presented by UPDATER</p>
+      <h1>夕照祭2026<span class="yomi">ゆうしょうさい</span><span class="sub">秋のサステナ盆踊り</span></h1>
+      <p class="presented">presented by みんな電力</p>
       <p class="place"><span>2026年10月24日（土）</span><span>花園ラグビー場 場外エリア</span></p>
       <p class="match"><b>KICK OFF 14:00</b><span>FC大阪 vs 鹿児島ユナイテッドFC</span></p>
       <div class="hero-cta">
@@ -389,7 +408,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
           <dl class="kv">
         <div>
           <dt>イベント名</dt>
-          <dd class="">夕照祭2026 FC大阪サステナ盆踊り</dd>
+          <dd class="">夕照祭2026 FC大阪 秋のサステナ盆踊り</dd>
         </div>
         <div>
           <dt>主催</dt>
@@ -459,7 +478,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
         </div>
         <div>
           <dt>レンタル備品</dt>
-          <dd class="">下記のとおりです。ここに無いもの（発電機・冷蔵庫など）のご要望は応募フォームでお伺いし、別途お見積もりをお送りします。</dd>
+          <dd class="">テント・長机・パイプ椅子をご用意しています（有料）。ここに無いもの（発電機・冷蔵庫など）のご要望は応募フォームでお伺いし、別途お見積もりをお送りします。</dd>
         </div>
         <div>
           <dt>お支払い</dt>
