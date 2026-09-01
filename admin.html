@@ -324,21 +324,25 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <p class="sub">夕照祭2026 FC大阪サステナ盆踊り</p>
     <div class="err" id="gErr" style="display:none"></div>
 
-    <div id="step1">
-      <label for="gPw">パスワード</label>
-      <div class="pwrow">
-        <input type="password" id="gPw" autocomplete="current-password">
-        <button type="button" id="gShow" aria-label="パスワードを表示">表示</button>
+    <!-- form にしておくと、ブラウザのパスワード保存が働きやすくなる。
+         CSPで form-action 'none' にしてあるので、万一 JS が動かなくても送信は起きない。 -->
+    <form id="gForm" autocomplete="on" novalidate>
+      <div id="step1">
+        <label for="gPw">パスワード</label>
+        <div class="pwrow">
+          <input type="password" id="gPw" name="password" autocomplete="current-password">
+          <button type="button" id="gShow" aria-label="パスワードを表示">表示</button>
+        </div>
+        <button type="submit" id="gNext">次へ</button>
       </div>
-      <button id="gNext">次へ</button>
-    </div>
 
-    <div id="step2" style="display:none">
-      <label for="gPerson">お名前</label>
-      <select id="gPerson"></select>
-      <button id="gIn">入室する</button>
-      <button class="back" id="gBack">← パスワードを入れ直す</button>
-    </div>
+      <div id="step2" style="display:none">
+        <label for="gPerson">お名前</label>
+        <select id="gPerson" name="username" autocomplete="username"></select>
+        <button type="submit" id="gIn">入室する</button>
+        <button type="button" class="back" id="gBack">← パスワードを入れ直す</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -602,10 +606,44 @@ function submitPerson(){
   api('adminLogin', { password: S.pw, person: person }).then(function(r){
     $('#gIn').disabled = false;
     if (!r || !r.ok){ gateError((r && r.message) || '入室できませんでした。'); return; }
-    S.token = r.token; S.person = r.person; S.role = r.role; S.pw = '';
+    S.token = r.token; S.person = r.person; S.role = r.role;
+    rememberPassword(person, S.pw);   // 消す前に、保存するか聞いてもらう
+    S.pw = '';
     try { localStorage.setItem(KEY, JSON.stringify({ token:r.token, person:r.person, role:r.role })); } catch(e){}
     start();
   }, function(e){ $('#gIn').disabled=false; gateError('接続できませんでした。' + e.message); });
+}
+
+/**
+ * ブラウザにパスワードを覚えてもらう。
+ *
+ * この画面はパスワードのあとに氏名を選ぶ2段階で、しかも画面が切り替わらない。
+ * ブラウザから見ると「ログインした」ように見えないので、
+ * 放っておくと保存を提案してこない（実際に効かなかった）。
+ * そこで、入室できた時点でこちらから頼む。
+ *
+ * 対応していないブラウザでは何も起きない。失敗しても入室の邪魔はしない。
+ */
+function rememberPassword(person, pw){
+  if (!pw) return;
+  try {
+    if (!window.PasswordCredential || !navigator.credentials) return;
+    navigator.credentials.store(new PasswordCredential({
+      id: person, name: person, password: pw,
+    })).catch(function(){});
+  } catch (e) { /* 保存できなくても入室には影響しない */ }
+}
+
+/** 覚えてもらっていれば、パスワード欄に入れておく（送信まではしない） */
+function recallPassword(){
+  try {
+    if (!navigator.credentials || !navigator.credentials.get) return;
+    navigator.credentials.get({ password: true, mediation: 'optional' })
+      .then(function(c){
+        if (c && c.password && !$('#gPw').value) $('#gPw').value = c.password;
+      })
+      .catch(function(){});
+  } catch (e) {}
 }
 
 function signOut(msg){
@@ -614,6 +652,7 @@ function signOut(msg){
   $('.app').classList.remove('on');
   $('.gate').style.display='';
   gateStep(1);
+  recallPassword();
   $('#gPw').value='';
   gateError(msg || '');
 }
@@ -1353,7 +1392,11 @@ function savePerson(){
 
 // ─────────────────────────── 起動
 document.addEventListener('DOMContentLoaded', function(){
-  $('#gNext').addEventListener('click', submitPassword);
+  // 2つの段階が同じ form の中にあるので、いま出ている方で振り分ける
+  $('#gForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    if ($('#step1').style.display === 'none') submitPerson(); else submitPassword();
+  });
   $('#gShow').addEventListener('click', function(){
     var i = $('#gPw');
     var show = (i.type === 'password');
@@ -1362,8 +1405,6 @@ document.addEventListener('DOMContentLoaded', function(){
     this.setAttribute('aria-label', show ? 'パスワードを隠す' : 'パスワードを表示');
     i.focus();
   });
-  $('#gPw').addEventListener('keydown', function(e){ if (e.key === 'Enter') submitPassword(); });
-  $('#gIn').addEventListener('click', submitPerson);
   $('#gBack').addEventListener('click', function(){ gateStep(1); gateError(''); });
   $('#out').addEventListener('click', function(){ if (confirm('管理ページから出ます。よろしいですか。')) signOut(); });
 
@@ -1402,6 +1443,7 @@ document.addEventListener('DOMContentLoaded', function(){
     }, function(){ signOut('接続できませんでした。もう一度お試しください。'); });
   } else {
     gateStep(1);
+    recallPassword();
   }
 });
 </script>
