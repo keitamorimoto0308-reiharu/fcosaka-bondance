@@ -105,6 +105,9 @@ img,svg{max-width:100%;display:block}
 .idbox:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
 .eg-hint{margin:10px 0 0;font-size:12.5px;color:var(--ink-muted);line-height:1.8}
 .edit-entry{margin:14px 0 0;font-size:13px;color:var(--ink-muted);line-height:1.9}
+/* フォードの先頭に置くほう。読み飛ばされないよう、面を敷いて区別する */
+.edit-entry-top{margin:0 0 16px;padding:11px 14px;background:var(--bg-subtle);
+  border-left:3px solid var(--brand);border-radius:0 6px 6px 0}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--link,#2b6f95);
   text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .changed-list{text-align:left;margin:10px auto 0;max-width:32em;font-size:14px;line-height:2}
@@ -590,6 +593,11 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
 
 <div class="wrap section" id="form-area">
   <div class="sec-head"><h2>応募フォーム</h2><span class="en">ENTRY</span></div>
+  <p class="edit-entry edit-entry-top">
+    すでにご応募済みの方は、
+    <button type="button" class="linkbtn js-open-edit">応募済み情報の修正</button>
+    から内容を呼び出して直せます。
+  </p>
   <p class="lead-note">所要時間の目安は5分です。<br>
     入力内容はこの端末に自動保存されるので、途中で閉じても続きから入力できます。</p>
   <div class="form-error" role="alert"></div>
@@ -754,7 +762,7 @@ footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
       <p class="after-submit">ご応募のあとに記入内容の誤りや変更が見つかった場合は、ご紹介いただいた担当社員、または実行委員会までメールでお知らせください。こちらで修正いたします。</p>
       <p class="edit-entry">
         すでにご応募いただいた内容を直したい場合は、
-        <button type="button" class="linkbtn" id="open-edit">応募済み情報の修正</button>
+        <button type="button" class="linkbtn js-open-edit">応募済み情報の修正</button>
         からお手続きいただけます。
       </p>
       <p class="submit-note">送信後、ご記入のメールアドレスに受付確認メールをお送りします。</p>
@@ -1611,7 +1619,7 @@ function startEditing(values){
   // 送信の意味が変わるので、ボタンの文言もそろえる。
   // 「この内容で応募する」のままだと、二重に応募したと思われる
   $('#submit-btn').textContent = 'この内容で上書きする';
-  var entry = $('.edit-entry'); if (entry) entry.classList.add('hidden');
+  $$('.edit-entry').forEach(function(e){ e.classList.add('hidden'); });
   var draft = $('#draft-note'); if (draft) draft.classList.add('hidden');
 
   $('#form-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1693,8 +1701,9 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   wireIdBlocks();
-  var openEdit = $('#open-edit');
-  if (openEdit) openEdit.addEventListener('click', showEditGate);
+  // 入口はフォームの先頭と応募ボタンの下の2か所にある。
+  // id だと片方にしか効かないので、目印はクラスで持つ
+  $$('.js-open-edit').forEach(function(b){ b.addEventListener('click', showEditGate); });
   var egGo = $('#eg-go');
   if (egGo) egGo.addEventListener('click', lookupApplication);
   var egCancel = $('#eg-cancel');
