@@ -113,6 +113,24 @@ h2.sec .ic{color:var(--brand-deep);width:17px;height:17px}
 .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
 .panel{background:#fff;border:1px solid var(--border);padding:14px 16px}
 .pcount{font-size:13px;color:var(--muted)}
+.todohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.todohead h3{margin:0;font-size:14px}
+.todohead .ghost{background:transparent;border:1px solid var(--border);border-radius:6px;
+  padding:6px 12px;font-family:inherit;font-size:12.5px;cursor:pointer}
+.todoitem{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border)}
+.todoitem:first-child{border-top:0}
+.todoitem .st{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;
+  background:var(--subtle);color:var(--muted);white-space:nowrap;margin-top:2px}
+.todoitem .st.doing{background:#E8F4FB;color:#1f5f80}
+.todoitem .st.done{background:#EFF6EC;color:#3d6b30}
+.todoitem .body{flex:1;min-width:0}
+.todoitem .t{font-size:13.5px;line-height:1.7}
+.todoitem.is-done .t{text-decoration:line-through;color:var(--muted)}
+.todoitem .meta{font-size:11.5px;color:var(--muted);margin-top:2px}
+.todoitem .due.over{color:#B5714C;font-weight:700}
+.todoitem .edit{flex:none;background:none;border:0;color:var(--muted);font-size:12px;
+  text-decoration:underline;cursor:pointer;padding:2px 0;margin-top:2px}
+.todo-empty{font-size:13px;color:var(--muted);padding:6px 0}
 .memolog{margin:6px 0 0;padding:10px 12px;background:var(--subtle);border-radius:6px;
   font-size:12.5px;line-height:1.9;white-space:pre-wrap;max-height:200px;overflow:auto}
 .memolog:empty{display:none}
@@ -383,6 +401,30 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <section class="view on" id="v-dash">
       <div class="asof" id="asOf"></div>
       <div class="todo" id="todo"></div>
+      <div class="panel todos">
+        <div class="todohead">
+          <h3>確認事項</h3>
+          <button class="ghost" id="todoNew">＋ 追加</button>
+        </div>
+        <div id="todoForm" hidden>
+          <div class="pgrid">
+            <label style="grid-column:1/-1">内容<span class="req">必須</span>
+              <input id="todoText" maxlength="500" placeholder="例：観戦チケットの枚数をFC大阪に確認する"></label>
+            <label>担当<input id="todoOwner" maxlength="60" placeholder="例：けいた"></label>
+            <label>期日<input id="todoDue" placeholder="2026-09-08"></label>
+            <label>状態<select id="todoState">
+              <option>未着手</option><option>確認中</option><option>完了</option></select></label>
+            <label style="grid-column:1/-1">メモ<input id="todoMemo" maxlength="500"></label>
+          </div>
+          <p class="perr" id="todoErr" hidden></p>
+          <div class="pbtns">
+            <button class="print" id="todoSave">保存する</button>
+            <button class="ghost" id="todoCancel">やめる</button>
+          </div>
+        </div>
+        <div id="todoList"></div>
+      </div>
+
       <h2 class="sec"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
     aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>数字</h2>
@@ -771,6 +813,7 @@ function start(){
   applyRole();
   loadSummary();
   loadList();
+  loadTodos();
 }
 
 // ─────────────────────────── ダッシュボード
@@ -1766,6 +1809,114 @@ function savePasswords(){
   });
 }
 
+// ─────────────────────────── 確認事項（ToDo）
+/**
+ * 打ち合わせで出た「これは確認します」を残す場所。
+ * 誰が挙げたか・誰が持つか・いつまでか の3つが無いと、結局は誰も動かない。
+ * 期日を過ぎたものは色を変えて、目に入るようにする。
+ */
+function loadTodos(){
+  api('adminTodos').then(function(r){
+    if (!r || !r.ok) return;
+    S.todos = r.rows || [];
+    renderTodos();
+  }, function(){});
+}
+
+function todayText(){
+  var d = new Date();
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+function renderTodos(){
+  var box = $('#todoList');
+  var all = S.todos || [];
+  // 未完了を上に、そのなかは期日の早い順。期日なしは最後
+  var open = all.filter(function(t){ return t.state !== '完了'; });
+  var done = all.filter(function(t){ return t.state === '完了'; });
+  open.sort(function(a,b){
+    if (!a.due && !b.due) return 0;
+    if (!a.due) return 1;
+    if (!b.due) return -1;
+    return a.due < b.due ? -1 : 1;
+  });
+  var rows = open.concat(done.slice(0, 5));   // 済んだものは直近5件だけ添える
+
+  if (!rows.length){
+    box.innerHTML = '<p class="todo-empty">確認事項はありません。'
+      + '打ち合わせで持ち帰ったことを、ここに残しておけます。</p>';
+    return;
+  }
+
+  var today = todayText();
+  box.innerHTML = rows.map(function(t){
+    var over = t.due && t.state !== '完了' && t.due < today;
+    var cls = t.state === '完了' ? 'done' : (t.state === '確認中' ? 'doing' : '');
+    return '<div class="todoitem' + (t.state === '完了' ? ' is-done' : '') + '">'
+      + '<span class="st ' + cls + '">' + esc(t.state) + '</span>'
+      + '<span class="body"><span class="t">' + esc(t.text) + '</span><br>'
+      + '<span class="meta">'
+      + (t.owner ? '担当 ' + esc(t.owner) + '　' : '')
+      + (t.due ? '<span class="due' + (over ? ' over' : '') + '">期日 ' + esc(t.due)
+                 + (over ? '（過ぎています）' : '') + '</span>　' : '')
+      + '起票 ' + esc(t.author || '—')
+      + (t.memo ? '　' + esc(t.memo) : '')
+      + '</span></span>'
+      + '<button class="edit" data-todo="' + t.row + '">直す</button>'
+      + '</div>';
+  }).join('');
+
+  $$('#todoList [data-todo]').forEach(function(b){
+    b.addEventListener('click', function(){ editTodo(Number(b.getAttribute('data-todo'))); });
+  });
+}
+
+function editTodo(row){
+  var t = (S.todos || []).filter(function(x){ return x.row === row; })[0]
+       || { state:'未着手', text:'', owner:'', due:'', memo:'' };
+  S.todoRow = row || 0;
+  $('#todoText').value = t.text || '';
+  $('#todoOwner').value = t.owner || '';
+  $('#todoDue').value = t.due || '';
+  $('#todoState').value = t.state || '未着手';
+  $('#todoMemo').value = t.memo || '';
+  $('#todoErr').hidden = true;
+  $('#todoForm').hidden = false;
+  $('#todoText').focus();
+}
+
+function saveTodo(){
+  var todo = {
+    text: $('#todoText').value.trim(),
+    owner: $('#todoOwner').value.trim(),
+    due: $('#todoDue').value.trim(),
+    state: $('#todoState').value,
+    memo: $('#todoMemo').value.trim(),
+  };
+  if (!todo.text){
+    $('#todoErr').textContent = '内容をご記入ください。';
+    $('#todoErr').hidden = false;
+    return;
+  }
+  $('#todoSave').disabled = true;
+  api('adminTodoSave', { row: S.todoRow || 0, todo: todo }).then(function(r){
+    $('#todoSave').disabled = false;
+    if (!r || !r.ok){
+      $('#todoErr').textContent = (r && r.message) || '保存できませんでした。';
+      $('#todoErr').hidden = false;
+      return;
+    }
+    $('#todoForm').hidden = true;
+    toast(r.added ? '確認事項を追加しました' : '確認事項を更新しました');
+    loadTodos();
+    if (S.history) loadHistory();
+  }, function(){
+    $('#todoSave').disabled = false;
+    $('#todoErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#todoErr').hidden = false;
+  });
+}
+
 // ─────────────────────────── 起動
 document.addEventListener('DOMContentLoaded', function(){
   // 2つの段階が同じ form の中にあるので、いま出ている方で振り分ける
@@ -1787,6 +1938,9 @@ document.addEventListener('DOMContentLoaded', function(){
   $$('.tabs button').forEach(function(b){
     b.addEventListener('click', function(){ showTab(b.getAttribute('data-tab')); });
   });
+  $('#todoNew').addEventListener('click', function(){ editTodo(0); });
+  $('#todoSave').addEventListener('click', saveTodo);
+  $('#todoCancel').addEventListener('click', function(){ $('#todoForm').hidden = true; });
   $('#setSave').addEventListener('click', saveSettings);
   $('#setPwSave').addEventListener('click', savePasswords);
   $('#hQ').addEventListener('input', renderHistory);
