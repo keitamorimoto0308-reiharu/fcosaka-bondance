@@ -546,7 +546,11 @@ function api(action, body){
     body: JSON.stringify(payload),
   }).then(function(r){ return r.json(); }).then(function(j){
     busy(false);
-    if (j && j.error === 'unauthorized') { signOut('セッションが切れました。もう一度お入りください。'); throw new Error('unauthorized'); }
+    if (j && j.error === 'unauthorized') {
+      // なぜ切れたのかはサーバーしか知らない。そのまま伝える
+      signOut(j.message || 'セッションが切れました。もう一度お入りください。');
+      throw new Error('unauthorized');
+    }
     return j;
   }, function(e){ busy(false); throw e; });
 }
