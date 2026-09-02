@@ -175,6 +175,28 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .pnote{margin:12px 0 0;font-size:12.5px;line-height:1.8;color:var(--muted);
   background:var(--subtle);padding:10px 12px;border-radius:6px}
 .pill-off{opacity:.45}
+/* ── メール送信（採択通知）。段ごとに区切って、順番を目でも分かるようにする */
+.mail-step{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.mail-step h4{margin:0 0 8px;font-size:13.5px;font-weight:700}
+.mail-count{margin:0 0 10px;font-size:14px}
+.mail-count b{font-size:20px;font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;margin-right:2px}
+.mail-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.mail-tbl th{background:var(--subtle);text-align:left;padding:6px 8px;
+  font-size:11.5px;color:var(--muted);white-space:nowrap;position:sticky;top:0}
+.mail-tbl td{padding:6px 8px;border-top:1px solid var(--border);white-space:nowrap}
+.tbl-wrap{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+/* 本文はそのまま出す。等幅にしないと、メールでの見え方と食い違う */
+.mail-prev{border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.mail-prev .mp-h{display:grid;grid-template-columns:64px 1fr;gap:8px;
+  padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px}
+.mail-prev .mp-h b{color:var(--muted);font-weight:700;font-size:11.5px}
+.mail-prev pre{margin:0;padding:14px;background:var(--subtle);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+  line-height:1.85;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto}
+/* 取り消せない操作なので、押す場所だけ色を変える */
+.pwarn{margin:10px 0 0;font-size:13px;line-height:1.8;color:var(--ink);
+  background:#FFF4E5;border-left:4px solid #E8A33D;padding:10px 12px;border-radius:0 6px 6px 0}
+#mailResult .ok{margin:0 0 8px;font-size:15px}
 .panel h3{margin:0 0 10px;font-size:12.5px;letter-spacing:.1em;color:var(--muted);font-weight:700}
 .rows2{display:grid;gap:6px}
 .rows2 .r{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;font-size:13.5px}
@@ -387,6 +409,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <button data-tab="map"  aria-selected="false">出店エリアマップ</button>
     <button data-tab="day"  aria-selected="false">当日運営</button>
     <button data-tab="history" aria-selected="false">変更履歴</button>
+    <button data-tab="mail" aria-selected="false" class="admin-only" hidden>メール送信</button>
     <button data-tab="people" aria-selected="false" class="admin-only" hidden>関係者</button>
     <button data-tab="settings" aria-selected="false" class="admin-only" hidden>設定</button>
   </div></nav>
@@ -569,6 +592,49 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
       </div>
     </section>
     <!-- ── 設定（管理者のみ） ───────────────── -->
+    <!-- ── メール送信（採択通知の一括送信・§6-5）
+         取り消せない操作なので、対象一覧 → プレビュー → 送信 の3段にする。
+         段を飛ばせないよう、次の段は前の段を通らないと出さない。 -->
+    <section class="view" id="v-mail">
+      <div class="panel">
+        <h3>採択通知の一括送信</h3>
+        <p class="pnote" id="mailIntro">読み込んでいます…</p>
+
+        <div id="mailWarn" hidden></div>
+
+        <div class="mail-step" id="mailStep1">
+          <h4>1. 送信する相手を確認する</h4>
+          <div id="mailTargets"></div>
+        </div>
+
+        <div class="mail-step" id="mailStep2" hidden>
+          <h4>2. 本文を確認する</h4>
+          <p class="pnote">1件目の宛先に送られる、実際の文面です。
+            リンクは受付IDごとに変わります。</p>
+          <div class="mail-prev">
+            <div class="mp-h"><b>差出人</b><span id="mailFrom"></span></div>
+            <div class="mp-h"><b>宛先</b><span id="mailTo"></span></div>
+            <div class="mp-h"><b>件名</b><span id="mailSubject"></span></div>
+            <pre id="mailBody"></pre>
+          </div>
+        </div>
+
+        <div class="mail-step" id="mailStep3" hidden>
+          <h4>3. 送信する</h4>
+          <p class="pwarn"><b>送信したメールは取り消せません。</b>
+            上の一覧と本文をご確認のうえ、進めてください。</p>
+          <div class="pbtns">
+            <button class="danger" id="mailSend">
+              <span id="mailSendLabel">送信する</span>
+            </button>
+            <span class="msg" id="mailMsg"></span>
+          </div>
+        </div>
+
+        <div id="mailResult" hidden></div>
+      </div>
+    </section>
+
     <section class="view" id="v-settings">
       <div class="panel">
         <h3>イベントの設定</h3>
@@ -1470,6 +1536,10 @@ function showTab(name, keepHash){
   if (name === 'people' && !S.people) loadPeople();
   if (name === 'history' && !S.history) loadHistory();
   if (name === 'settings' && !S.settings) loadSettings();
+  // メール送信だけは毎回読み直す。他のタブは一度読んだら使い回すが、
+  // ここは「いま送る対象が何件か」を見せる画面なので、
+  // 古い件数を見せたまま送信させると、見せた覚えのない相手に届く。
+  if (name === 'mail') loadNotify();
   if (!keepHash && location.hash.slice(1).split('/')[0] !== name){
     history.replaceState(null, '', '#' + name);
   }
@@ -1479,7 +1549,7 @@ function showTab(name, keepHash){
 function applyHash(){
   var parts = location.hash.replace(/^#/, '').split('/');
   var tab = parts[0];
-  if (['dash','list','map','day','people','history','settings'].indexOf(tab) < 0) return;
+  if (['dash','list','map','day','mail','people','history','settings'].indexOf(tab) < 0) return;
   showTab(tab, true);
   if (tab === 'list' && parts[1]){
     var wait = setInterval(function(){
@@ -1721,6 +1791,161 @@ function saveApplicant(){
 }
 
 // ─────────────────────────── 設定（管理者のみ）
+// ─────────────────────────── メール送信（採択通知）
+/**
+ * 対象と本文を取り直して、3段を組み直す。
+ *
+ * ■ 毎回取り直す
+ *   「いま何件に送るか」を見せる画面なので、古い件数を見せたまま
+ *   送信させると、見せた覚えのない相手に届く。
+ *   サーバー側も件数の食い違いを見て弾くが、画面でも古いものを残さない。
+ *
+ * ■ 押した瞬間に押せなくする
+ *   二重クリックで2回送ると、事業者に同じメールが2通届く。
+ *   サーバー側は「送信済みは対象外」なので実害は小さいが、
+ *   応答が返る前の2回目は素通りしうるので、画面でも止める。
+ */
+function loadNotify(){
+  S.notify = null;
+  $('#mailIntro').textContent = '読み込んでいます…';
+  $('#mailStep2').hidden = true;
+  $('#mailStep3').hidden = true;
+  $('#mailResult').hidden = true;
+  $('#mailWarn').hidden = true;
+  $('#mailTargets').innerHTML = '';
+
+  api('adminNotifyPreview').then(function(r){
+    if (!r || !r.ok){
+      $('#mailIntro').textContent = (r && r.message) || '対象を取得できませんでした。';
+      return;
+    }
+    S.notify = r;
+    renderNotify();
+  }, function(){ $('#mailIntro').textContent = '対象を取得できませんでした。'; });
+}
+
+function renderNotify(){
+  var r = S.notify || {};
+  var rows = r.rows || [];
+  var bad = r.invalid || [];
+
+  $('#mailIntro').innerHTML =
+    'ステータスが<b>「採択」</b>で、まだ通知を送っていない出店者さまが対象です。'
+    + '<br>提出期限の表記：<b>' + esc(r.deadlineText || '') + '</b>';
+
+  // 送る前に気づけるようにする。差出人が壊れていると、
+  // 事業者には見覚えのないアドレスから届く
+  var warn = [];
+  if (r.mail && !r.mail.aliasRegistered){
+    warn.push('差出人のエイリアスが未登録です。このまま送ると、'
+      + '差出人が <b>' + esc(r.mail.from || '') + '</b> になります。');
+  }
+  if (!r.urls || !r.urls.confirm){
+    warn.push('設定シートの<b>確定情報フォームURL</b>が空です。このままでは送信できません。');
+  }
+  if (!r.urls || !r.urls.upload){
+    warn.push('素材アップロードURLが未設定のため、その案内は本文に入りません（送信は可能です）。');
+  }
+  if (bad.length){
+    warn.push('メールアドレスの形が正しくない行が' + bad.length + '件あります。'
+      + 'この行は<b>送信されません</b>：'
+      + bad.map(function(b){ return esc(b.id) + ' ' + esc(b.company); }).join(' / '));
+  }
+  if (r.mail && r.mail.remainingQuota != null && r.mail.remainingQuota < rows.length){
+    warn.push('本日の送信可能数が足りません（残り ' + r.mail.remainingQuota
+      + ' 通／対象 ' + rows.length + ' 件）。');
+  }
+  $('#mailWarn').hidden = !warn.length;
+  $('#mailWarn').innerHTML = warn.map(function(w){
+    return '<p class="pwarn">' + w + '</p>';
+  }).join('');
+
+  if (!rows.length){
+    $('#mailTargets').innerHTML = '<p class="empty">送信する相手はいません。'
+      + '出店者一覧でステータスを「採択」にすると、ここに出ます。</p>';
+    return;
+  }
+
+  var over = rows.length > (r.batchMax || 40);
+  $('#mailTargets').innerHTML =
+    '<p class="mail-count"><b>' + rows.length + '件</b>に送信します'
+    + (over ? '（1回に送れるのは ' + r.batchMax + ' 件までです。'
+            + '残りは、もう一度この画面から送ってください）' : '') + '</p>'
+    + '<div class="tbl-wrap"><table class="mail-tbl"><thead><tr>'
+    + '<th>受付ID</th><th>企業名</th><th>ご担当者</th><th>宛先</th><th>担当社員</th>'
+    + '</tr></thead><tbody>'
+    + rows.map(function(x){
+        return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.company) + '</td>'
+          + '<td>' + esc(x.person) + '</td><td>' + esc(x.email) + '</td>'
+          + '<td>' + esc(x.staff) + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<div class="pbtns"><button class="print" id="mailToPreview">本文を確認する</button></div>';
+
+  $('#mailToPreview').addEventListener('click', function(){
+    var s = r.sample;
+    if (!s){ toast('本文を組み立てられませんでした', true); return; }
+    $('#mailFrom').textContent = (r.mail && r.mail.from) || '';
+    $('#mailTo').textContent = s.to + '（' + s.company + '）ほか '
+      + Math.max(rows.length - 1, 0) + '件';
+    $('#mailSubject').textContent = s.subject;
+    $('#mailBody').textContent = s.body;
+    $('#mailStep2').hidden = false;
+    $('#mailStep3').hidden = false;
+    $('#mailSendLabel').textContent = rows.length + '件に送信する';
+    $('#mailStep2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+function sendNotify(){
+  var r = S.notify || {};
+  var rows = r.rows || [];
+  if (!rows.length) return;
+
+  // 改行を入れたい場合、この位置ではバックスラッシュを2つ重ねること。
+  // build-admin.js は「JavaScriptを書き出すJavaScript」で、この行は
+  // テンプレートリテラルの中にある。1つだけ書くと書き出し時に本物の改行になり、
+  // 生成された admin.html の中で文字列リテラルが途中で切れる。
+  // コメント行でも同じことが起きるので、説明文にも書かない。
+  if (!confirm(rows.length + '件に採択通知を送信します。\n\n'
+      + '送信したメールは取り消せません。よろしいですか？')) return;
+
+  var btn = $('#mailSend');
+  btn.disabled = true;
+  $('#mailMsg').textContent = '送信しています…';
+
+  api('adminNotifySend', { confirm: true, expect: rows.length }).then(function(res){
+    $('#mailMsg').textContent = '';
+    if (!res || !res.ok){
+      btn.disabled = false;
+      toast((res && res.message) || '送信できませんでした', true);
+      // 件数が変わっていた場合は、取り直してから見せ直す
+      if (res && res.error === 'changed') loadNotify();
+      return;
+    }
+    $('#mailResult').hidden = false;
+    $('#mailResult').innerHTML =
+      '<p class="ok"><b>' + (res.sent || []).length + '件を送信しました。</b></p>'
+      + ((res.failed || []).length
+          ? '<p class="pwarn"><b>' + res.failed.length + '件が失敗しています。</b>'
+            + res.failed.map(function(f){
+                return esc(f.id) + ' ' + esc(f.company || '') + '（' + esc(f.reason || '') + '）';
+              }).join(' / ')
+            + '<br>失敗した行は「未送信」のままなので、もう一度この画面から送れます。</p>'
+          : '')
+      + (res.remaining ? '<p class="pnote">残り' + res.remaining
+          + '件は、もう一度この画面から送信してください。</p>' : '');
+    $('#mailStep1').hidden = true;
+    $('#mailStep2').hidden = true;
+    $('#mailStep3').hidden = true;
+    $('#mailResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, function(){
+    btn.disabled = false;
+    $('#mailMsg').textContent = '';
+    toast('送信できませんでした（通信）', true);
+  });
+}
+
 function loadSettings(){
   api('adminSettings').then(function(r){
     if (!r || !r.ok){ toast((r && r.message) || '設定を取得できませんでした', true); return; }
@@ -1744,6 +1969,8 @@ function renderSettings(){
     } else {
       input = '<input id="set-' + esc(f.key) + '" value="' + esc(val) + '"'
         + (f.type === 'deadline' ? ' placeholder="2026-09-30 18:00"' : '')
+        + (f.type === 'url' ? ' placeholder="https://bondance.kreha-c.com/…" inputmode="url"' : '')
+        + (f.type === 'date' ? ' placeholder="2026-10-10"' : '')
         + (f.type === 'int' ? ' inputmode="numeric"' : '') + '>';
     }
     return '<label>' + esc(f.label) + input + '</label>';
@@ -2025,6 +2252,7 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#todoSave').addEventListener('click', saveTodo);
   $('#todoCancel').addEventListener('click', function(){ $('#todoForm').hidden = true; });
   $('#setSave').addEventListener('click', saveSettings);
+  $('#mailSend').addEventListener('click', sendNotify);
   $('#setPwSave').addEventListener('click', savePasswords);
   $('#hQ').addEventListener('input', renderHistory);
   $('#hReload').addEventListener('click', loadHistory);
