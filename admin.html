@@ -163,6 +163,30 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .pgrid input{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
   border-radius:6px;font-size:14px;font-family:inherit}
 .pgrid .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
+/* 項目の説明。作った本人にしか分からない画面にしないための行。
+   2026-09-02 けいた指摘「これをFC大阪さんに渡した後、初めて見る人たちが困りそう」。
+   畳まずに常に出す。畳むと初めて見る人は開かない */
+.pgrid .hint{display:block;margin-top:3px;font-size:11.5px;line-height:1.7;
+  color:var(--muted);font-weight:400}
+
+/* 画面の見かた。各タブの先頭に置く。
+   常に開いていると本文が遠のくので畳むが、**見出しで中身が想像できる**ようにする */
+.howto{margin:0 0 12px;border:1px solid var(--border);border-radius:8px;background:var(--subtle)}
+.howto>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:700;
+  color:var(--ink);list-style:none}
+.howto>summary::-webkit-details-marker{display:none}
+.howto>summary::before{content:'？';display:inline-block;width:16px;height:16px;
+  margin-right:7px;border-radius:50%;background:var(--ink);color:#fff;
+  font-size:10.5px;line-height:16px;text-align:center;vertical-align:1px}
+.howto[open]>summary{border-bottom:1px solid var(--border)}
+.howto dl{margin:0;padding:10px 14px 12px;display:grid;
+  grid-template-columns:max-content 1fr;gap:6px 14px;font-size:12.5px;line-height:1.8}
+.howto dt{font-weight:700;color:var(--ink);white-space:nowrap}
+.howto dd{margin:0;color:var(--muted)}
+@media (max-width:560px){
+  .howto dl{grid-template-columns:1fr;gap:2px}
+  .howto dd{margin:0 0 8px}
+}
 .pgrid select{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
   border-radius:6px;font-size:14px;font-family:inherit;background:#fff}
 .pwstate{margin-left:8px;font-size:11px;color:var(--muted);font-weight:400}
@@ -461,6 +485,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   <main>
     <!-- ダッシュボード -->
     <section class="view on" id="v-dash">
+      <details class="howto"><summary>ダッシュボードの見かた</summary><dl><dt>要対応</dt><dd>手が止まっている応募です。「審査中」のまま設定した日数を過ぎたもの、連絡が返っていないものが出ます。</dd><dt>確認事項</dt><dd>チームで持ち回る宿題です。ここに書いたものは全員に見えます。</dd><dt>進捗バー</dt><dd>設定の「目標の出店社数」を分母にしています。空欄なら出ません。</dd></dl></details>
       <div class="asof" id="asOf"></div>
       <div class="todo" id="todo"></div>
       <div class="panel todos">
@@ -511,6 +536,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- 一覧 -->
     <section class="view" id="v-list">
+      <details class="howto"><summary>出店者一覧の見かた</summary><dl><dt>ステータス</dt><dd>審査中 → 採択／不採択。<b>ここを変えても、メールは自動では飛びません。</b>採択のご連絡は「メール送信」タブから行います。</dd><dt>受付ID</dt><dd>応募を受け付けた順の通し番号です。事業者へのご連絡でも使います。</dd><dt>行を押す</dt><dd>応募内容の全項目と、これまでの変更履歴が開きます。</dd></dl></details>
       <div class="toolbar">
         <input type="search" id="fQ" placeholder="企業名・受付ID・担当者などで検索">
         <select id="fStatus"></select>
@@ -529,6 +555,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- 当日運営：区画番号順・1行1社・印刷して持ち歩ける -->
     <section class="view" id="v-day">
+      <details class="howto"><summary>当日運営の見かた</summary><dl><dt>この画面</dt><dd>当日、現場で開くための一覧です。印刷にも耐える形にしてあります。</dd><dt>搬入時間</dt><dd>採択後の「出店確定情報フォーム」で事業者に書いてもらった希望です。</dd><dt>現場責任者</dt><dd>当日その場にいる方の連絡先です。応募時のご担当者とは別のことがあります。</dd></dl></details>
       <div class="toolbar">
         <span class="daycount" id="dayCount"></span>
         <label style="font-size:13px"><input type="checkbox" id="dOnlyAssigned" checked> 区画が決まっている分だけ</label>
@@ -544,6 +571,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- マップ -->
     <section class="view" id="v-map">
+      <details class="howto"><summary>出店エリアマップの見かた</summary><dl><dt>マス目</dt><dd>1つが1区画（約2.7m×3.6m）です。数は設定の「区画の総数」で決まります。</dd><dt>割り当て</dt><dd>出店者を選んでマスを押すと決まります。2区画の事業者は、続いた2マスを使います。</dd></dl></details>
       <div class="maplayout">
         <div>
           <div class="mapbox" id="map"></div>
@@ -566,6 +594,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- ── 変更履歴 ─────────────────────────── -->
     <section class="view" id="v-history">
+      <details class="howto"><summary>変更履歴の見かた</summary><dl><dt>記録されるもの</dt><dd>誰が・いつ・どの項目を・何から何に変えたか。事業者ご本人による修正も残ります。</dd><dt>消せません</dt><dd>あとから書き換えられない台帳です。「言った・言わない」を防ぐためのものなので、編集機能は用意していません。</dd></dl></details>
       <div class="toolbar">
         <input id="hQ" placeholder="受付ID・項目・操作者で絞り込み" style="min-width:240px">
         <span class="pcount" id="hCount"></span>
@@ -588,6 +617,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- ── 関係者（管理者のみ） ─────────────── -->
     <section class="view" id="v-people">
+      <details class="howto"><summary>関係者の見かた</summary><dl><dt>応募フォーム</dt><dd>応募フォームの「FC大阪の担当社員」プルダウンに、その方を出すか。外しても行は消えないので、いつでも戻せます。</dd><dt>管理ページ</dt><dd>この管理ページに入れるかどうか。メールアドレスの登録が要ります。</dd><dt>役割</dt><dd>管理者はメール送信・設定変更・関係者の編集ができます。一般は閲覧と、自分の担当分の更新までです。</dd><dt>通知</dt><dd><b>ON … 新しい応募がすべて届きます。</b><b>OFF … 自分が担当社員として選ばれた応募だけ届きます。</b>どちらでも、担当に選ばれた応募は必ず届きます。メールアドレスが未登録の方には届きません。</dd><dt>辞めた方</dt><dd><b>消さずに</b>「応募フォーム」と「管理ページ」の両方を外してください。消すと、過去の応募に残っている担当社員名の行き先が分からなくなります。</dd></dl></details>
       <div class="toolbar">
         <span class="pcount" id="peopleCount"></span>
         <button class="print" id="pNew">新しく登録する</button>
@@ -640,6 +670,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
          Driveを直接共有すると相手にGoogleアカウントが要る。
          管理ページのパスワードだけで置けるようにする。 -->
     <section class="view" id="v-docs">
+      <details class="howto"><summary>資料置き場の見かた</summary><dl><dt>図面・議事録・その他</dt><dd>主催側の資料です。Driveの共有フォルダとつながっています。</dd><dt>出店者提出物</dt><dd>事業者から届いたロゴや写真です。<b>このフォルダは共有していません</b>（他社の素材が混ざるため）。Driveで開く必要がある方は、けいたに個別の共有をご依頼ください。</dd><dt>未提出</dt><dd>まだ1件も出していない採択先です。催促の目安に使えます。</dd><dt>削除</dt><dd>管理者のみです。ゴミ箱に入るだけなので、Driveから戻せます。</dd></dl></details>
       <div class="panel">
         <h3>資料置き場</h3>
         <p class="pnote" id="docsIntro">読み込んでいます…</p>
@@ -661,6 +692,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
          取り消せない操作なので、対象一覧 → プレビュー → 送信 の3段にする。
          段を飛ばせないよう、次の段は前の段を通らないと出さない。 -->
     <section class="view" id="v-mail">
+      <details class="howto"><summary>メール送信の見かた</summary><dl><dt>この画面ですること</dt><dd>採択が決まった事業者に、出店決定のご案内を一斉に送ります。</dd><dt>3つの段階</dt><dd>①送る相手を確かめる → ②本文を読む → ③送る。②まではメールは飛びません。</dd><dt>送ったあと</dt><dd>取り消せません。同じ方に二度送らないよう、送信済みの方は次から対象に出ません。</dd><dt>届かなかったら</dt><dd>結果に失敗として出ます。原因（宛先違いなど）を直して、その方だけもう一度送れます。</dd></dl></details>
       <div class="panel">
         <h3>採択通知の一括送信</h3>
         <p class="pnote" id="mailIntro">読み込んでいます…</p>
@@ -701,6 +733,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     </section>
 
     <section class="view" id="v-settings">
+      <details class="howto"><summary>設定の見かた</summary><dl><dt>変更したら</dt><dd>保存した内容は、募集ページ・募集要項PDF・メール本文にすぐ反映されます。</dd><dt>パスワード</dt><dd>空欄のままにすると変更しません。変えると、いま入っている方も次回から新しいパスワードが要ります。</dd><dt>各項目</dt><dd>入力欄の下に、それぞれ何に使う値かを書いています。</dd></dl></details>
       <div class="panel">
         <h3>イベントの設定</h3>
         <div class="pgrid" id="setFields"></div>
@@ -816,6 +849,19 @@ var esc = function (s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 };
+
+/**
+ * 説明文の ** ** だけ太字にする（ブラウザ側）。
+ * サーバーから来る設定の説明に強調が書けるようにするため。
+ * esc() だけだと「**空だと採択通知を送れません。**」とそのまま出る。
+ * 組み立ての順序に注意：**先に esc してから** 分けること。
+ * 先に分けると、< > が生のまま残って差し込みになる。
+ */
+function mdBold(s){
+  return esc(s).split('**').map(function(part, i){
+    return i % 2 ? '<b>' + part + '</b>' : part;
+  }).join('');
+}
 
 function busy(on){ $('.busy').classList.toggle('on', !!on); }
 /**
@@ -2215,7 +2261,13 @@ function renderSettings(){
         + (f.type === 'date' ? ' placeholder="2026-10-10"' : '')
         + (f.type === 'int' ? ' inputmode="numeric"' : '') + '>';
     }
-    return '<label>' + esc(f.label) + input + '</label>';
+    // 説明はサーバー（gas/Admin.gs の SETTING_KEYS_）から来る。
+    // 画面側に書くと、項目を足したときに説明だけ抜ける
+    return '<label>' + esc(f.label)
+      // ** ** は太字にする。esc() だけだと、説明文に書いた強調が
+      // そのまま「**空だと採択通知を送れません。**」と表示される
+      + (f.help ? '<span class="hint">' + mdBold(f.help) + '</span>' : '')
+      + input + '</label>';
   }).join('');
 
   $('#setPasswords').innerHTML = (r.passwords || []).map(function(pw){
