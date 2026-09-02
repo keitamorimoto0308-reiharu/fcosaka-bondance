@@ -163,6 +163,52 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .pgrid input{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
   border-radius:6px;font-size:14px;font-family:inherit}
 .pgrid .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
+/* 表示する列の選択 */
+.colbox{margin:0 0 10px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.colbox>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:700;
+  list-style:none}
+.colbox>summary::-webkit-details-marker{display:none}
+.colbox>summary::before{content:'▸';margin-right:7px;color:var(--muted)}
+.colbox[open]>summary::before{content:'▾'}
+.colbox .cnum{margin-left:8px;font-weight:400;color:var(--muted)}
+.colpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+  gap:4px 12px;padding:10px 14px;border-top:1px solid var(--border)}
+.colopt{display:flex;align-items:center;gap:6px;font-size:12.5px;
+  color:var(--ink);cursor:pointer;min-height:28px}
+.colbox #colReset{margin:0 14px 12px}
+/* 数を集める項目の合計 */
+.totals h3{margin:0 0 10px;font-size:14px}
+.totals .card .sub{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.6}
+.totals .card.partial .sub{color:#B5714C}
+/* テストデータの一括削除。目立たせるが、押しやすくはしない */
+.purge{margin-top:16px;border:1px solid var(--error)}
+.purge h3{margin:0 0 8px;font-size:14px;color:var(--error)}
+.purge .pnote.warn{background:#FDF2F0;color:var(--error);margin-top:10px}
+.purge-run{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-top:12px}
+.purge-run label{font-size:12.5px;color:var(--muted)}
+.purge-run input{display:block;margin-top:4px;padding:9px 11px;width:120px;
+  border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit}
+.danger{background:var(--error);color:#fff;border:0;border-radius:6px;
+  padding:10px 18px;font-family:inherit;font-size:13px;cursor:pointer}
+.danger:disabled{opacity:.5;cursor:default}
+.purge-list{max-height:260px;overflow:auto;border:1px solid var(--border);
+  border-radius:6px;margin-top:10px}
+.purge-list table{width:100%;border-collapse:collapse;font-size:12.5px}
+.purge-list td{border-bottom:1px solid var(--border);padding:6px 10px}
+/* 詳細パネルの区切り。応募時と採択後を、見た目で分ける */
+.dsec{margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--ink);
+  font-size:13px;letter-spacing:.04em}
+.dsec .dcount{margin-left:8px;font-size:11px;font-weight:400;color:var(--muted)}
+.dnote{margin:0;padding:12px 14px;background:var(--subtle);border-radius:6px;
+  font-size:12.5px;line-height:1.8;color:var(--muted)}
+.dnote.warn{background:#FDF2F0;color:var(--error)}
+/* 確認事項。「誰から誰へ」と、期日・完了をその場で扱えるようにする */
+.todoitem .who{font-weight:700;color:var(--ink)}
+.todoitem .due.none{color:var(--muted)}
+.todo-done{background:#fff;border:1px solid var(--border);border-radius:6px;
+  padding:5px 12px;margin-right:6px;font-family:inherit;font-size:11.5px;
+  color:var(--ink);cursor:pointer;min-height:32px}
+.todo-done:hover{background:var(--subtle);border-color:var(--ink)}
 /* 項目の説明。作った本人にしか分からない画面にしないための行。
    2026-09-02 けいた指摘「これをFC大阪さんに渡した後、初めて見る人たちが困りそう」。
    畳まずに常に出す。畳むと初めて見る人は開かない */
@@ -485,6 +531,8 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   <main>
     <!-- ダッシュボード -->
     <section class="view on" id="v-dash">
+      <!-- 数を集める項目の合計。schema.js の aggregate から自動で並ぶ -->
+      <div class="panel totals" id="totals" hidden></div>
       <details class="howto"><summary>ダッシュボードの見かた</summary><dl><dt>要対応</dt><dd>手が止まっている応募です。「審査中」のまま設定した日数を過ぎたもの、連絡が返っていないものが出ます。</dd><dt>確認事項</dt><dd>チームで持ち回る宿題です。ここに書いたものは全員に見えます。</dd><dt>進捗バー</dt><dd>設定の「目標の出店社数」を分母にしています。空欄なら出ません。</dd></dl></details>
       <div class="asof" id="asOf"></div>
       <div class="todo" id="todo"></div>
@@ -547,9 +595,37 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         <label style="font-size:13px"><input type="checkbox" id="fDup"> 重複の可能性</label>
         <span class="count" id="count"></span>
       </div>
+      <!-- 表に出す列。仕事によって見たい列が変わるので、使う人が選ぶ -->
+      <details class="colbox">
+        <summary>表示する列を選ぶ<span class="cnum" id="colCount"></span></summary>
+        <div class="colpick" id="colPick"></div>
+        <button class="ghost" id="colReset">最初の並びに戻す</button>
+      </details>
       <div class="tablewrap">
         <table class="list"><thead id="listHead"></thead><tbody id="listBody"></tbody></table>
         <div class="empty" id="listEmpty">該当する応募はありません。</div>
+      </div>
+
+      <!-- テストデータの一括削除。設定でONにしたときだけ出る（管理者のみ）。
+           取り返しのつかない操作なので、3段階で押させる -->
+      <div class="panel purge admin-only" id="purgeBox" hidden>
+        <h3>テストデータの一括削除</h3>
+        <p class="pnote">
+          応募・出店確定情報・区画の割当・提出物を、まとめて
+          <b>「削除済み」シートへ移します</b>（完全には消しません）。
+          公開前の掃除にお使いください。変更履歴は残します。
+        </p>
+        <button class="ghost" id="purgeCheck">消える対象を確かめる</button>
+        <div id="purgeStep2" hidden>
+          <div id="purgeList"></div>
+          <p class="pnote warn" id="purgeWarn"></p>
+          <div class="purge-run">
+            <label>消す件数をご入力ください
+              <input id="purgeCount" inputmode="numeric" maxlength="4" placeholder="例：12"></label>
+            <button class="danger" id="purgeRun">控えを取って、すべて消す</button>
+          </div>
+        </div>
+        <p class="msg" id="purgeMsg"></p>
       </div>
     </section>
 
@@ -831,6 +907,12 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
           </div>
         </div>
         <div id="dRead"></div>
+        <!-- 採択後に集めた情報。2026-09-02 まで、ここは画面のどこにも出ていなかった。
+             当日いちばん要る情報（現場責任者・搬入車両・保険）を集めているのに、
+             スプレッドシートを開かないと見られない状態だった -->
+        <div id="dConfirm"></div>
+        <!-- 枚数の打ち込み（管理者のみ）。電話で聞いた数の行き場 -->
+        <div id="dCounts"></div>
       </div>
     </div>
   </div>
@@ -1006,6 +1088,37 @@ function start(){
 }
 
 // ─────────────────────────── ダッシュボード
+/**
+ * 数を集める項目の合計。
+ *
+ * **項目が増えても、ここは変えない。**
+ * schema.js の項目に aggregate を付けると、サーバーが拾って送ってくる。
+ * （2026-09-03 けいた「今後もダッシュボードに出したいものは
+ *   運用しながら増えていくかも」）
+ *
+ * ■ 「未提出」を必ず添える
+ *   合計だけ出すと、まだ聞けていないぶんが見えない。
+ *   枚数を手配する人がいちばん困るのは「この数字で発注してよいのか」なので、
+ *   **何件ぶんの数字なのか**を必ず一緒に出す。
+ */
+function renderTotals(totals){
+  var box = $('#totals');
+  if (!box) return;
+  if (!totals.length){ box.innerHTML = ''; box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = '<h3>当日お渡しするもの・人数</h3>'
+    + '<div class="cards">' + totals.map(function(t){
+        var note = t.missing
+          ? t.filled + '社ぶん（未提出 ' + t.missing + '社）'
+          : t.filled + '社ぶん';
+        return '<div class="card' + (t.missing ? ' partial' : '') + '">'
+          + '<div class="k">' + esc(t.label) + '</div>'
+          + '<div class="v">' + Number(t.sum).toLocaleString('ja-JP')
+          + (t.unit ? '<small>' + esc(t.unit) + '</small>' : '')
+          + '</div><div class="sub">' + esc(note) + '</div></div>';
+      }).join('') + '</div>';
+}
+
 function bars(obj, order){
   var keys = order || Object.keys(obj);
   var max = 0;
@@ -1081,14 +1194,13 @@ function loadSummary(){
       ['締切まで', r.daysLeft == null ? '—' : r.daysLeft, r.daysLeft == null ? '' : '日', 'dark'],
       ['区画の充足', r.spaces.rate + '%', r.spaces.assigned + ' / ' + r.spaces.total + ' 区画'],
       ['備品の概算', r.pricesKnown ? yen(r.revenue) : '調整中', r.pricesKnown ? '' : '単価未設定'],
-      // 火気・搬入車両・スタッフ人数は採択後の「出店確定情報」で集める項目。
-      // 応募段階のここに置くと、値が来ないので空欄のカードが3枚並ぶ。
-      // 出店確定情報フォームができたら、そちらの集計として戻す。
       ['消費電力の合計', Number(c.powerWatt||0).toLocaleString('ja-JP'), 'W' + (c.powerUnknown ? '（不明 '+c.powerUnknown+'件）' : '')],
     ].map(function(x){
       return '<div class="card '+(x[3]||'')+'"><div class="k">'+esc(x[0])+'</div>'
            + '<div class="v">'+esc(x[1])+(x[2] ? '<small>'+esc(x[2])+'</small>' : '')+'</div></div>';
     }).join('');
+
+    renderTotals(r.totals || []);
 
     $('#breakdown').innerHTML = [
       ['ステータス別', bars(c.byStatus, ['未確認','審査中','採択','不採択','辞退','キャンセル','重複（無効）'])],
@@ -1127,6 +1239,9 @@ function loadList(){
     var mine = r.rows.filter(function(x){ return x['FC大阪担当社員'] === S.person; });
     if (mine.length) $('#fMine').checked = true;
     fillFilters();
+    loadShow();              // 覚えている列。無ければ既定の並び
+    renderColumnPicker();
+    if (S.role === '管理者') loadPurgeBox();
     renderList();
     renderDay();
   }, function(e){ toast('一覧を取得できませんでした: ' + e.message, true); });
@@ -1185,14 +1300,168 @@ function filtered(){
   return rows;
 }
 
-var SHOW = ['受付ID','受付日時','ステータス','企業名','出店形態','希望区画',
-            '割当開始区画','FC大阪担当社員','当日ステータス'];
+/**
+ * 表に出す列。**使う人が選ぶ**（2026-09-02 けいた指摘）。
+ *
+ * その日の仕事によって、見たい列は変わる。
+ * 区画を割るときは希望区画とテント、電気の計画をするときは電源と消費電力。
+ * こちらで決め打ちにすると、そのたびにスプレッドシートを開くことになる。
+ *
+ * 選んだ内容はこの端末に覚えておく（人によって見たい列が違う）。
+ */
+var SHOW_KEY = 'bondance.listColumns.v1';
+var SHOW = [];
+
+function loadShow(){
+  var def = (S.list && S.list.defaultColumns) || [];
+  try {
+    var saved = JSON.parse(localStorage.getItem(SHOW_KEY) || 'null');
+    if (Array.isArray(saved) && saved.length){
+      // 台帳から消えた列が残っていると、空の列が並ぶ
+      var live = saved.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
+      if (live.length){ SHOW = live; return; }
+    }
+  } catch (e) {}
+  SHOW = def.slice();
+}
+
+function saveShow(){
+  try { localStorage.setItem(SHOW_KEY, JSON.stringify(SHOW)); } catch (e) {}
+}
+
+/** 列を選ぶ画面。開いている間だけ出す */
+function renderColumnPicker(){
+  var box = $('#colPick');
+  if (!S.list) return;
+  box.innerHTML = S.list.columns.map(function(c){
+    var on = SHOW.indexOf(c) >= 0;
+    return '<label class="colopt"><input type="checkbox" value="' + esc(c) + '"'
+      + (on ? ' checked' : '') + '>' + esc(c) + '</label>';
+  }).join('');
+  $$('#colPick input').forEach(function(inp){
+    inp.addEventListener('change', function(){
+      var c = inp.value;
+      if (inp.checked){
+        // 台帳の並び順を保つ。押した順に並ぶと、開くたびに表の形が変わる
+        SHOW = S.list.columns.filter(function(x){
+          return x === c || SHOW.indexOf(x) >= 0;
+        });
+      } else {
+        SHOW = SHOW.filter(function(x){ return x !== c; });
+      }
+      if (!SHOW.length){
+        // 全部外すと、何の表か分からなくなる
+        SHOW = [S.list.columns[0]];
+        renderColumnPicker();
+      }
+      saveShow();
+      renderList();
+    });
+  });
+}
+
+/**
+ * テストデータの一括削除。
+ *
+ * 取り返しのつかない操作なので、3段階で押させる。
+ *   ① 消える対象を確かめる（この時点では何も書き換えない）
+ *   ② 件数を打ち込む（惰性で押せないように）
+ *   ③ 実行。**下見のときと対象が変わっていたらサーバーが断る**
+ */
+var PURGE = { ids: null };
+
+function loadPurgeBox(){
+  // 設定でONのときだけ入口が開く。OFFなら箱ごと出さない
+  api('adminPurgePreview').then(function(r){
+    var on = !!(r && r.ok);
+    $('#purgeBox').hidden = !on || S.role !== '管理者';
+    if (on) PURGE.ids = r.ids || [];
+  }, function(){ $('#purgeBox').hidden = true; });
+}
+
+function purgeCheck(){
+  $('#purgeMsg').textContent = '';
+  api('adminPurgePreview').then(function(r){
+    if (!r || !r.ok){
+      $('#purgeStep2').hidden = true;
+      $('#purgeMsg').className = 'msg err';
+      $('#purgeMsg').textContent = (r && r.message) || '確かめられませんでした。';
+      return;
+    }
+    PURGE.ids = r.ids || [];
+    var items = r.items || [];
+    $('#purgeList').innerHTML = '<div class="purge-list"><table>' + items.map(function(x){
+      return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.company)
+           + '</td><td>' + esc(x.status) + '</td><td>' + esc(x.at) + '</td></tr>';
+    }).join('') + '</table></div>';
+    $('#purgeWarn').textContent = 'この ' + items.length + ' 件を「削除済み」シートへ移します。'
+      + '出店確定情報・区画の割当・提出物のフォルダも一緒に片づきます。'
+      + (r.tooMany ? '（一度に移せるのは ' + r.max + ' 件までです）' : '');
+    $('#purgeCount').value = '';
+    $('#purgeStep2').hidden = false;
+  }, function(){ toast('確かめられませんでした', true); });
+}
+
+function purgeRun(){
+  var n = Number($('#purgeCount').value);
+  if (!PURGE.ids || !PURGE.ids.length){
+    $('#purgeMsg').className = 'msg err';
+    $('#purgeMsg').textContent = '先に「消える対象を確かめる」を押してください。';
+    return;
+  }
+  if (n !== PURGE.ids.length){
+    $('#purgeMsg').className = 'msg err';
+    $('#purgeMsg').textContent = '件数が違います。' + PURGE.ids.length + ' とご入力ください。';
+    return;
+  }
+  if (!confirm(PURGE.ids.length + ' 件を「削除済み」シートへ移します。'
+      + String.fromCharCode(10) + 'よろしいですか。')) return;
+
+  $('#purgeRun').disabled = true;
+  $('#purgeMsg').className = 'msg';
+  $('#purgeMsg').textContent = '移しています…';
+  api('adminPurgeRun', { ids: PURGE.ids, count: n }).then(function(r){
+    $('#purgeRun').disabled = false;
+    if (!r || !r.ok){
+      $('#purgeMsg').className = 'msg err';
+      $('#purgeMsg').textContent = (r && r.message) || '消せませんでした。';
+      return;
+    }
+    var c = r.cleared || {};
+    var done = Object.keys(c).map(function(k){ return k + ' ' + c[k] + '行'; }).join('／');
+    $('#purgeMsg').className = 'msg';
+    $('#purgeMsg').innerHTML = '消しました（' + esc(done)
+      + '／区画の割当 ' + (r.spaces || 0) + '件／提出物フォルダ ' + (r.folders || 0) + '件）。'
+      + '設定のスイッチはOFFに戻しました。'
+      + (r.backupUrl
+         ? '<br>控え：<a href="' + esc(r.backupUrl) + '" target="_blank" rel="noopener">'
+           + 'Driveで開く</a>（ご確認のうえ、不要になったら捨ててください）'
+         : '');
+    $('#purgeStep2').hidden = true;
+    PURGE.ids = null;
+    loadList();
+    loadPurgeBox();
+  }, function(){
+    $('#purgeRun').disabled = false;
+    $('#purgeMsg').className = 'msg err';
+    $('#purgeMsg').textContent = '消せませんでした。';
+  });
+}
+
+function resetColumns(){
+  SHOW = ((S.list && S.list.defaultColumns) || []).slice();
+  saveShow();
+  renderColumnPicker();
+  renderList();
+}
 
 function renderList(){
   if (!S.list) return;
+  if (!SHOW.length) loadShow();
   var rows = filtered();
   $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
   var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
+  $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
   var head = '<tr>' + cols.map(function(c){
     var cls = S.sort.col === c ? (S.sort.dir > 0 ? 'asc' : 'desc') : '';
     return '<th data-sort="'+esc(c)+'" class="'+cls+'">'+esc(c)+'</th>';
@@ -1266,7 +1535,10 @@ function openDetail(id){
     }).map(function(k){
       return '<dt>'+esc(k)+'</dt><dd>'+link(k, d[k])+'</dd>';
     }).join('');
-    $('#dRead').innerHTML = '<dl class="dl">'+body+'</dl>';
+    $('#dRead').innerHTML = '<h4 class="dsec">ご応募時にいただいた情報</h4>'
+      + '<dl class="dl">'+body+'</dl>';
+    renderConfirmBlock(r.confirm, d['ステータス']);
+    renderCountEntry(r.countFields || [], r.confirm, id);
 
     $('#eStatus').innerHTML = S.list.statuses.map(function(s){
       return '<option'+(d['ステータス']===s?' selected':'')+'>'+esc(s)+'</option>';
@@ -1290,6 +1562,99 @@ function openDetail(id){
     $('#dMsg').textContent = '';
     $('.drawer').classList.add('on');
   }, function(e){ toast('詳細を取得できませんでした: ' + e.message, true); });
+}
+
+/**
+ * 採択後に集めた「出店確定情報」。
+ *
+ * 出ていないときも**枠ごと消さない**。
+ * 何も出ないと「この画面には無い」のか「まだ提出されていない」のかが分からず、
+ * 電話をかける前に確かめようがない。
+ */
+function renderConfirmBlock(cf, status){
+  var box = $('#dConfirm');
+  if (!cf || !cf.ok){
+    box.innerHTML = '<h4 class="dsec">採択後にいただいた情報</h4>'
+      + '<p class="dnote warn">読み込めませんでした。'
+      + 'スプレッドシートの「出店確定情報」シートをご確認ください。</p>';
+    return;
+  }
+  if (!cf.submitted){
+    var why = status === '採択'
+      ? '出店確定情報フォームからのご提出を、まだいただいていません。'
+      : 'このお申し込みは「' + esc(status || '審査中') + '」です。'
+        + '採択のご連絡後に、事業者がご提出できるようになります。';
+    box.innerHTML = '<h4 class="dsec">採択後にいただいた情報</h4>'
+      + '<p class="dnote">' + why + '</p>';
+    return;
+  }
+  var keys = Object.keys(cf.values);
+  box.innerHTML = '<h4 class="dsec">採択後にいただいた情報'
+    + '<span class="dcount">' + keys.length + '項目</span></h4>'
+    + '<dl class="dl">' + keys.map(function(k){
+        return '<dt>' + esc(k) + '</dt><dd>' + esc(cf.values[k]) + '</dd>';
+      }).join('') + '</dl>';
+}
+
+/**
+ * 枚数の打ち込み。
+ *
+ * 2026-09-03 けいた指示：
+ * 「応募フォームから吸い上げ、および、管理画面で打ち込み、
+ *   ダッシュボードで総数が分かれば便利」
+ *
+ * 枚数は電話で聞くことがある。フォームの提出を待つしかない作りだと、
+ * 分かっているのに数えられない。
+ *
+ * ■ 入力欄は**サーバーが送ってきた一覧から組み立てる**
+ *   ここに項目名を書くと、schema.js に項目を足したときに
+ *   画面だけ古いまま残る。
+ *
+ * ■ 入れられるのは数字だけ
+ *   事業者が書いた文章を主催側が書き換えられると、誰が書いたのか分からなくなる。
+ */
+function renderCountEntry(fields, cf, id){
+  var box = $('#dCounts');
+  if (!box) return;
+  if (!fields.length || S.role !== '管理者'){ box.innerHTML = ''; return; }
+
+  var vals = (cf && cf.values) || {};
+  box.innerHTML = '<h4 class="dsec">枚数・人数の打ち込み'
+    + '<span class="dcount">管理者のみ</span></h4>'
+    + '<p class="dnote">お電話などで伺った数を、ここに入れられます。'
+    + '入れた数はダッシュボードの合計に入り、変更履歴に残ります。</p>'
+    + '<div class="pgrid">' + fields.map(function(f){
+        var v = vals[f.sheet] == null ? '' : vals[f.sheet];
+        return '<label>' + esc(f.label)
+          + (f.unit ? '（' + esc(f.unit) + '）' : '')
+          + '<input id="cnt-' + esc(f.key) + '" inputmode="numeric" maxlength="5"'
+          + ' value="' + esc(v) + '"></label>';
+      }).join('') + '</div>'
+    + '<div class="pbtns"><button class="print" id="cntSave">枚数を保存する</button>'
+    + '<span class="msg" id="cntMsg"></span></div>';
+
+  $('#cntSave').addEventListener('click', function(){
+    var values = {};
+    fields.forEach(function(f){ values[f.key] = $('#cnt-' + f.key).value.trim(); });
+    $('#cntSave').disabled = true;
+    $('#cntMsg').className = 'msg';
+    $('#cntMsg').textContent = '保存しています…';
+    api('adminConfirmSave', { id: id, values: values }).then(function(r){
+      $('#cntSave').disabled = false;
+      if (!r || !r.ok){
+        $('#cntMsg').className = 'msg err';
+        $('#cntMsg').textContent = (r && r.message) || '保存できませんでした。';
+        return;
+      }
+      $('#cntMsg').textContent = r.changed ? '保存しました（' + r.changed + '件）'
+                                           : '変更はありません';
+      loadSummary();     // ダッシュボードの合計にすぐ効かせる
+    }, function(){
+      $('#cntSave').disabled = false;
+      $('#cntMsg').className = 'msg err';
+      $('#cntMsg').textContent = '保存できませんでした。';
+    });
+  });
 }
 
 function closeDetail(){ $('.drawer').classList.remove('on'); }
@@ -2403,12 +2768,19 @@ function renderTodos(){
       + '<span class="st ' + cls + '">' + esc(t.state) + '</span>'
       + '<span class="body"><span class="t">' + esc(t.text) + '</span><br>'
       + '<span class="meta">'
-      + (t.owner ? '担当 ' + esc(t.owner) + '　' : '')
+      // 「誰から誰へ」の形にする（2026-09-02 けいた指摘）。
+      // 担当だけだと、誰が投げた宿題なのかが分からず、聞き返す先が無い
+      + '<span class="who">' + esc(t.author || '—') + ' → ' + esc(t.owner || '（担当未定）')
+      + '</span>　'
       + (t.due ? '<span class="due' + (over ? ' over' : '') + '">期日 ' + esc(t.due)
-                 + (over ? '（過ぎています）' : '') + '</span>　' : '')
-      + '起票 ' + esc(t.author || '—')
-      + (t.memo ? '　' + esc(t.memo) : '')
+                 + (over ? '（過ぎています）' : '') + '</span>　'
+               : '<span class="due none">期日なし</span>　')
+      + (t.state === '完了' && t.doneAt ? '完了 ' + esc(t.doneAt) + '　' : '')
+      + (t.memo ? esc(t.memo) : '')
       + '</span></span>'
+      // 1件ずつ開かずに済ませたい。完了と未完了はその場で切り替える
+      + '<button class="todo-done" data-done="' + t.row + '">'
+      + (t.state === '完了' ? '戻す' : '完了') + '</button>'
       + '<button class="edit" data-todo="' + t.row + '">直す</button>'
       + '</div>';
   }).join('');
@@ -2416,6 +2788,27 @@ function renderTodos(){
   $$('#todoList [data-todo]').forEach(function(b){
     b.addEventListener('click', function(){ editTodo(Number(b.getAttribute('data-todo'))); });
   });
+  $$('#todoList [data-done]').forEach(function(b){
+    b.addEventListener('click', function(){ toggleTodoDone(Number(b.getAttribute('data-done'))); });
+  });
+}
+
+/**
+ * 完了・未完了をその場で切り替える。
+ * 打ち合わせ中に「それ終わりました」と言われて、
+ * わざわざ編集画面を開くのは煩わしい（2026-09-02 けいた指摘）。
+ */
+function toggleTodoDone(row){
+  var t = (S.todos || []).filter(function(x){ return x.row === row; })[0];
+  if (!t) return;
+  var next = t.state === '完了' ? '未着手' : '完了';
+  api('adminTodoSave', { row: row, todo: {
+    state: next, text: t.text, owner: t.owner, due: t.due, memo: t.memo,
+  }}).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '変えられませんでした', true); return; }
+    toast(next === '完了' ? '完了にしました' : '未着手に戻しました');
+    loadTodos();
+  }, function(){ toast('変えられませんでした', true); });
 }
 
 function editTodo(row){
@@ -2543,6 +2936,9 @@ document.addEventListener('DOMContentLoaded', function(){
   });
   $('#inboxReload').addEventListener('click', loadInbox);
   $('#todoNew').addEventListener('click', function(){ editTodo(0); });
+  $('#colReset').addEventListener('click', resetColumns);
+  $('#purgeCheck').addEventListener('click', purgeCheck);
+  $('#purgeRun').addEventListener('click', purgeRun);
   $('#todoSave').addEventListener('click', saveTodo);
   $('#todoCancel').addEventListener('click', function(){ $('#todoForm').hidden = true; });
   $('#setSave').addEventListener('click', saveSettings);
