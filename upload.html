@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 検索に出さない。専用リンクを持つ方だけが開くページ -->
+<meta name="robots" content="noindex, nofollow">
+<!-- URLにトークンが乗るので、外部へ送らない -->
+<meta name="referrer" content="no-referrer">
+<title>素材のご提出 ｜ 夕照祭2026 FC大阪 秋のサステナ盆踊り</title>
+<link rel="icon" href="assets/logo/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/logo/favicon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#7FCAF1; --brand-deep:#2F8FC4; --brand-pale:#EAF6FD;
+  --ink:#231816; --ink-muted:#6B6360; --ink-faint:#9A928F; --white:#FFFFFF;
+  --accent:#B5714C; --accent-pale:#F5EDE6;
+  --bg:#FFFFFF; --bg-subtle:#F7F9FB; --border:#E4E0DE; --error:#C0392B;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+  --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:12px; --r-lg:20px;
+  --asanoha:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='70' viewBox='0 0 40 70'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.1'%3E%3Cpath d='M20 0v70M0 17.5l20 11.7 20-11.7M0 52.5l20-11.7 20 11.7M0 0l20 17.5M40 0L20 17.5M0 70l20-17.5M40 70L20 52.5'/%3E%3C/g%3E%3C/svg%3E");
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:'Noto Sans JP', system-ui, -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;font-size:16px;line-height:1.8;overflow-wrap:anywhere}
+img,svg{max-width:100%;display:block}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px}
+@media (min-width:400px){ .wrap{padding:0 24px} }
+/* .wrap と同じ要素に付くクラスは、上下だけを指定すること。
+   padding の一括指定は4辺すべてを書き換えるため、左右の余白が0に潰れる。 */
+.ic{flex:none;stroke:currentColor}
+
+/* ── 主催表記（ヒーローの右上）
+   ヘッダーは廃止した。ヒーローの h1 がロゴそのものになったので、
+   上に小さなロゴをもう一枚置いても、同じ絵が2回出るだけだった（けいた判断）。
+   ロゴ自体が FC大阪 と みんな電力 を含むので、ここでロゴは再掲しない。
+   主催者の正式名（UPDATER）はロゴに入っていないため、文字でだけ補う。 */
+/* 区切りの「／」も同じ理由で墨色にする（430px で 4.28:1 だった）。
+   小さい文字ほど写真の濃淡に負けやすい。 */
+.supported{margin:0;display:flex;align-items:center;gap:var(--s2);
+  font-size:11px;color:var(--ink);white-space:nowrap}
+/* --ink-faint(#9A928F) は白地で 2.98:1。10px の文字には使えない。
+   ヘッダーにあった頃から不足していたが、旧の実測ツールでは見えていなかった */
+.supported .label{font-size:10px;letter-spacing:.14em;color:var(--ink-muted)}
+.supported b{font-weight:700;color:var(--ink)}
+
+/* ── 1. ヒーロー：白い膜。ロゴそのものを見出しにする面
+ *
+ * ■ なぜ濃色をやめたか（けいた判断・2026-09-01）
+ *   支給ロゴのロゴタイプ（F.C.☆OSAKA）は墨色 #221816 で、濃い面では消える。
+ *   濃色のままだとエンブレム単体しか置けず、ロゴの文字部分を
+ *   テキストで打ち直すことになっていた（＝同じ文言がロゴと本文で二重）。
+ *   膜を白にすると、ロゴをまるごと置けるようになり、打ち直しが要らなくなる。
+ *
+ * ■ 白にすると、色の役割が全部入れ替わる
+ *   ブランド水色 #7FCAF1 は白に対して 1.81:1 しかない（theme.js の注記）。
+ *   濃色時代は「水色の文字」で成立していたが、白の上ではまったく読めない。
+ *   白の上では **文字は墨色（9.58:1）、水色は面（バッジ・ボタンの地）** に役割を移す。
+ *   直下のファクト帯は濃色のままなので、明→暗の対比でリズムも出る。
+ *
+ * ■ 写真の上の文字は、目分量で決めない
+ *   膜の不透明度は「写真が見える」と「文字が読める」の綱引きになる。
+ *   空の明るい部分だけ比が落ちる、といったムラは目では捕まえられない。
+ *   src/contrast.js が、書き出した画像から実際の背景を拾って比を出す。
+ */
+.hero{position:relative;background:var(--white);overflow:hidden;isolation:isolate}
+.hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;
+  /* 元の写真は空が明るく芝が濃い。そのまま膜をかけても濃淡が残り、
+     文字の背後だけコントラストが落ちる。明度を上げて振れ幅を圧縮しておく */
+  filter:brightness(1.12) saturate(.88)}
+/* 白の膜。**2枚重ね**にしている（けいた指示：もっと薄く、濃淡のあるグラデーションに）。
+ *
+ *   1枚目（radial）… 文字が乗る左上を中心にした「光だまり」。
+ *                     ここだけ白を濃く保ち、外へ向かって一気に抜く。
+ *   2枚目（linear）… 全体にかける薄い霞。写真の色が強く出すぎるのを抑える。
+ *
+ * 1枚の直線グラデーションだと、「文字の下は濃く」と「右下は抜く」が両立しない。
+ * 直線は端から端へ一様に変わるので、右下を抜いた分だけ文字の下も薄くなる。
+ * 中心を持てる radial なら、抜きたい角と守りたい面を別々に決められる。
+ *
+ * ■ 抜ける量は幅で変える必要がある
+ *   広い画面は文字が左半分に収まるので、右を大きく抜ける。
+ *   狭い画面は文字が幅いっぱいに広がるので、同じだけ抜くと文字の背後が薄くなる。
+ *   下の @media で狭い画面用にやり直している。数値は src/contrast.js の実測で決めた。 */
+.hero::before{content:'';position:absolute;inset:0;z-index:-1;
+  background:
+    radial-gradient(148% 128% at 8% 44%,
+      rgba(255,255,255,.94) 0%, rgba(255,255,255,.90) 32%,
+      rgba(255,255,255,.76) 56%, rgba(255,255,255,.46) 80%,
+      rgba(255,255,255,.14) 100%),
+    linear-gradient(160deg, rgba(255,255,255,.34) 0%, rgba(255,255,255,.10) 100%)}
+/* 和文様。ASANOHA は**白い細線**なので、白い膜の上では文様として成立しない。
+   検証役が実測したところ、有りと無しで1画素も差が出なかった。
+   濃色ヒーロー時代の資産をそのまま残していた。
+   ここでは墨色に染めて、ごく薄く敷く（白線のままなら消したほうがまし）。 */
+.hero::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.05;
+  background-image:var(--asanoha);background-size:40px 70px;
+  filter:invert(1) brightness(.16)}
+.hero-inner{position:relative;z-index:1;padding-top:var(--s5);padding-bottom:var(--s6)}
+/* ヘッダーを廃したので、この行がページの一番上になる。
+   左に「出店者募集」、右に主催表記。狭い画面でも実測で収まる（約210px） */
+.hero-top{display:flex;align-items:center;justify-content:space-between;
+  gap:var(--s3);flex-wrap:wrap;margin:0 0 var(--s5)}
+.hero .eyebrow{display:inline-block;font-size:11px;letter-spacing:.18em;font-weight:700;
+  background:var(--brand);color:var(--ink);padding:6px 12px;border-radius:99px;margin:0}
+
+/* ■ ロゴが見出し（h1）そのもの
+ *   ロゴの中に「F.C.☆OSAKA／秋のサステナ盆踊り／presented by みんな電力」が
+ *   図案として入っている。同じ文言をテキストで隣に置くと二重になる（けいた指摘）。
+ *   ただし画像だけの h1 は、検索エンジンにも読み上げにも主題が伝わらない。
+ *   **h1 の中に画像を置き、alt にイベント名を持たせる**ことで、
+ *   見た目からは文字を消しつつ、機械には残す。
+ *
+ *   狭い画面は縦組み（エンブレムが上・文字が下／縦横比 0.71）、
+ *   広い画面は横組み（エンブレムが左・文字が右／2.87）に入れ替える。
+ *   1枚で通すと、どちらかの幅で文字が読めない大きさになる。 */
+/* ロゴの背後だけ白を敷く。
+   スタジアムの照明塔とスタンド屋根の白い線が、ちょうど「盆踊り」の真後ろを
+   通っていた（390〜500px幅）。水色の文字と照明塔の比は 1.23:1 で、
+   ロゴが構造物に串刺しにされて見える。
+   **ロゴは WCAG の対象外なので、文字のコントラスト実測では検出できない。**
+   角のある白いプレートを敷くと箱に見えるので、輪郭の出ない放射状のぼかしにする。
+   closest-side なので、ロゴの大きさが変わっても追随する。 */
+.hero h1{margin:0 0 var(--s4);width:max-content;max-width:100%;
+  background:radial-gradient(closest-side at 50% 50%,
+    rgba(255,255,255,.94) 0%, rgba(255,255,255,.88) 62%, rgba(255,255,255,0) 100%)}
+.hero h1 img{display:block;height:auto}
+/* 380px以上で 228px 固定だと、599px あたりで右の6割が空の写真になって間延びする。
+   clamp で中間の幅でも育つようにし、600px の切り替わりの段差も緩める。 */
+.hero .logo-stack{width:clamp(196px,46vw,300px)}
+/* 「夕照」を「せきしょう」と読まれる。営業が口で言えないと困る（決定 G14）。
+   ロゴの中の YŪSHŌ-SAI は小さすぎて読ませられないので、1行だけ添える */
+.hero .yomi{margin:0 0 var(--s4);font-size:12px;letter-spacing:.2em;color:var(--ink-muted)}
+/* --ink-faint(#9A928F) だと白い膜の上で 2.95:1 しかなく、基準（4.5:1）を割る。
+   濃色時代は水色で 8:1 あった文字なので、白に変えた影響がここに出た。
+   src/contrast.js の実測で検出。--ink-muted に上げて 5.5:1 前後にする */
+.hero .en{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:14px;letter-spacing:.34em;
+  color:var(--ink-muted);margin:0 0 var(--s3)}
+.hero .place span{display:block}
+.hero .place{margin:0;font-size:16px;font-weight:700;color:var(--ink)}
+.hero .match b{display:inline-block;background:var(--brand);color:var(--ink);
+  font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:19px;letter-spacing:.04em;padding:2px 12px;margin-right:10px;
+  vertical-align:1px}
+.hero .match span{display:inline-block}
+/* 膜を薄くした結果、写真の暗い部分にかかる幅（実測430px）で 4.24:1 まで落ちた。
+   マスクは薄いまま保ちたいので、文字側を濃くして写真の濃淡に依存しなくする。 */
+.hero .match{margin:var(--s2) 0 0;font-size:13px;color:var(--ink)}
+/* 白地なので下線リンクも墨色にする。白のままだと消える */
+.btn-dl{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-size:13px;
+  text-decoration:underline;text-underline-offset:3px;padding:8px 4px;white-space:nowrap}
+.btn-dl:hover{opacity:.7}
+.hero-cta{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
+@media (min-width:600px){
+  /* picture が横組みに差し替わる。縦横比が変わるので幅も指定し直す */
+  .hero .logo-stack{width:min(440px,56%)}
+  .hero-inner{padding-top:var(--s7);padding-bottom:var(--s7)}
+}
+
+/* ── 2. ファクト帯：数字が主役。濃色の面に水色の数字（コントラスト 8:1） */
+.facts{background:var(--ink);color:var(--white)}
+.facts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(255,255,255,.14)}
+.egrid{margin:18px 0 0;text-align:left}
+.eg-label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}
+#eg-mail{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:8px;
+  font-size:16px;font-family:inherit}
+.idblocks{display:flex;align-items:center;gap:8px}
+.idprefix{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:22px;letter-spacing:.04em;color:var(--ink-muted)}
+.idbox{width:46px;height:56px;text-align:center;font-size:24px;font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;
+  border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--ink)}
+.idbox:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
+.eg-hint{margin:10px 0 0;font-size:12.5px;color:var(--ink-muted);line-height:1.8}
+.edit-entry{margin:14px 0 0;font-size:13px;color:var(--ink-muted);line-height:1.9}
+/* フォードの先頭に置くほう。読み飛ばされないよう、面を敷いて区別する */
+.edit-entry-top{margin:0 0 16px;padding:11px 14px;background:var(--bg-subtle);
+  border-left:3px solid var(--brand);border-radius:0 6px 6px 0}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--link,#2b6f95);
+  text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.changed-list{text-align:left;margin:10px auto 0;max-width:32em;font-size:14px;line-height:2}
+.editing-banner{background:#B5714C;color:#fff;padding:12px 0}
+.editing-banner p{margin:0;font-size:13.5px;line-height:1.9}
+.editing-banner .rc{font-weight:700;margin:0 8px}
+.applied-banner{background:var(--ink);color:#fff;padding:12px 0}
+.applied-banner p{margin:0;font-size:13.5px;line-height:1.9}
+.applied-banner .rc{display:inline-block;margin:0 10px;font-weight:700;color:var(--brand)}
+.applied-banner a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+/* 受付が済んだあとは、応募へ誘う導線を出さない（二度送りを防ぐ） */
+body.applied .hero-cta .btn-brand{display:none}
+.done-back{margin:22px 0 0}
+.fact{background:var(--ink);padding:var(--s5) var(--s3);text-align:center}
+.fact .lb{font-size:11px;letter-spacing:.12em;color:#B9B3B0;margin:0 0 var(--s2)}
+.fact .bg{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:38px;line-height:1;color:var(--brand);
+  letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.fact .sm{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:16px;color:var(--brand);opacity:.85;margin-left:2px}
+.fact .nt{font-size:11px;color:#B9B3B0;margin:var(--s2) 0 0;line-height:1.6}
+
+/* ── 3. 募集要項：アコーディオン */
+.section{padding-top:var(--s8);padding-bottom:var(--s8)}
+.sec-head{display:flex;align-items:baseline;gap:var(--s3);margin:0 0 var(--s5)}
+.sec-head h2{margin:0;font-size:22px;font-weight:700;letter-spacing:.02em}
+.sec-head .en{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:13px;letter-spacing:.2em;color:var(--ink-faint)}
+.notice-closed{margin:0 0 var(--s5);font-size:12.5px;line-height:1.8;color:var(--ink-muted);
+  border-left:3px solid var(--brand);padding-left:var(--s3)}
+.lead-note{margin:0 0 var(--s5);font-size:13.5px;line-height:1.85;color:var(--ink-muted)}
+
+.acc{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin:0 0 var(--s3);
+  background:var(--white)}
+.acc-btn{width:100%;display:flex;align-items:center;gap:var(--s3);text-align:left;cursor:pointer;
+  background:var(--white);border:0;padding:var(--s4);font-family:inherit;color:var(--ink);
+  min-height:56px;transition:background .18s ease}
+.acc-btn:hover{background:var(--brand-pale)}
+.acc-btn:focus-visible{outline:3px solid var(--brand-deep);outline-offset:-3px}
+.acc-mark{width:36px;height:36px;border-radius:10px;background:var(--brand-pale);color:var(--brand-deep);
+  display:grid;place-items:center;flex:none}
+.acc-txt{flex:1;min-width:0}
+.acc-txt .t{display:block;font-size:16px;font-weight:700;line-height:1.5}
+.acc-txt .l{display:block;font-size:12.5px;color:var(--ink-muted);line-height:1.7;margin-top:2px}
+.acc-chev{flex:none;color:var(--ink-faint);transition:transform .22s ease}
+.acc.open .acc-chev{transform:rotate(180deg)}
+.acc-body{border-top:1px solid var(--border);padding:var(--s4);background:var(--bg-subtle);display:none}
+.acc.open .acc-body{display:block}
+.kv{margin:0}
+.kv>div{display:grid;grid-template-columns:104px 1fr;gap:2px var(--s4);padding:var(--s3) 0;
+  border-top:1px solid var(--border)}
+.kv>div:first-child{border-top:0;padding-top:0}
+.kv dt{margin:0;font-size:12.5px;color:var(--ink-muted);font-weight:700}
+.kv dd{margin:0;font-size:14.5px;line-height:1.85}
+.kv dd.em{font-weight:700}
+.pending{font-size:12px;color:var(--accent);margin:var(--s2) 0 0}
+
+/* ── ボタン */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);
+  min-height:52px;padding:0 var(--s5);border-radius:var(--r);border:0;cursor:pointer;
+  font-family:inherit;font-size:16px;font-weight:700;text-decoration:none;
+  transition:transform .15s ease,box-shadow .15s ease,background .15s ease,filter .15s ease}
+.btn:active{transform:scale(.985)}
+.btn-primary{background:var(--ink);color:var(--white);box-shadow:0 2px 0 rgba(0,0,0,.25)}
+.btn-primary:hover{background:#3A2B28}
+/* ⚠ 白い面では使わないこと。水色の文字は白地に対して 1.81:1 で読めない。
+   濃色の面（フッター等）専用。ヒーローで使っていないことをテストが検査する。 */
+.btn-ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
+.btn-ghost:hover{background:rgba(127,202,241,.14)}
+.btn-brand{background:var(--brand);color:var(--ink);box-shadow:0 2px 0 var(--brand-deep)}
+.btn-brand:hover{filter:brightness(1.05)}
+.btn-ghost-dark{background:transparent;border:1.5px solid var(--ink);color:var(--ink)}
+/* 白地に水色の枠、文字は墨色（けいた指示「背景白の水色文字」）。
+   **文字まで水色にはできない。** 水色 #7FCAF1 は白に対して 1.81:1 で、
+   ボタンの文字としては読めない（theme.js の注記・src/contrast.js の実測）。
+   水色は枠と影で出し、可読性は文字色で担保する。
+   地の白は写真に埋もれないよう不透明にする（半透明だと下の芝が透けて濁る）。 */
+.btn-outline-brand{background:var(--white);border:2px solid var(--brand);color:var(--ink);
+  box-shadow:0 2px 0 rgba(47,143,196,.28)}
+.btn-outline-brand:hover{background:var(--brand-pale);border-color:var(--brand-deep)}
+.btn-ghost-dark:hover{background:var(--ink);color:#fff}
+.btn:focus-visible{outline:3px solid var(--brand-deep);outline-offset:2px}
+.btn:disabled{background:#D6D1CE;color:#8A8481;box-shadow:none;cursor:not-allowed}
+
+/* ── 5. 追従CTA */
+.sticky-cta{position:fixed;left:0;right:0;bottom:0;z-index:50;
+  padding:var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-top:1px solid var(--border);
+  transform:translateY(115%);transition:transform .26s cubic-bezier(.2,.7,.3,1);
+  display:flex;justify-content:center}
+.sticky-cta.show{transform:translateY(0)}
+.sticky-cta .btn{width:100%;max-width:420px}
+body.cta-on{padding-bottom:88px}
+
+/* ── 4. フォーム */
+.form-section{border:1px solid var(--border);border-radius:var(--r);padding:var(--s5);
+  margin:0 0 var(--s4);background:var(--white)}
+.form-section>h3{display:flex;align-items:center;gap:var(--s3);margin:0 0 var(--s4);
+  font-size:17px;font-weight:700}
+.form-section>h3::before{content:'';width:4px;height:20px;border-radius:2px;background:var(--brand)}
+.form-section .sec-desc{font-size:13px;color:var(--ink-muted);margin:-8px 0 var(--s4)}
+.field{margin:0 0 var(--s5)}
+.field:last-child{margin-bottom:0}
+label.q{display:block;font-weight:700;font-size:15px;margin:0 0 var(--s2);line-height:1.6}
+.req,.opt{font-size:11px;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:2px;
+  font-weight:700;white-space:nowrap}
+.req{background:var(--accent);color:var(--white)}
+.opt{background:rgba(35,24,22,.08);color:var(--ink-muted)}
+.help{font-size:13px;color:var(--ink-muted);margin:0 0 var(--s2);line-height:1.75}
+input[type=text],input[type=email],input[type=tel],input[type=url],input[type=number],textarea,select{
+  width:100%;min-height:52px;padding:14px;font-size:16px;font-family:inherit;line-height:1.6;
+  border:1px solid #B9B3B0;border-radius:10px;background:var(--white);color:var(--ink)}
+textarea{min-height:auto;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:3px solid var(--brand);outline-offset:1px;
+  border-color:var(--brand-deep)}
+.choices{display:flex;flex-direction:column;gap:var(--s2)}
+.choice{display:flex;gap:var(--s3);align-items:flex-start;padding:14px;min-height:52px;
+  border:1px solid #D6D1CE;border-radius:10px;cursor:pointer;background:var(--white);
+  transition:border-color .15s ease,background .15s ease}
+.choice:has(input:checked){border-color:var(--brand-deep);background:var(--brand-pale)}
+.choice input{margin:3px 0 0;width:22px;height:22px;flex:none;accent-color:var(--brand-deep)}
+.choice span{font-size:15px;line-height:1.6}
+.choice .rental-note{display:block;font-size:11.5px;color:var(--ink-muted);margin-top:2px}
+.rental-price{margin-top:2px}
+.inline-note{font-size:13px;color:var(--ink-muted);margin-top:var(--s2)}
+.err{color:var(--error);font-size:13px;font-weight:700;margin-top:var(--s2);display:none}
+.field.invalid .err{display:block}
+.field.invalid input,.field.invalid textarea,.field.invalid select{border-color:var(--error);background:#FDF4F3}
+.hidden{display:none !important}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+
+/* ── 備品 */
+.rental-row{display:grid;grid-template-columns:1fr 112px;gap:var(--s3);align-items:center;
+  padding:var(--s3) 0;border-top:1px solid var(--border)}
+.rental-row:first-of-type{border-top:0}
+.rental-name{font-size:15px;font-weight:700}
+.rental-price{font-size:12px;color:var(--ink-muted);font-weight:400;display:block;line-height:1.7}
+.rental-total{display:flex;justify-content:space-between;align-items:baseline;margin-top:var(--s4);
+  padding-top:var(--s4);border-top:2px solid var(--ink);font-weight:700}
+.rental-total .amount{font-size:24px;font-family:'Bebas Neue', 'Noto Sans JP', sans-serif}
+
+/* ── 送信 */
+.submit-area{text-align:center;padding:var(--s2) 0 var(--s8)}
+.submit-area .btn{width:100%;max-width:440px;min-height:58px;font-size:17px}
+.after-submit{margin:14px 0 0;font-size:13px;line-height:1.75;color:var(--ink-muted);
+  background:var(--bg-subtle);border-left:3px solid var(--brand);padding:12px 14px}
+.submit-note{font-size:13px;color:var(--ink-muted);margin:var(--s3) auto 0;
+  max-width:32em;line-height:1.85}
+.form-error{display:none;background:#FDF4F3;border:1px solid var(--error);color:var(--error);
+  border-radius:10px;padding:var(--s4);margin:0 0 var(--s4);font-size:14px;font-weight:700}
+.form-error.show{display:block}
+#confirm-box{background:var(--brand-pale);border:1px solid var(--brand);border-radius:var(--r);
+  padding:var(--s4);margin:0 0 var(--s3)}
+#confirm-box h4{margin:0 0 var(--s3);font-size:14px}
+
+/* ── 完了・受付終了 */
+.notice-page{padding-top:var(--s8);padding-bottom:var(--s8);text-align:center}
+.notice-page .mark{width:64px;height:64px;border-radius:50%;background:var(--brand);
+  margin:0 auto var(--s4);display:grid;place-items:center;color:var(--ink)}
+.notice-page h2{font-size:21px;margin:0 0 var(--s3)}
+.notice-page p{max-width:34em;margin-left:auto;margin-right:auto;line-height:1.9}
+.receipt{display:inline-block;margin:var(--s4) 0;padding:var(--s4) var(--s6);background:var(--bg-subtle);
+  border-radius:var(--r);border:2px solid var(--brand)}
+.receipt .num{font-family:'Bebas Neue', 'Noto Sans JP', sans-serif;font-size:36px;letter-spacing:.06em;display:block;line-height:1.1}
+.receipt .cap{font-size:11px;color:var(--ink-muted);letter-spacing:.12em}
+
+footer{background:var(--ink);color:#CFC9C6;padding:var(--s6) 0 var(--s7);font-size:13px}
+footer a{color:var(--brand)}
+/* 下線をベースラインから離す。重なるとアンダースコアが空白に見えて、
+   fcosaka_bondance@… を「fcosaka bondance@…」と読み違える。
+   **見たまま打っても届かない**。ファイル名でも同じことが起きる */
+a{text-underline-offset:3px}
+footer .org{color:var(--white);font-weight:700;margin:0 0 var(--s2)}
+
+@media (min-width:600px){
+  .hero-inner{padding-top:var(--s8);padding-bottom:var(--s7)}
+  /* 6項目なので3列×2段。4列だと 4+2 に割れて右下が空く（PDFも3列×2段） */
+  .facts-grid{grid-template-columns:repeat(3,1fr)}
+  .fact .bg{font-size:44px}
+}
+@media (max-width:380px){
+  .fact .bg{font-size:32px}
+  .kv>div{grid-template-columns:1fr;gap:0}
+}
+/* ── 印刷
+ * ■ 写真は消すこと
+ *   ヒーローは「写真（<img>）＋白い膜（CSSの背景）」で成り立っている。
+ *   ブラウザは既定で**背景を印刷しない**ので、膜だけが消えて写真が残る。
+ *   その結果、青空と芝の上に濃色の文字が乗り、ほぼ読めない紙が出てくる。
+ *   画面では正常なので、刷ってみるまで誰も気づかない。
+ *   紙では写真も膜も要らない（白地に墨色のロゴが、むしろ紙に向いている）。
+ *
+ * ■ 濃色の面も同じ理由で反転する
+ *   ファクト帯は「濃色の地＋水色の数字」。地が印刷されないと
+ *   白地に水色の数字だけが残り 1.81:1 になる。紙では墨色に落とす。 */
+@media print{
+  .form-section,.submit-area,.sticky-cta,.hero-cta{display:none}
+  .acc-body{display:block!important}
+  .hero-photo{display:none}
+  .hero::before,.hero::after{display:none}
+  .hero{background:#fff}
+  .facts{background:#fff;color:var(--ink)}
+  .facts-grid{background:var(--border)}
+  .fact .bg,.fact .sm,.fact .lb{color:var(--ink)}
+  .fact .nt{color:var(--ink-muted)}
+  footer{background:#fff;color:var(--ink)}
+  footer .org,footer a{color:var(--ink)}
+}
+/* ── 素材アップロード。応募フォームのCSSに、この画面ぶんだけ足す */
+.up-head{background:var(--white);border-bottom:1px solid var(--border)}
+.up-head .wrap{padding-top:var(--s5);padding-bottom:var(--s5)}
+.up-logo{height:44px;width:auto;display:block;margin-bottom:var(--s4)}
+@media (min-width:600px){ .up-logo{height:56px} }
+.up-head h1{margin:0 0 var(--s2);font-size:22px;font-weight:700;letter-spacing:.01em}
+@media (min-width:600px){ .up-head h1{font-size:26px} }
+.up-head .who{margin:0;font-size:14px;color:var(--ink-muted)}
+.up-head .who b{color:var(--ink);font-size:16px}
+
+.up-gate{padding:var(--s8) 0;text-align:center}
+.up-gate h2{margin:0 0 var(--s3);font-size:19px}
+.up-gate p{margin:0 auto;max-width:32em;font-size:14.5px;line-height:1.9;color:var(--ink-muted)}
+.up-gate .mail{display:inline-block;margin-top:var(--s4);font-weight:700}
+
+/* 置き場。押しても、ドラッグしても入る */
+.up-drop{margin:var(--s5) 0 0;border:2px dashed var(--border);border-radius:var(--r-lg);
+  background:var(--bg-subtle);padding:var(--s7) var(--s5);text-align:center;
+  cursor:pointer;transition:border-color .15s ease,background .15s ease}
+.up-drop:hover,.up-drop.over{border-color:var(--brand-deep);background:var(--brand-pale)}
+.up-drop .big{margin:0 0 var(--s2);font-size:16px;font-weight:700}
+.up-drop .sub{margin:0;font-size:13px;color:var(--ink-muted);line-height:1.8}
+.up-drop input{display:none}
+
+/* 送信中・結果 */
+.up-queue{margin:var(--s5) 0 0;display:grid;gap:var(--s2)}
+.up-item{display:grid;grid-template-columns:1fr auto;gap:var(--s3);align-items:center;
+  border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:13.5px}
+.up-item .nm{overflow-wrap:anywhere}
+.up-item .sz{font-size:12px;color:var(--ink-muted)}
+.up-item .st{font-size:12.5px;font-weight:700;white-space:nowrap}
+.up-item.ok{border-color:#9BD4A8;background:#F2FAF4}
+.up-item.ok .st{color:#2F7D46}
+.up-item.ng{border-color:var(--error);background:#FDF2F0}
+.up-item.ng .st{color:var(--error)}
+.up-item .why{grid-column:1/-1;font-size:12.5px;color:var(--error);line-height:1.7}
+
+/* 提出済みの一覧 */
+.up-list{margin:var(--s6) 0 0}
+.up-list h2{margin:0 0 var(--s3);font-size:16px;letter-spacing:.04em}
+.up-list ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--s2)}
+.up-list li{display:grid;grid-template-columns:1fr auto;gap:var(--s3);align-items:baseline;
+  border-bottom:1px solid var(--border);padding:10px 2px;font-size:13.5px}
+.up-list .meta{font-size:12px;color:var(--ink-muted);white-space:nowrap}
+.up-list .nm{overflow-wrap:anywhere}
+.up-empty{margin:0;padding:var(--s5) 0;font-size:14px;color:var(--ink-muted)}
+
+/* 送信中は置き場を触らせない。
+   このクラスは build-confirm.js 側にしか無く、ここでは効いていなかった。
+   回線の細いお店で10枚送っている間、押しても何も起きず「壊れた」と読まれる */
+.cf-busy{opacity:.5;pointer-events:none}
+
+/* リンクの色と下線の位置。
+   既定の #0000EE のままだと他ページと揃わない。下線がアンダースコアに重なって
+   「店舗ロゴ_大阪」が「店舗ロゴ 大阪」に見え、メールアドレスを見て打つと届かない */
+.up-gate a,.up-note a{color:var(--brand-deep);text-underline-offset:3px}
+.up-gate .mail{text-decoration:none;color:var(--brand-deep)}
+
+/* 提出期限。確定情報フォームと同じ見た目にそろえる */
+.up-due{margin:var(--s5) 0 0;background:#FBF6EC;border:1px solid #E4D6BC;
+  border-radius:var(--r);padding:12px 16px;font-size:14px;line-height:1.8}
+.up-due b{color:#7A5A20}
+
+/* 一括で送ったあとの総括。赤い箱が並ぶだけでは何件通ったか読み取れない */
+.up-sum{margin:var(--s4) 0 0;font-size:14px;font-weight:700;line-height:1.8}
+.up-sum.ng{color:var(--error)}
+
+.up-note{margin:var(--s6) 0 0;background:var(--bg-subtle);border-left:4px solid var(--brand);
+  padding:14px 16px;border-radius:0 var(--r) var(--r) 0;font-size:13.5px;line-height:1.9}
+.up-note b{display:block;margin-bottom:4px}</style>
+</head>
+<body>
+
+<header class="up-head">
+  <div class="wrap">
+    <img class="up-logo" src="assets/logo/event-logo-text.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り"
+         width="479" height="200">
+    <h1>素材のご提出</h1>
+    <p class="who" id="up-who"><b id="up-company"></b>　受付ID <span id="up-receipt"></span></p>
+  </div>
+</header>
+
+<main>
+
+<section class="wrap up-gate" id="up-gate" hidden>
+  <h2 id="gate-title"></h2>
+  <p id="gate-body"></p>
+  <p><a class="mail" href="mailto:fcosaka_bondance@kreha-c.com">fcosaka_bondance@kreha-c.com</a></p>
+</section>
+
+<div id="up-main" hidden>
+  <div class="wrap">
+    <p class="lead-note">当日の告知や実施報告に使わせていただく素材をお預かりします。
+      お店のロゴ、商品やブースの写真などをご提出ください。</p>
+
+    <p class="up-due" id="up-due" hidden><b>ご提出期限：<span id="up-due-text"></span></b><br>
+      告知物の準備がありますので、期限までにお願いいたします。</p>
+
+    <div class="up-drop" id="up-drop">
+      <p class="big">ファイルを選ぶ</p>
+      <p class="sub" id="up-drop-msg">ここを押すか、ファイルをドラッグしてください</p>
+      <p class="sub"><span id="up-limit"></span></p>
+      <input type="file" id="up-input" multiple
+             accept="image/*,.heic,.heif,application/pdf,.ai,.eps,.zip,.docx,.pptx">
+    </div>
+
+    <div class="up-queue" id="up-queue"></div>
+    <p class="up-sum" id="up-sum" hidden></p>
+
+    <section class="up-list">
+      <h2 id="up-files-h">ご提出いただいたもの</h2>
+      <div id="up-files"></div>
+    </section>
+
+    <p class="up-note">
+      <b>ご提出後について</b>
+      いただいた素材は、本イベントの運営、および告知・実施報告での紹介に使わせていただきます。
+      間違えてご提出された場合は、正しいものをあらためてお送りください（新しいものとして並びます）。
+      削除が必要な場合は、担当までご連絡ください。
+    </p>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="org">FC大阪サステナ盆踊り実行委員会</p>
+    <p>お問い合わせ：<a href="mailto:fcosaka_bondance@kreha-c.com">fcosaka_bondance@kreha-c.com</a></p>
+  </div>
+</footer>
+
+<script>
+var ENDPOINT = "https://script.google.com/macros/s/AKfycbwWrbDS3BxTNj5qQiYCFjsiA19lF4oVQrFByzApAK61S9EzWmCUy7tckvvTySXTW-MMMQ/exec";
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+var STATE = { id:'', t:'', max:0, maxFiles:0, allowed:[], count:0, busy:false };
+
+/**
+ * 拡張子からの種類の割り出し。
+ *
+ * ブラウザは、知らない拡張子だと File.type を**空文字**にする。
+ * Illustrator（.ai）とiPhoneの写真（.heic）がまさにそれで、
+ * 「この種類はお預かりできません（不明）」と断られていた。
+ * .ai はロゴ入稿でいちばん多く、.heic は iPhone の既定の写真形式。
+ * ダイアログの accept には .ai を入れているので、
+ * **選ばせておいて断る**という一番よくない形になっていた。
+ */
+var EXT_MIME = {
+  ai:'application/illustrator', eps:'application/postscript',
+  heic:'image/heic', heif:'image/heic',
+  jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif',
+  webp:'image/webp', svg:'image/svg+xml', pdf:'application/pdf', zip:'application/zip',
+  docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+};
+
+/** 受け取れる形の案内。サーバー側の文言と同じにする */
+var KINDS = '画像（JPEG・PNG・GIF・WebP・HEIC・SVG）、PDF、Word、PowerPoint、'
+          + 'Illustrator、ZIP をお送りください。';
+
+var DROP_MSG = 'ここを押すか、ファイルをドラッグしてください';
+
+function pickMime(f){
+  if (f.type && STATE.allowed.indexOf(f.type) >= 0) return f.type;
+  var m = /\.([A-Za-z0-9]{1,12})$/.exec(f.name || '');
+  var byExt = m ? EXT_MIME[m[1].toLowerCase()] : '';
+  if (byExt && STATE.allowed.indexOf(byExt) >= 0) return byExt;
+  return '';
+}
+
+function esc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+function show(which){
+  ['up-gate','up-main'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.hidden = (id !== which);
+  });
+}
+
+function gate(title, body){
+  $('#gate-title').textContent = title;
+  $('#gate-body').textContent = body;
+  // 会社名が空のまま「受付ID」というラベルだけが残ると、
+  // 「エラー画面まで壊れている」ように見える
+  var who = $('#up-who');
+  if (who) who.hidden = true;
+  show('up-gate');
+}
+
+function api(payload){
+  return fetch(ENDPOINT, {
+    method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); });
+}
+
+function sizeText(n){
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return Math.round(n/1024) + ' KB';
+  return (Math.round(n/1024/1024*10)/10) + ' MB';
+}
+
+// ── 提出済みの一覧
+
+/**
+ * 提出済みの一覧。
+ *
+ * ■ ファイル名をリンクにしない
+ *   リンク先はDriveのファイルURLで、そのファイルは主催側にしか共有されていない。
+ *   事業者が押すとGoogleの「アクセス権のリクエスト」画面に飛び、
+ *   壊れているように見える（「リンクが開けません」の電話になる）。
+ *   控えとしては、名前・大きさ・日時が読めれば足りる。
+ */
+function renderFiles(files){
+  STATE.count = files.length;
+  var box = $('#up-files');
+  var h = $('#up-files-h');
+  if (h) h.textContent = files.length
+    ? 'ご提出いただいたもの（' + files.length + '件／' + STATE.maxFiles + '件まで）'
+    : 'ご提出いただいたもの';
+  if (!files.length){
+    box.innerHTML = '<p class="up-empty">まだご提出はありません。</p>';
+    return;
+  }
+  box.innerHTML = '<ul>' + files.map(function(f){
+    return '<li><span class="nm">' + esc(f.name) + '</span>'
+      + '<span class="meta">' + esc(f.sizeText) + '　' + esc(f.updated) + '</span></li>';
+  }).join('') + '</ul>';
+}
+
+// ── 送信
+
+/**
+ * 1件ずつ順番に送る。
+ * まとめて送ると、1つ大きいものが混ざっただけで全部落ちる。
+ * 途中で失敗しても、そこまでの提出は残る。
+ */
+function handleFiles(fileList){
+  if (STATE.busy) return;
+  var files = Array.prototype.slice.call(fileList);
+  if (!files.length) return;
+
+  var queue = $('#up-queue');
+  queue.innerHTML = '';
+  $('#up-sum').hidden = true;
+  var rows = files.map(function(f){
+    var el = document.createElement('div');
+    el.className = 'up-item';
+    el.innerHTML = '<div><div class="nm">' + esc(f.name) + '</div>'
+      + '<div class="sz">' + sizeText(f.size) + '</div></div>'
+      + '<div class="st">待機中</div>';
+    queue.appendChild(el);
+    return el;
+  });
+
+  STATE.busy = true;
+  $('#up-drop').classList.add('cf-busy');
+  $('#up-drop-msg').textContent = '送信中です。そのままお待ちください。';
+
+  var done = 0, failed = 0;
+  var i = 0;
+  function next(){
+    if (i >= files.length){
+      STATE.busy = false;
+      $('#up-drop').classList.remove('cf-busy');
+      $('#up-drop-msg').textContent = DROP_MSG;
+
+      // 赤い箱が並ぶだけでは、何件通ったのかが読み取れない
+      var sum = $('#up-sum');
+      sum.hidden = false;
+      sum.className = 'up-sum' + (failed ? ' ng' : '');
+      sum.textContent = failed
+        ? done + '件をお預かりしました。' + failed + '件は送れませんでした（上の赤い行をご確認ください）。'
+        : done + '件をお預かりしました。ありがとうございます。';
+      // 送り終わったら一覧を取り直す（こちらで積み上げると、
+      // 失敗した分まで並べてしまう）
+      api({ action:'uploadInfo', id:STATE.id, t:STATE.t }).then(function(r){
+        if (r && r.ok) renderFiles(r.files || []);
+      });
+      return;
+    }
+    var f = files[i], row = rows[i];
+    var st = row.querySelector('.st');
+
+    // ■ 送る前に断る
+    var bad = '';
+    var mime = pickMime(f);
+    if (!mime){
+      // 生の種別（application/vnd.openxmlformats-…）は出さない。
+      // 商店会の方には意味が通らず、「システムが壊れた」と読まれる。
+      // 代わりに「では何を送ればよいか」を書く
+      bad = 'この形のファイルはお預かりできません。' + KINDS;
+    } else if (f.size > STATE.max){
+      bad = '大きすぎます（1つあたり ' + sizeText(STATE.max) + ' まで）';
+    } else if (STATE.count + 1 > STATE.maxFiles){
+      bad = 'ご提出は' + STATE.maxFiles + '件までです';
+    }
+    if (bad){
+      row.classList.add('ng');
+      st.textContent = '送っていません';
+      var why = document.createElement('div');
+      why.className = 'why';
+      why.textContent = bad;
+      row.appendChild(why);
+      failed++; i++; next(); return;
+    }
+
+    st.textContent = '送信中…';
+    var reader = new FileReader();
+    reader.onerror = function(){
+      row.classList.add('ng'); st.textContent = '読めません';
+      failed++; i++; next();
+    };
+    reader.onload = function(){
+      // data:...;base64,XXXX の XXXX だけを送る
+      var data = String(reader.result || '');
+      var comma = data.indexOf(',');
+      data = comma >= 0 ? data.slice(comma + 1) : '';
+
+      api({ action:'uploadFile', id:STATE.id, t:STATE.t,
+            name:f.name, mime:mime, data:data }).then(function(r){
+        if (r && r.ok){
+          row.classList.add('ok'); st.textContent = '完了';
+          STATE.count++; done++;
+        } else {
+          row.classList.add('ng'); st.textContent = '失敗';
+          failed++;
+          var w = document.createElement('div');
+          w.className = 'why';
+          w.textContent = (r && r.message) || '保存できませんでした。';
+          row.appendChild(w);
+        }
+        i++; next();
+      }, function(){
+        row.classList.add('ng'); st.textContent = '失敗';
+        failed++;
+        var w = document.createElement('div');
+        w.className = 'why';
+        w.textContent = '通信に失敗しました。しばらくおいて、もう一度お試しください。';
+        row.appendChild(w);
+        i++; next();
+      });
+    };
+    reader.readAsDataURL(f);
+  }
+  next();
+}
+
+// ── 読み込み
+
+function load(){
+  var q = new URLSearchParams(location.search);
+  STATE.id = (q.get('id') || '').trim();
+  STATE.t = (q.get('t') || '').trim();
+
+  if (!STATE.id || !STATE.t){
+    gate('リンクが正しくありません',
+      '採択通知メールに記載のリンクを、そのままお開きください。'
+      + 'メールソフトによっては、リンクが途中で切れることがあります。');
+    return;
+  }
+
+  api({ action:'uploadInfo', id:STATE.id, t:STATE.t }).then(function(r){
+    if (!r || !r.ok){
+      gate('ご提出いただけません', (r && r.message) || 'このリンクは有効ではありません。');
+      return;
+    }
+    STATE.max = r.maxBytes;
+    STATE.maxFiles = r.maxFiles;
+    STATE.allowed = r.allowed || [];
+    $('#up-company').textContent = r.company || '';
+    $('#up-receipt').textContent = r.receiptId || '';
+    $('#up-limit').textContent = '1つあたり ' + r.maxSizeText + ' まで／'
+      + r.maxFiles + '件まで';
+    // 期限が設定されていなければ枠ごと出さない（空の枠は不安にさせる）
+    if (r.deadline){
+      $('#up-due').hidden = false;
+      $('#up-due-text').textContent = r.deadline;
+    }
+    renderFiles(r.files || []);
+    show('up-main');
+  }, function(){
+    gate('つながりませんでした',
+      '通信に失敗しました。しばらくおいて、もう一度お試しください。');
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var drop = $('#up-drop'), input = $('#up-input');
+  drop.addEventListener('click', function(){ if (!STATE.busy) input.click(); });
+  input.addEventListener('change', function(){
+    handleFiles(input.files);
+    input.value = '';     // 同じファイルをもう一度選べるようにする
+  });
+  ['dragenter','dragover'].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function(e){
+    if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+  });
+  load();
+});</script>
+</body>
+</html>
