@@ -411,7 +411,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 <!-- ── 入室 ───────────────────────────────── -->
 <div class="gate">
   <div class="box">
-    <div class="logo"><img src="assets/logo/event-logo-wide.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り" width="689" height="240"></div>
+    <div class="logo"><img src="assets/logo/event-logo-wide.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り" width="1200" height="428"></div>
     <h1>出展者管理</h1>
     <p class="sub">夕照祭2026 FC大阪 秋のサステナ盆踊り</p>
     <div class="err" id="gErr" style="display:none"></div>
@@ -1055,7 +1055,7 @@ function loadSummary(){
         r.rentalQty || {}))],
       ['テント', bars(c.byTent || {})],
       // 仕様書§6-2「食器・包材の持込予定の内訳（サステナ報告用）」
-      ['食器・包材（サステナ報告用）', bars(c.byPack || {})],
+      ['包材の用意（サステナ報告用）', bars(c.byPack || {})],
     ].map(function(p){
       return '<div class="panel"><h3>'+esc(p[0])+'</h3>'+p[1]+'</div>';
     }).join('');
