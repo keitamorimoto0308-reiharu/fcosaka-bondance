@@ -176,6 +176,12 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .colopt{display:flex;align-items:center;gap:6px;font-size:12.5px;
   color:var(--ink);cursor:pointer;min-height:28px}
 .colbox #colReset{margin:0 14px 12px}
+/* 送る種類の切り替え。採択と不採択を取り違えないよう、はっきり分ける */
+.mailkind{display:flex;gap:18px;margin:0 0 12px}
+.mailkind label{display:flex;align-items:center;gap:7px;font-size:13.5px;
+  padding:8px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer}
+.mailkind label:has(input:checked){border-color:var(--ink);background:var(--subtle);
+  font-weight:700}
 /* レンタル品目 */
 .rental table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
 .rental th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:400;
@@ -790,7 +796,13 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <section class="view" id="v-mail">
       <details class="howto"><summary>メール送信の見かた</summary><dl><dt>この画面ですること</dt><dd>採択が決まった事業者に、出店決定のご案内を一斉に送ります。</dd><dt>3つの段階</dt><dd>①送る相手を確かめる → ②本文を読む → ③送る。②まではメールは飛びません。</dd><dt>送ったあと</dt><dd>取り消せません。同じ方に二度送らないよう、送信済みの方は次から対象に出ません。</dd><dt>届かなかったら</dt><dd>結果に失敗として出ます。原因（宛先違いなど）を直して、その方だけもう一度送れます。</dd></dl></details>
       <div class="panel">
-        <h3>採択通知の一括送信</h3>
+        <h3>選考結果の一括送信</h3>
+        <div class="mailkind">
+          <label><input type="radio" name="mailKind" value="accept" checked>
+            採択のご連絡</label>
+          <label><input type="radio" name="mailKind" value="reject">
+            不採択のご連絡</label>
+        </div>
         <p class="pnote" id="mailIntro">読み込んでいます…</p>
 
         <div id="mailWarn" hidden></div>
@@ -2369,7 +2381,7 @@ function loadNotify(){
   $('#mailWarn').hidden = true;
   $('#mailTargets').innerHTML = '';
 
-  api('adminNotifyPreview').then(function(r){
+  api('adminNotifyPreview', { kind: S.notifyKind || 'accept' }).then(function(r){
     if (!r || !r.ok){
       $('#mailIntro').textContent = (r && r.message) || '対象を取得できませんでした。';
       return;
@@ -2384,9 +2396,14 @@ function renderNotify(){
   var rows = r.rows || [];
   var bad = r.invalid || [];
 
+  var isReject = (r.kind === 'reject');
   $('#mailIntro').innerHTML =
-    'ステータスが<b>「採択」</b>で、まだ通知を送っていない出店者さまが対象です。'
-    + '<br>提出期限の表記：<b>' + esc(r.deadlineText || '') + '</b>';
+    'ステータスが<b>「' + (isReject ? '不採択' : '採択') + '」</b>で、'
+    + 'まだ通知を送っていない出店者さまが対象です。'
+    + (isReject
+        ? '<br>不採択のご連絡には、<b>理由もリンクも書きません</b>'
+          + '（問い合わせの行き先が無くなるため）。'
+        : '<br>提出期限の表記：<b>' + esc(r.deadlineText || '') + '</b>');
 
   // 送る前に気づけるようにする。差出人が壊れていると、
   // 事業者には見覚えのないアドレスから届く
@@ -2462,14 +2479,22 @@ function sendNotify(){
   // テンプレートリテラルの中にある。1つだけ書くと書き出し時に本物の改行になり、
   // 生成された admin.html の中で文字列リテラルが途中で切れる。
   // コメント行でも同じことが起きるので、説明文にも書かない。
-  if (!confirm(rows.length + '件に採択通知を送信します。\n\n'
+  if (!confirm(rows.length + '件に' + (r.kindLabel || '通知') + 'を送信します。\n\n'
       + '送信したメールは取り消せません。よろしいですか？')) return;
 
   var btn = $('#mailSend');
   btn.disabled = true;
   $('#mailMsg').textContent = '送信しています…';
 
-  api('adminNotifySend', { confirm: true, expect: rows.length }).then(function(res){
+  // **受付IDの集合そのものを送り返す。**
+  // 件数だけを送っていたため、サーバー（IDで照合）と噛み合わず、
+  // 本番では必ず changed で弾かれていた（2026-09-03 発見）。
+  // 模擬は件数を見ていたので、模擬では通っていた。
+  api('adminNotifySend', {
+    confirm: true,
+    kind: r.kind || 'accept',
+    ids: rows.map(function(x){ return x.id; }),
+  }).then(function(res){
     $('#mailMsg').textContent = '';
     if (!res || !res.ok){
       btn.disabled = false;
@@ -3114,6 +3139,12 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#inboxReload').addEventListener('click', loadInbox);
   $('#todoNew').addEventListener('click', function(){ editTodo(0); });
   $('#colReset').addEventListener('click', resetColumns);
+  $$('input[name="mailKind"]').forEach(function(radio){
+    radio.addEventListener('change', function(){
+      S.notifyKind = radio.value;
+      loadNotify();
+    });
+  });
   $('#rentalNew').addEventListener('click', function(){ editRental(0); });
   $('#rSave').addEventListener('click', saveRental);
   $('#rCancel').addEventListener('click', function(){ $('#rentalForm').hidden = true; });
