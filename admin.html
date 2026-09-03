@@ -176,6 +176,26 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .colopt{display:flex;align-items:center;gap:6px;font-size:12.5px;
   color:var(--ink);cursor:pointer;min-height:28px}
 .colbox #colReset{margin:0 14px 12px}
+/* レンタル品目 */
+.rental table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+.rental th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:400;
+  border-bottom:1px solid var(--border);padding:6px 8px;white-space:nowrap}
+.rental td{border-bottom:1px solid var(--border);padding:8px}
+.rental td.r{text-align:right;white-space:nowrap}
+.rental tr.off td{color:var(--muted)}
+.rental .tag{display:inline-block;font-size:10.5px;padding:2px 7px;border-radius:99px;
+  background:var(--subtle);color:var(--muted);margin-left:6px}
+.rental .tag.off{background:#FDF2F0;color:var(--error)}
+.rental .tag.tbd{background:#FBF6EC;color:#7A5A20}
+.rental .act{background:#fff;border:1px solid var(--border);border-radius:6px;
+  padding:5px 11px;font-family:inherit;font-size:11.5px;cursor:pointer;min-height:32px}
+/* 紙面とのずれ。**ここがこの画面の主役** */
+.paperdiff{background:#FBF6EC;border:1px solid #E4D6BC;border-radius:8px;
+  padding:12px 14px;margin:10px 0;font-size:13px;line-height:1.8}
+.paperdiff b{color:#7A5A20}
+.paperdiff ul{margin:6px 0 0;padding-left:1.2em}
+.paperdiff.ok{background:#F2FAF4;border-color:#9BD4A8}
+.paperdiff.ok b{color:#2F7D46}
 /* 数を集める項目の合計 */
 .totals h3{margin:0 0 10px;font-size:14px}
 .totals .card .sub{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.6}
@@ -810,6 +830,48 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <section class="view" id="v-settings">
       <details class="howto"><summary>設定の見かた</summary><dl><dt>変更したら</dt><dd>保存した内容は、募集ページ・募集要項PDF・メール本文にすぐ反映されます。</dd><dt>パスワード</dt><dd>空欄のままにすると変更しません。変えると、いま入っている方も次回から新しいパスワードが要ります。</dd><dt>各項目</dt><dd>入力欄の下に、それぞれ何に使う値かを書いています。</dd></dl></details>
+
+      <!-- レンタル品目。単価はお金の話なので管理者のみ。
+           **紙面（募集要項PDF）とのずれを、必ずここに出す** -->
+      <div class="panel rental">
+        <h3>レンタル備品の品目と単価</h3>
+        <p class="pnote">
+          ここを直すと、<b>応募フォームの選択肢と金額がすぐ変わります</b>。
+          単価を空欄にすると「調整中」と表示され、その品目は選べなくなります。
+        </p>
+        <div id="rentalPaper"></div>
+        <div id="rentalList">読み込んでいます…</div>
+        <div class="pbtns">
+          <button class="ghost" id="rentalNew">＋ 品目を追加する</button>
+          <span class="msg" id="rentalMsg"></span>
+        </div>
+
+        <div class="panel pform" id="rentalForm" hidden>
+          <h3 id="rentalFormTitle">品目の登録</h3>
+          <div class="pgrid">
+            <label>品目名<span class="req">必須</span>
+              <input id="rName" maxlength="60" placeholder="例：長机（1800×450）"></label>
+            <label>種別<span class="req">必須</span><select id="rKind"></select></label>
+            <label>単価（円・税込）
+              <input id="rPrice" inputmode="numeric" maxlength="7" placeholder="空欄なら調整中">
+            </label>
+            <label>単位<input id="rUnit" maxlength="10" placeholder="台・脚・張など"></label>
+            <label>1社あたりの上限数
+              <input id="rMax" inputmode="numeric" maxlength="3" placeholder="例：20"></label>
+            <label style="grid-column:1/-1">説明（任意）
+              <input id="rNote" maxlength="200"></label>
+          </div>
+          <div class="pchecks">
+            <label><input type="checkbox" id="rActive"> 応募フォームに出す</label>
+          </div>
+          <p class="perr" id="rErr" hidden></p>
+          <div class="pbtns">
+            <button class="print" id="rSave">保存する</button>
+            <button class="ghost" id="rCancel">やめる</button>
+          </div>
+        </div>
+      </div>
+
       <div class="panel">
         <h3>イベントの設定</h3>
         <div class="pgrid" id="setFields"></div>
@@ -2026,6 +2088,7 @@ function showTab(name, keepHash){
   if (name === 'people' && !S.people) loadPeople();
   if (name === 'history' && !S.history) loadHistory();
   if (name === 'settings' && !S.settings) loadSettings();
+  if (name === 'settings' && !S.rental) loadRental();
   // メール送信だけは毎回読み直す。他のタブは一度読んだら使い回すが、
   // ここは「いま送る対象が何件か」を見せる画面なので、
   // 古い件数を見せたまま送信させると、見せた覚えのない相手に届く。
@@ -2607,6 +2670,120 @@ function loadSettings(){
   }, function(){ toast('設定を取得できませんでした', true); });
 }
 
+/**
+ * レンタル品目。
+ *
+ * ■ この画面の主役は、一覧ではなく**紙面とのずれ**
+ *   募集要項PDFは src/content.js から刷り、フォームはシートを読む。
+ *   シートだけ直すと、**紙とフォームで金額が違う**状態になる。
+ *   PDFはGASからは刷れないので、この制約は消せない。
+ *   だから「ずれています」と必ず画面に出す。出さなければ誰も気づけない。
+ */
+function loadRental(){
+  api('adminRental').then(function(r){
+    if (!r || !r.ok){
+      $('#rentalList').innerHTML = '<p class="pnote warn">'
+        + esc((r && r.message) || '読み込めませんでした。') + '</p>';
+      return;
+    }
+    S.rental = r;
+    renderRental();
+  }, function(){ $('#rentalList').textContent = '読み込めませんでした。'; });
+}
+
+function renderRental(){
+  var r = S.rental;
+  var items = (r.items || []).slice().sort(function(a,b){ return a.order - b.order; });
+
+  $('#rentalList').innerHTML = '<table><thead><tr>'
+    + '<th>品目</th><th>種別</th><th class="r">単価</th><th class="r">上限</th><th></th>'
+    + '</tr></thead><tbody>' + items.map(function(it){
+        var price = (typeof it.price === 'number' && it.price > 0)
+          ? Number(it.price).toLocaleString('ja-JP') + ' 円'
+          : '<span class="tag tbd">調整中</span>';
+        return '<tr class="' + (it.active ? '' : 'off') + '">'
+          + '<td>' + esc(it.name)
+          + (it.active ? '' : '<span class="tag off">フォームに出ません</span>') + '</td>'
+          + '<td>' + esc(it.kind) + '</td>'
+          + '<td class="r">' + price + '</td>'
+          + '<td class="r">' + (it.max || '—') + '</td>'
+          + '<td class="r"><button class="act" data-redit="' + it.row + '">直す</button></td>'
+          + '</tr>';
+      }).join('') + '</tbody></table>';
+
+  $$('#rentalList [data-redit]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      editRental(Number(btn.getAttribute('data-redit')));
+    });
+  });
+
+  // 紙面とのずれ
+  var diff = r.paperDiff || [];
+  $('#rentalPaper').innerHTML = diff.length
+    ? '<div class="paperdiff"><b>募集要項PDFの料金表と食い違っています</b>'
+      + '<ul>' + diff.map(function(d){ return '<li>' + esc(d.message) + '</li>'; }).join('')
+      + '</ul>'
+      + '<p style="margin:8px 0 0">紙面はこの画面からは直せません。'
+      + '<b>森本にご連絡ください</b>（PDFと配布キットを刷り直します）。</p></div>'
+    : '<div class="paperdiff ok"><b>募集要項PDFの料金表と一致しています。</b></div>';
+}
+
+function editRental(row){
+  var it = (S.rental.items || []).filter(function(x){ return x.row === row; })[0]
+        || { row: 0, kind: '', name: '', price: '', unit: '個', max: '', note: '', active: true };
+  S.rentalRow = row || 0;
+  $('#rentalFormTitle').textContent = row ? esc(it.name) + ' を直す' : '品目の登録';
+  $('#rKind').innerHTML = (S.rental.kinds || []).map(function(k){
+    return '<option' + (it.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
+  }).join('');
+  $('#rName').value = it.name || '';
+  $('#rPrice').value = (typeof it.price === 'number' && it.price > 0) ? it.price : '';
+  $('#rUnit').value = it.unit || '個';
+  $('#rMax').value = it.max || '';
+  $('#rNote').value = it.note || '';
+  $('#rActive').checked = !!it.active;
+  $('#rErr').hidden = true;
+  $('#rentalForm').hidden = false;
+  $('#rName').focus();
+}
+
+function saveRental(){
+  var item = {
+    kind: $('#rKind').value,
+    name: $('#rName').value.trim(),
+    price: $('#rPrice').value.trim(),
+    unit: $('#rUnit').value.trim(),
+    max: $('#rMax').value.trim(),
+    note: $('#rNote').value.trim(),
+    active: $('#rActive').checked,
+  };
+  // 単価を空にすると「調整中」になる。押す前に伝える
+  if (!item.price && item.active
+      && !confirm('単価が空欄です。' + String.fromCharCode(10)
+        + '「' + item.name + '」は応募フォームに出ず、「調整中」と表示されます。'
+        + String.fromCharCode(10) + 'よろしいですか。')) return;
+
+  $('#rSave').disabled = true;
+  $('#rentalMsg').className = 'msg';
+  $('#rentalMsg').textContent = '保存しています…';
+  api('adminRentalSave', { row: S.rentalRow || 0, item: item }).then(function(r){
+    $('#rSave').disabled = false;
+    if (!r || !r.ok){
+      $('#rErr').hidden = false;
+      $('#rErr').textContent = (r && r.message) || '保存できませんでした。';
+      $('#rentalMsg').textContent = '';
+      return;
+    }
+    $('#rentalForm').hidden = true;
+    $('#rentalMsg').textContent = '保存しました';
+    loadRental();
+  }, function(){
+    $('#rSave').disabled = false;
+    $('#rErr').hidden = false;
+    $('#rErr').textContent = '保存できませんでした。';
+  });
+}
+
 function renderSettings(){
   var r = S.settings || {};
   var v = r.values || {};
@@ -2937,6 +3114,9 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#inboxReload').addEventListener('click', loadInbox);
   $('#todoNew').addEventListener('click', function(){ editTodo(0); });
   $('#colReset').addEventListener('click', resetColumns);
+  $('#rentalNew').addEventListener('click', function(){ editRental(0); });
+  $('#rSave').addEventListener('click', saveRental);
+  $('#rCancel').addEventListener('click', function(){ $('#rentalForm').hidden = true; });
   $('#purgeCheck').addEventListener('click', purgeCheck);
   $('#purgeRun').addEventListener('click', purgeRun);
   $('#todoSave').addEventListener('click', saveTodo);
