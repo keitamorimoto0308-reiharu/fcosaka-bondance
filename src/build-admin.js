@@ -686,6 +686,14 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-status.s5{border-color:#C97A16;color:#9A5B24}
 .sch-status.s6{background:#F5F5F4;color:var(--muted);text-decoration:line-through}
 
+/* ステータスの選択肢。押したその場で出す小窓（パネルは開かない） */
+.sch-menu{position:fixed;z-index:70;background:#fff;border:1px solid var(--line);
+  border-radius:8px;box-shadow:0 10px 28px rgba(35,24,22,.18);padding:5px;min-width:150px}
+.sch-menu button{display:block;width:100%;text-align:left;background:none;border:0;
+  padding:9px 12px;font-size:13px;border-radius:5px;cursor:pointer;color:var(--ink)}
+.sch-menu button:hover{background:#F5F2F0}
+.sch-menu button[aria-pressed="true"]{background:var(--ink);color:#fff}
+
 .sch-add{width:100%;background:none;border:1px dashed var(--line);border-radius:6px;
   padding:9px;font-size:12px;color:var(--muted);cursor:pointer;margin-top:6px}
 .sch-add:hover{border-color:var(--brandDeep);color:var(--brandDeep)}
@@ -3478,8 +3486,15 @@ document.addEventListener('DOMContentLoaded', function(){
  * ここだけ古いまま残る（test/aggregate.test.js と同じ向きの検査がある）。
  */
 var SCH = { rows: [], areas: [], statuses: [], kinds: [], companies: [],
-            peopleByCompany: {}, me: {}, today: '', warnDays: 3, editing: null };
+            peopleByCompany: {}, me: {}, today: '', warnDays: 3,
+            editing: null, menu: null };
 var SCH_KEY = 'bondance.sched.filters.v1';
+/*
+ * 前回選んだ領域を覚える（けいた確定・2026-09-04）。
+ * **覚えるのは領域だけ。**日付やステータスまで覚えると、
+ * 気づかないうちに古い日付のまま保存される。
+ */
+var SCH_AREA_KEY = 'bondance.sched.lastArea.v1';
 var SCH_F = { done: false, mine: false, only: [] };
 
 /** 詳細欄のURLのリンク化。src/linkify.js から書き出したもの（①②で共有） */
@@ -3789,7 +3804,11 @@ function schOpen(row, week){
     }).join('');
   };
   fill('#schKind', SCH.kinds, row ? row.kind : 'タスク');
-  fill('#schArea', SCH.areas, row ? row.area : '', '選んでください');
+  var lastArea = '';
+  try { lastArea = localStorage.getItem(SCH_AREA_KEY) || ''; } catch(e){}
+  // 覚えていない領域（選択肢が変わった等）は使わない。選ばせる側に倒す
+  if (SCH.areas.indexOf(lastArea) < 0) lastArea = '';
+  fill('#schArea', SCH.areas, row ? row.area : lastArea, '選んでください');
   fill('#schStat', SCH.statuses, row ? row.status : '未着手');
   // 「今週に追加」なら、その週の月曜を入れた状態で開く（打ち直さなくて済む）
   $('#schDate').value = row ? (row.date || '')
@@ -3839,6 +3858,8 @@ function schCollect(){
     .map(function(b){ return b.getAttribute('data-person'); });
   var cos = $('#schCos').value.split(',').map(function(s){ return s.trim(); })
     .filter(function(s){ return s; });
+  // 次に開いたとき、同じ領域から始められるようにする
+  try { localStorage.setItem(SCH_AREA_KEY, $('#schArea').value || ''); } catch(e){}
   return {
     kind: $('#schKind').value,
     date: $('#schDate').value,
@@ -3879,10 +3900,45 @@ function schDelete(){
   }, function(e){ toast(String(e && e.message || e), true); });
 }
 
-/** ステータスのチップを押したときだけ、パネルを開かずに切り替える（いちばん頻度が高い） */
-function schCycleStatus(row){
-  var i = SCH.statuses.indexOf(row.status);
-  var next = SCH.statuses[(i + 1) % SCH.statuses.length];
+/**
+ * ステータスのチップを押したら、**選択肢を出す**（けいた確定・2026-09-04）。
+ *
+ * 最初は押すたびに順送りにしていたが、「完了にしたいだけなのに4回押す」ことになる。
+ * パネルを開かずに変えられる、という利点は残したまま、1回で目的の値にする。
+ * 選択肢は**サーバーが返したものから組む**（画面に一覧を持たない）。
+ */
+function schStatusMenu(btn, row){
+  schCloseMenu();
+  var m = document.createElement('div');
+  m.className = 'sch-menu';
+  m.innerHTML = SCH.statuses.map(function(s){
+    return '<button data-st="' + esc(s) + '"' + (s === row.status ? ' aria-pressed="true"' : '')
+      + '>' + esc(s) + '</button>';
+  }).join('');
+  document.body.appendChild(m);
+
+  var r = btn.getBoundingClientRect();
+  // 画面の下にはみ出すなら、上に出す（下に出したまま切れると選べない）
+  var below = window.innerHeight - r.bottom;
+  m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 160)) + 'px';
+  if (below < 240) m.style.top = Math.max(8, r.top - m.offsetHeight - 6) + 'px';
+  else m.style.top = (r.bottom + 6) + 'px';
+
+  m.addEventListener('click', function(e){
+    var b = e.target.closest('[data-st]'); if (!b) return;
+    schCloseMenu();
+    schSetStatus(row, b.getAttribute('data-st'));
+  });
+  SCH.menu = m;
+}
+function schCloseMenu(){
+  if (SCH.menu && SCH.menu.parentNode) SCH.menu.parentNode.removeChild(SCH.menu);
+  SCH.menu = null;
+}
+
+/** 選ばれたステータスで保存する */
+function schSetStatus(row, next){
+  if (next === row.status) return;
   var wasDone = (row.status === '完了' || row.status === '見送り');
   var item = { kind: row.kind, date: row.date, endDate: row.endDate, area: row.area,
                status: next, title: row.title, detail: row.detail, memo: row.memo,
@@ -3938,14 +3994,22 @@ function bindSched(){
     var add = e.target.closest('[data-week]');
     if (add){ schOpen(null, Number(add.getAttribute('data-week'))); return; }
     var st = e.target.closest('.sch-status[data-sid]');
-    if (st){ var r1 = schFind(st.getAttribute('data-sid')); if (r1) schCycleStatus(r1); return; }
+    if (st){ var r1 = schFind(st.getAttribute('data-sid')); if (r1) schStatusMenu(st, r1); return; }
     var tr = e.target.closest('.sch-row'); if (!tr) return;
     if (e.target.closest('a')) return;      // 詳細のリンクは、そのまま開かせる
     var r2 = schFind(tr.getAttribute('data-sid')); if (r2) schOpen(r2);
   });
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && $('#schDrawer').classList.contains('on')) schClose();
+    if (e.key !== 'Escape') return;
+    if (SCH.menu){ schCloseMenu(); return; }
+    if ($('#schDrawer').classList.contains('on')) schClose();
   });
+  // 外を押したら閉じる。開きっぱなしの小窓が画面に残ると、次の操作を邪魔する
+  document.addEventListener('click', function(e){
+    if (SCH.menu && !e.target.closest('.sch-menu')
+        && !e.target.closest('.sch-status')) schCloseMenu();
+  }, true);
+  window.addEventListener('resize', schCloseMenu);
 }
 `;
 }

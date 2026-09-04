@@ -25,6 +25,9 @@ const SHOTS = [
     after: 'schOpen(null);' },
   { name: 'sched-efushi', role: 'admin', tab: 'sched', w: 1400, h: 900,
     after: 'schEfushi();' },
+  // ステータスの選択肢。resize で閉じる作りなので、撮影の直前に開き直す
+  { name: 'sched-status', role: 'admin', tab: 'sched', w: 1400, h: 900,
+    after: "var b=document.querySelector('.sch-status[data-sid]'); if(b){b.click();}" },
   { name: 'list',       role: 'admin', tab: 'list', w: 1400, h: 900 },
   { name: 'map',        role: 'admin', tab: 'map',  w: 1400, h: 1000 },
   { name: 'detail',     role: 'admin', tab: 'list', w: 1400, h: 1100, open: 'SB-0003' },

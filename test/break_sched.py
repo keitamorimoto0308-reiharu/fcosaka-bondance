@@ -359,6 +359,25 @@ CASES = [
             ''),
     ], '飛び先の名前をリンクに使っていません'),
 
+    ('ステータスを、押すたびの順送りに戻す', [
+        (B, 'if (r1) schStatusMenu(st, r1); return; }',
+            'if (r1) schSetStatus(r1, SCH.statuses[(SCH.statuses.indexOf(r1.status)+1)%SCH.statuses.length]); return; }'),
+        (B, 'function schStatusMenu(btn, row){', 'function schCycleStatus(btn, row){'),
+    ], '選択肢を出す処理がありません'),
+
+    ('ステータスの選択肢を、画面に直書きする', [
+        (B, "m.innerHTML = SCH.statuses.map(function(s){",
+            "m.innerHTML = ['未着手','進行中','確認中','完了','停滞中','見送り'].map(function(s){"),
+    ], '選択肢を画面が自前で持っています'),
+
+    # **構文エラーにしない**壊し方にすること。括弧が合わない形にすると、
+    # 「生成物の構文検査」が先に落ちて、狙った検査が働いたのか分からなくなる
+    # （最初 void(0 && …) で囲んで、理由が違うまま通った）
+    ('前回の領域を覚えない（文字列は残したまま働かなくする）', [
+        (B, "  try { localStorage.setItem(SCH_AREA_KEY, $('#schArea').value || ''); } catch(e){}",
+            "  try { if (false) localStorage.setItem(SCH_AREA_KEY, ''); } catch(e){}"),
+    ], '選んだ領域を記憶していません'),
+
     ('模擬の「今日」を、時差のある基準に戻す', [
         (M, "        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo",
             "        today: new Date(Date.now() - 86400000).toISOString().slice(0, 10),"),

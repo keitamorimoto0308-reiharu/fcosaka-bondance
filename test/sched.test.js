@@ -26,6 +26,15 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8').split('\r\n').join('\n');
 
+/*
+ * 関数の終わりの目印（改行 + } + 改行）。
+ * **この行に制御文字を直接書かない。**Python やヒアドキュメントを経由して
+ * 書くと本物の改行に化ける（引き継ぎ書§8。この検査を書くときにも踏んだ）。
+ * fromCharCode で組み立てれば、経路によらず同じものになる。
+ */
+const NL = String.fromCharCode(10);
+const CUT_END = NL + '}' + NL;
+
 /** 本番のソースから関数を1つ切り出す（写しを作らないため） */
 function cutFunction(code, name) {
   const start = code.indexOf('function ' + name + '(');
@@ -1414,5 +1423,64 @@ describe('① ダッシュボードへの合流（§4-8）', () => {
       '帯を描く処理が2つあります（片方だけ直す事故が起きます）');
     assert.ok(h.indexOf("schPaintTerms($('#schTerms')") >= 0);
     assert.ok(h.indexOf("schPaintTerms($('#dashTerms')") >= 0);
+  });
+});
+
+describe('① ステータスは選んで変える／領域は前回を覚える（けいた確定・2026-09-04）', () => {
+
+  const ADMIN = () => fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+
+  test('ステータスは、押すと選択肢が出る（順送りではない）', () => {
+    // 「完了にしたいだけなのに4回押す」を無くす（けいた確定）
+    const h = ADMIN();
+    assert.ok(h.indexOf('function schStatusMenu') >= 0,
+      'ステータスの選択肢を出す処理がありません');
+    assert.ok(h.indexOf('function schCycleStatus') < 0,
+      '順送りの処理が残っています（2つあると、どちらが動くか読めません）');
+  });
+
+  test('選択肢は、サーバーが返したものから組む', () => {
+    const h = ADMIN();
+    const s = h.indexOf('function schStatusMenu');
+    const body = h.slice(s, h.indexOf('\n}\n', s));
+    assert.ok(body.indexOf('SCH.statuses') >= 0,
+      '選択肢を画面が自前で持っています: ' + body.slice(0, 200));
+  });
+
+  test('領域は、前回選んだものを覚える（実際に呼んで確かめる）', () => {
+    /*
+     * 最初は「localStorage.setItem という文字列があるか」で見ていた。
+     * ところが `void(0 && localStorage.setItem(...))` と囲むだけで
+     * **文字列は残ったまま働かなくなる**（壊し検査がすり抜けた）。
+     * 形ではなく、呼んで結果を見る。
+     */
+    const h = ADMIN();
+    const s = h.indexOf('function schCollect(');
+    assert.ok(s >= 0, 'schCollect がありません');
+    const e = h.indexOf(CUT_END, s) + CUT_END.length;
+    const store = {};
+    const box = vm.createContext({
+      Array, Object, String, Number,
+      localStorage: { setItem: (k, v) => { store[k] = v; }, getItem: k => store[k] || null },
+      $: (sel) => ({ value: sel === '#schArea' ? '制作' : '' }),
+      $$: () => [],
+      SCH_AREA_KEY: 'bondance.sched.lastArea.v1',
+    });
+    vm.runInContext(h.slice(s, e) + ' schCollect();', box);
+    assert.strictEqual(store['bondance.sched.lastArea.v1'], '制作',
+      '選んだ領域を記憶していません（記録された値: ' + JSON.stringify(store) + '）');
+  });
+
+  test('覚えた領域が無いときは、「選んでください」を出す', () => {
+    // 記憶が無いのに勝手な既定を入れると、選び忘れがそのまま保存される
+    const h = ADMIN();
+    assert.ok(h.indexOf("'選んでください'") >= 0, '選ばせる文言がありません');
+  });
+
+  test('覚えるのは領域だけ（ステータスや日付は覚えない）', () => {
+    // 前回の日付を覚えると、**気づかないうちに古い日付のまま保存**される
+    const h = ADMIN();
+    assert.ok(h.indexOf('SCH_DATE_KEY') < 0, '日付まで覚えようとしています');
+    assert.ok(h.indexOf('SCH_STATUS_KEY') < 0, 'ステータスまで覚えようとしています');
   });
 });
