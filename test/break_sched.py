@@ -4,11 +4,16 @@
 
 ■ 仕様書
   docs/internal/design_schedule_plan.md §5-4 に、足すべき壊し方が12通り書いてある。
-  いまここに在るのは **§5-1（詳細欄のURLのリンク化）の分だけ**。
-  残り（許可リスト・絞り込み・完了日・削除の履歴・端末の日付・HOWTO・直書き）は、
-  gas/Sched.gs を作るときに、歯止めと一緒に足す。
+  **サーバー側の分は入れ終えた。**
+  まだ無いのは**画面を作ってから足す分**：
+    5・6・6b … 「終わったもの ◯件を表示」の判定（未着手を含めない／期日前の完了を含めない／
+                0件ならボタンを出さない）
+    7 …… 曜日を列として持つように戻す（いまは表示形式 m/d(ddd)）
+    10 … 遅れの判定を端末の日付にする（サーバーの today を使っているか）
+    11 … HOWTO['sched'] を消す
+    12 … 画面に領域名・ステータス名を直書きする
 
-■ なぜリンク化だけ先に在るか
+■ リンク化（1〜3）が先に在る理由
   この仕組みは「守りはすべてサーバー側」で通してきたが、
   **リンク化だけは画面側の処理**なので、ここに穴が開く。
   詳細欄は全員が書けて、管理ページは応募企業の個人情報を読める画面。
@@ -28,11 +33,11 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _guard import guard  # noqa: E402
 R = pathlib.Path(__file__).resolve().parent.parent
-TARGET = 'test/linkify.test.js'
+TARGETS = ['test/linkify.test.js', 'test/sched.test.js']
 
 
 def run():
-    r = subprocess.run(['node', '--test', TARGET], cwd=R, capture_output=True,
+    r = subprocess.run(['node', '--test'] + TARGETS, cwd=R, capture_output=True,
                        text=True, encoding='utf-8', errors='replace', shell=True)
     return r.returncode == 0, (r.stdout or '') + (r.stderr or '')
 
@@ -75,6 +80,7 @@ def case(label, edits, expect):
 
 
 F = 'src/linkify.js'
+S = 'gas/Sched.gs'
 
 # 画面側の esc と同じもの。case5 で「関数の外」に置くために使う
 OUTER_ESC = (
@@ -124,6 +130,56 @@ CASES = [
         (F, 'function linkifyDetail(text, esc) {',
             OUTER_ESC + 'function linkifyDetail(text, esc) {\n  esc = __outerEsc;'),
     ], '__outerEsc is not defined'),
+
+    # ── 仕様書 §5-4 の 4：許可リストを素の {} に戻す ───────
+    ('種類の照合を、配列から素の {} に戻す', [
+        (S, 'if (SCHED_KINDS_.indexOf(kind) < 0) {',
+            "if (!({ 'タスク': 1, '期間': 1, 'マイルストーン': 1 })[kind]) {"),
+    ], 'kind に constructor が通りました'),
+
+    ('担当者の入れ物を、親を持つ素の {} に戻す', [
+        (S, 'var byName = Object.create(null);', 'var byName = {};'),
+    ], '担当者に constructor が通りました'),
+
+    ('担当者の実在チェックを外す', [
+        (S, 'if (!(name in people.byName)) {', 'if (false) {'),
+    ], '知らない担当者が通りました'),
+
+    ('担当者の所属を、担当会社に足さなくする', [
+        (S, 'chosen.forEach(function (p) {', '[].forEach(function (p) {'),
+    ], '担当者の所属が担当会社に足されていません'),
+
+    # ── 仕様書 §5-4 の 8：完了日の自動記入 ──────────────
+    ('完了にしても完了日を入れない', [
+        (S, 'if (schedSettled_(item.status)) {', 'if (false) {'),
+    ], '完了にしたのに完了日が入りません'),
+
+    ('手で入れた完了日を、毎回今日で上書きする', [
+        (S, "var prev = before ? asText_(before[10]).trim() : '';", "var prev = '';"),
+    ], '手で入れた値を上書きしました'),
+
+    # ── 仕様書 §5-4 の 9：削除が全文を残す ────────────────
+    ('削除の履歴に、タスク名だけしか残さない', [
+        (S, "JSON.stringify(full), '', '');", "full['タスク名'], '', '');"),
+    ], '詳細が履歴に残っていません'),
+
+    # ── 期間の前後関係 ────────────────────────────────
+    ('期間の「終了日が開始日より前」の検査を外す', [
+        (S, 'if (end.value < date.value) {', 'if (false) {'),
+    ], '終了日が開始日より前の期間が通りました'),
+
+    # ── 移行（§5-3-10）────────────────────────────────
+    ('移行で、元のシートを消す（名前を変えるだけにしない）', [
+        (S, "if (moved) src.setName(SHEET.TODO + '（移行済み）');", 'if (false) { }'),
+    ], '元シートの名前を変えていません'),
+
+    ('移行で、関係者にいない名前も担当者に入れる', [
+        (S, 'if (owner && (owner in people.byName)) {', 'if (owner) {'),
+    ], '知らない名前が担当者に入りました'),
+
+    ('移行の件数をログに出さない', [
+        (S, "console.log('確認事項から制作スケジュールへ '", "if (moved) console.log('確認事項から制作スケジュールへ '"),
+    ], 'ログが1行も出ていません'),
 ]
 
 

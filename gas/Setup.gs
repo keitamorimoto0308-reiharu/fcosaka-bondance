@@ -20,13 +20,26 @@ function setup() {
   setupHistorySheet_(ss);
   setupSpacesSheet_(ss);
   setupMailTemplateSheet_(ss);
+  setupSchedSheet_(ss);   // 制作スケジュール（確認事項の移行を含む）
   ensureDocsFolders_();       // 資料フォルダの区分と、提出物フォルダ（社外秘）
   cleanupOldPriceRows_(ss);   // 単価を移したあとに、設定シートの古い行を片づける
   removeDefaultSheet_(ss);
   SpreadsheetApp.flush();
-  return '台帳の構築が完了しました：'
+
+  /*
+   * 結果は**ログにも出す**。
+   *
+   * Apps Script の実行ログに出るのは Logger.log / console.log だけで、
+   * **戻り値は誰の目にも触れない**。
+   * 2026-09-04、けいたが setup() を実行したのに「完了しました」が出ないため、
+   * 成功したのか分からなくなった（実際は成功していた）。
+   * 「黙って正常」を作らない、と自分で書いておきながら破っていた箇所。
+   */
+  var msg = '台帳の構築が完了しました：'
        + [SHEET.LEDGER, SHEET.CONFIRM, SHEET.HISTORY, SHEET.SPACES, SHEET.CONFIG,
-          SHEET.PEOPLE, SHEET.RENTAL, SHEET.TODO, SHEET.MAILTPL].join(' / ');
+          SHEET.PEOPLE, SHEET.RENTAL, SHEET.SCHED, SHEET.MAILTPL].join(' / ');
+  console.log(msg);
+  return msg;
 }
 
 /**
@@ -440,6 +453,33 @@ function cleanupOldPriceRows_(ss) {
  * 打ち合わせで出た「これは確認します」が、誰の手元にも残らずに消えるのを防ぐ。
  * 誰が挙げたか・誰が持つか・いつまでか の3つが無いと、結局は誰も動かない。
  */
+function setupSchedSheet_(ss) {
+  var sh = getOrCreate_(ss, SHEET.SCHED);
+  var head = SCHED_HEADERS_;
+  if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, head.length).setValues([head]);
+  styleHeader_(sh, head.length);
+
+  var n = Math.max(sh.getMaxRows() - 1, 1);
+  setDropdown_(sh, 1, 2, n, SCHED_KINDS_);
+  setDropdown_(sh, 4, 2, n, SCHED_AREAS_);
+  setDropdown_(sh, 9, 2, n, SCHED_STATUSES_);
+
+  // 曜日の列は作らない。表示形式で見せる（列を足すよりずれようがない）
+  sh.getRange(2, 2, n, 1).setNumberFormat('m/d(ddd)');
+  sh.getRange(2, 3, n, 1).setNumberFormat('m/d(ddd)');
+  sh.getRange(2, 11, n, 1).setNumberFormat('m/d(ddd)');
+
+  [90, 110, 110, 80, 140, 140, 300, 340, 90, 220, 110, 70, 100, 100, 100, 130]
+    .forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  sh.getRange('B1').setNote('タスクは期日、期間は開始日、マイルストーンはその日を入れます。');
+  sh.getRange('C1').setNote('期間のときだけ入れます。ほかの種類では空のままです。');
+  sh.getRange('K1').setNote('完了・見送りにすると自動で入ります。手で直した値は上書きしません。');
+
+  // 確認事項の行を移す。元シートは消さず、名前を変えるだけ
+  schedMigrateTodos_(ss);
+  return sh;
+}
+
 function setupTodoSheet_(ss) {
   var sh = getOrCreate_(ss, SHEET.TODO);
   var head = ['状態', '内容', '担当', '期日', '起票者', '起票日', '完了日', 'メモ'];

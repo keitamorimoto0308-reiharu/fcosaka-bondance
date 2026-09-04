@@ -1743,6 +1743,11 @@ function adminDispatch_(payload) {
     case 'adminInbox':      return adminInbox_(auth);
     case 'adminTodos':      return adminTodos_(auth);
     case 'adminTodoSave':   return adminTodoSave_(auth, payload);
+    // 制作スケジュール。**adminOnly には入れない**（全員が触れる・けいた確定）。
+    // 管理者だけにすると、結局シートを直接開くことになって形骸化する
+    case 'adminSched':       return adminSched_(auth);
+    case 'adminSchedSave':   return adminSchedSave_(auth, payload);
+    case 'adminSchedDelete': return adminSchedDelete_(auth, payload);
     case 'adminConfirmSave':  return adminConfirmSave_(auth, payload);
     case 'adminMailTemplate':      return adminMailTemplate_(auth, payload);
     case 'adminMailTemplateSave':  return adminMailTemplateSave_(auth, payload);

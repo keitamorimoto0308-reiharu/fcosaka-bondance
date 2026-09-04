@@ -13,11 +13,11 @@
     "build:admin": "node src/build-admin.js",
     "mock": "node src/mock.js",
     "shot": "node src/shot.js",
-    "push": "node tools/lock.js take deploy \"npm run push\" && npm test && npx clasp push --force; node tools/lock.js free deploy",
+    "push": "node tools/lock.js run deploy \"npm test && npx clasp push --force\"",
     "build:ogp": "node src/build-ogp.js",
     "build:confirm": "node src/build-confirm.js",
     "build:upload": "node src/build-upload.js",
-    "break": "node tools/lock.js take break \"npm run break\" && python test/break_all.py; node tools/lock.js free break",
+    "break": "node tools/lock.js run break \"python test/break_all.py\"",
     "lock": "node tools/lock.js check"
   },
   "devDependencies": {

@@ -175,6 +175,29 @@ const DB = {
                      url: 'https://drive.google.com/file/d/mock/view', folder: '（未分類）' }],
     '図面': [], '議事録': [], 'その他': [] },
   vendorFiles: {},   // 受付ID → [{ id, name, size, ... }]
+  // 制作スケジュール。遅れ・今週・来週・それ以降が1つずつ出るように置く
+  sched: [
+    { kind: '期間', date: '2026-09-01', endDate: '2026-09-30', area: '営業',
+      companies: ['FC大阪'], people: ['山田 太郎'], title: '出店の募集期間',
+      detail: '', status: '', memo: '', doneDate: '',
+      author: '山田 太郎', createdAt: '2026-08-20', updatedBy: '', updatedAt: '' },
+    { kind: 'タスク', date: '2026-08-28', area: '制作',
+      companies: ['FC大阪'], people: ['佐藤 花子'], title: '会場図の最終版をもらう',
+      detail: '詳細は https://example.com/kaijou を参照', status: '進行中', memo: '期日を過ぎた例',
+      doneDate: '', author: '山田 太郎', createdAt: '2026-08-20', updatedBy: '', updatedAt: '' },
+    { kind: 'タスク', date: '2026-09-12', area: '会議',
+      companies: ['FC大阪'], people: ['山田 太郎'], title: '定例で電源の可否を確認',
+      detail: '', status: '未着手', memo: '', doneDate: '',
+      author: '山田 太郎', createdAt: '2026-09-01', updatedBy: '', updatedAt: '' },
+    { kind: 'タスク', date: '2026-09-05', area: '制作',
+      companies: ['LOP'], people: [], title: '募集要項の印刷手配',
+      detail: '', status: '完了', memo: '', doneDate: '2026-09-04',
+      author: '山田 太郎', createdAt: '2026-08-25', updatedBy: '', updatedAt: '' },
+    { kind: 'マイルストーン', date: '2026-10-24', area: '全体',
+      companies: [], people: [], title: '本番（夕照祭2026）',
+      detail: '', status: '', memo: '', doneDate: '',
+      author: '山田 太郎', createdAt: '2026-08-20', updatedBy: '', updatedAt: '' },
+  ],
   todos: [
     { state: '未着手', text: '観戦チケットの枚数をFC大阪に確認する', owner: 'けいた',
       due: '2026-09-08', author: '山田 太郎', createdAt: '2026-09-01', doneAt: '', memo: '' },
@@ -376,6 +399,42 @@ const MAILTPL = (() => {
   vm.runInContext(cut.join('\n'), box);
   return box;
 })();
+
+/**
+ * 制作スケジュールの検証を、**本番のソースからそのまま借りる**（gas/Sched.gs）。
+ *
+ * ここに写しを置くと、種類・領域・ステータスを1つ足したときに
+ * **模擬だけ古い一覧のまま**になり、「模擬で通るのに本番で落ちる」が起きる。
+ * gas/Sched.gs の上部は宣言だけなので、GASのAPIが無くても読める。
+ */
+const SCHED = (() => {
+  const src = fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8');
+  const adminSrc = fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8');
+  // 検証が使う道具も本番から借りる（正規表現で切ると \s が1層落ちるので indexOf で切る）
+  const cutFn = (code, name) => {
+    const s = code.indexOf('function ' + name + '(');
+    if (s < 0) throw new Error('gas/Admin.gs の ' + name + ' を読めませんでした');
+    const e = code.indexOf('\n}\n', s) + 3;
+    return code.slice(s, e);
+  };
+  const box = { Object, String, Number, Array, JSON, RegExp, Math, isFinite, Date, console };
+  vm.createContext(box);
+  vm.runInContext([cutFn(adminSrc, 'asText_'), cutFn(adminSrc, 'safeCellText_'),
+                   cutFn(adminSrc, 'normalizeDue_')].join('\n'), box);
+  vm.runInContext(src, box);
+  return box;
+})();
+
+/** 関係者から「氏名 → 所属」を引く。本番の schedPeople_ が返すものと同じ形 */
+function schedPeopleMock() {
+  const byName = Object.create(null);
+  const byCompany = Object.create(null);
+  PEOPLE.forEach(p => {
+    byName[p.name] = p.org || '';
+    if (p.org) { if (!byCompany[p.org]) byCompany[p.org] = []; byCompany[p.org].push(p.name); }
+  });
+  return { byName, byCompany };
+}
 
 /** 画面に返してはいけない列（本番の gas/Admin.gs NEVER_SEND と同じ） */
 const NEVER_SEND = ['生データ(JSON)', '素材トークン'];
@@ -1118,6 +1177,73 @@ function handle(payload) {
           at: '2026-08-31 18:40', count: 3, unread: false, replied: true,
           url: 'https://mail.google.com/', snippet: 'ご対応ありがとうございました。当日はよろしくお願いいたします。' },
       ] };
+    }
+
+    // ── 制作スケジュール。**adminOnly には入れない**（全員が触れる・本番と同じ）
+    case 'adminSched': {
+      const people = schedPeopleMock();
+      const companies = SCHED.SCHED_COMPANIES_.slice();
+      const add = c => { if (c && !companies.includes(c)) companies.push(c); };
+      Object.keys(people.byCompany).forEach(add);
+      DB.sched.forEach(r => (r.companies || []).forEach(add));
+      const me = PEOPLE.find(p => p.name === auth.person);
+      return {
+        ok: true,
+        rows: DB.sched.map((r, i) => Object.assign({ row: i + 2, order: i }, r)),
+        areas: SCHED.SCHED_AREAS_.slice(),
+        statuses: SCHED.SCHED_STATUSES_.slice(),
+        kinds: SCHED.SCHED_KINDS_.slice(),
+        companies,
+        peopleByCompany: people.byCompany,
+        me: { person: auth.person, company: me ? me.org : '' },
+        // 本番はサーバーの日付を返す。端末の時計を見ない（§3-1）
+        today: new Date().toISOString().slice(0, 10),
+      };
+    }
+
+    case 'adminSchedSave': {
+      // 検証は**本番の関数をそのまま呼ぶ**。模擬に写しを持たない
+      const v = SCHED.validateSchedRow_(payload.item, schedPeopleMock());
+      if (v.message) return { ok: false, error: 'bad_value', message: v.message };
+      const item = v.value;
+      const today = new Date().toISOString().slice(0, 10);
+      const row = Number(payload.row) || 0;
+      const settled = SCHED.schedSettled_(item.status);
+
+      if (!row) {
+        DB.sched.push(Object.assign({}, item, {
+          doneDate: settled ? today : '',
+          author: auth.person, createdAt: today,
+          updatedBy: auth.person, updatedAt: today,
+        }));
+        return { ok: true, added: true };
+      }
+      const i = row - 2;
+      if (i < 0 || i >= DB.sched.length) return { ok: false, error: 'not_found' };
+      const prev = DB.sched[i];
+      DB.sched[i] = Object.assign({}, item, {
+        // 手で入れた完了日は上書きしない（本番と同じ）
+        doneDate: settled ? (prev.doneDate || today) : '',
+        author: prev.author, createdAt: prev.createdAt,
+        updatedBy: auth.person, updatedAt: today,
+      });
+      return { ok: true, added: false };
+    }
+
+    case 'adminSchedDelete': {
+      const row = Number(payload.row) || 0;
+      const i = row - 2;
+      if (i < 0 || i >= DB.sched.length) return { ok: false, error: 'not_found' };
+      // 削除は変更履歴に**行の全文**を残す。これが唯一の復元手段（本番と同じ）
+      const gone = DB.sched[i];
+      // 列名は who / id。**operator / receiptId ではない**（DB.history の形に合わせる）。
+      // ここを本番側の名前で入れると、模擬の変更履歴だけ操作者が空欄に見える
+      // （2026-09-03 に同じ形の取り違えが見つかっている）
+      DB.history.unshift({ at: new Date().toISOString().slice(0, 16).replace('T', ' '),
+                           who: auth.person, id: '（スケジュール）', item: '削除',
+                           before: JSON.stringify(gone), after: '', reason: '' });
+      DB.sched.splice(i, 1);
+      return { ok: true, title: gone.title };
     }
 
     case 'adminTodos':

@@ -24,9 +24,16 @@
  *   取れなければ、**誰が・何を・いつから**やっているかを見せて止まる。
  *
  * ■ 使い方
+ *   node tools/lock.js run deploy "npm test"      鍵を取って実行し、**必ず返す**（推奨）
  *   node tools/lock.js take deploy "本番へ反映"    鍵を取る（取れなければ終了コード2）
  *   node tools/lock.js free deploy                鍵を返す
  *   node tools/lock.js check                      いま誰が何をしているか
+ *
+ *   ⚠ package.json から使うときは **run を使うこと**。
+ *   最初は `take … && 本体; free …` と書いていたが、**Windows では動かない**。
+ *   npm は Windows で cmd.exe を使い、そこでは `;` がコマンドの区切りにならず、
+ *   ただの文字になる。実際 `python test/break_all.py;` というファイルを開こうとして
+ *   失敗し、しかも `;` 以降が動かないので**鍵が取られたまま残った**（2026-09-04）。
  *
  *   鍵の種類は2つ：
  *     deploy … 本番へ上げる（push / create-version / update-deployment / deploy.js）
@@ -125,8 +132,33 @@ function check() {
   return 0;
 }
 
+/**
+ * 鍵を取って本体を実行し、**終わり方によらず必ず返す**。
+ *
+ * これが package.json から使うべき形。
+ * `take && 本体; free` は Windows で `;` が効かず、鍵が残る。
+ * ここなら finally で返すので、本体が落ちても Ctrl+C でも返る。
+ */
+function run(kind, command) {
+  if (!command) {
+    console.error('実行するコマンドがありません');
+    return 1;
+  }
+  const code = take(kind, command);
+  if (code !== 0) return code;          // 取れなかった。理由は take が出している
+  try {
+    require('child_process').execSync(command, { stdio: 'inherit', cwd: ROOT });
+    return 0;
+  } catch (e) {
+    return typeof e.status === 'number' ? e.status : 1;
+  } finally {
+    free(kind);
+  }
+}
+
 const [cmd, kind, note] = process.argv.slice(2);
-if (cmd === 'take' && KINDS.includes(kind)) process.exit(take(kind, note));
+if (cmd === 'run' && KINDS.includes(kind)) process.exit(run(kind, note));
+else if (cmd === 'take' && KINDS.includes(kind)) process.exit(take(kind, note));
 else if (cmd === 'free' && KINDS.includes(kind)) process.exit(free(kind));
 else if (cmd === 'check') process.exit(check());
 else {
