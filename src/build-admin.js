@@ -915,6 +915,7 @@ function start(){
   loadList();
   loadTodos();
   loadInbox();
+  loadSched();   // ダッシュボードに「遅れ・まもなく・動いている期間」を出すため
 }
 
 // ─────────────────────────── ダッシュボード
@@ -991,6 +992,9 @@ function bindJumps(root){
         if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
         return;
       }
+      // ダッシュボードからは**追加も編集もできない**。押すとその画面へ行くだけ（§4-8）。
+      // 入口を2つにすると、片方の直し忘れが必ず起きる
+      if (to.indexOf('tab:') === 0){ showTab(to.slice(4)); return; }
       jumpToList(to);
     });
   });
@@ -1032,20 +1036,48 @@ function renderAlerts(){
     if (r.todo.toCheckPower && r.todo.toCheckPower.length)
       todo.push(['発電機の持ち込みが未確認', r.todo.toCheckPower.length, 'power']);
     if (c.dup) todo.push(['重複の可能性', c.dup, 'dup']);
-    // 応募の状態から出るものだけでなく、人が入れた確認事項と
-    // 外から届いた問い合わせも、ここで拾う。見落としはここから起きる
+    /*
+     * 制作スケジュールの遅れ・まもなくを、ここに合流させる（§4-8）。
+     *
+     * **判定はサーバーが返した today で行う**（SCH.today）。
+     * 端末の時計がずれていると、遅れが見えない端末ができる。
+     * 自分が担当のものは、件数の後ろに添えて先に気づけるようにする。
+     */
+    var late = (SCH.rows || []).filter(schIsLate);
+    var soon = (SCH.rows || []).filter(schIsSoon);
+    var mineOf = function(list){
+      if (!SCH.me || !SCH.me.person) return 0;
+      return list.filter(function(r){
+        return (r.people || []).indexOf(SCH.me.person) >= 0;
+      }).length;
+    };
+    if (late.length){
+      var lm = mineOf(late);
+      todo.push([lm ? '遅れている作業（うち自分の担当 ' + lm + '件）' : '遅れている作業',
+                 late.length, 'tab:sched']);
+    }
+    if (soon.length){
+      var sm = mineOf(soon);
+      todo.push([sm ? 'まもなく期日（うち自分の担当 ' + sm + '件）' : 'まもなく期日',
+                 soon.length, 'tab:sched']);
+    }
+    // 確認事項は制作スケジュールへ一本化した。移行前の台帳のために、
+    // 行が残っているあいだだけ出す（setup() の移行が済めば 0 になる）
     var over = (S.todos || []).filter(function(t){
       return t.state !== '完了' && t.due && t.due < todayText();
     }).length;
-    // 行き先が無いと、同じ見た目なのに押せない行になる（2026-09-03 の検証で指摘）。
-    // どちらも同じダッシュボードの下にあるので、そこまで送る
-    if (over) todo.push(['期日を過ぎた確認事項', over, 'scroll:todoList']);
+    if (over) todo.push(['期日を過ぎた確認事項（移行前）', over, 'scroll:todoList']);
     var unreplied = ((S.inbox && S.inbox.rows) || []).filter(function(m){ return !m.replied; }).length;
     if (unreplied) todo.push(['未返信の問い合わせ', unreplied, 'scroll:inboxPanel']);
     $('#todo').innerHTML = todo.length
       ? '<h3>要対応</h3><ul>' + todo.map(function(t){
           var to = t[2];
-          var label = to.indexOf('scroll:') === 0 ? 'この下で見る →' : '一覧で見る →';
+          // 行き先で言葉を変える。**飛び先と違う言葉を書くと、押す前に誤解される**
+          // （「一覧」は出店者一覧のこと。制作スケジュールへ飛ぶのに
+          //   「一覧で見る」と書いていた）
+          var label = to.indexOf('scroll:') === 0 ? 'この下で見る →'
+            : to.indexOf('tab:') === 0 ? tabLabel(to.slice(4)) + 'で見る →'
+            : '一覧で見る →';
           return '<li><b>'+t[1]+'</b><span>'+esc(t[0])+'</span>'
                + (to ? '<a href="#" data-jump="'+esc(to)+'">'+label+'</a>' : '')
                + '</li>';
@@ -3446,7 +3478,7 @@ document.addEventListener('DOMContentLoaded', function(){
  * ここだけ古いまま残る（test/aggregate.test.js と同じ向きの検査がある）。
  */
 var SCH = { rows: [], areas: [], statuses: [], kinds: [], companies: [],
-            peopleByCompany: {}, me: {}, today: '', editing: null };
+            peopleByCompany: {}, me: {}, today: '', warnDays: 3, editing: null };
 var SCH_KEY = 'bondance.sched.filters.v1';
 var SCH_F = { done: false, mine: false, only: [] };
 
@@ -3473,8 +3505,11 @@ function loadSched(){
     SCH.rows = r.rows || [];
     SCH.areas = r.areas || []; SCH.statuses = r.statuses || []; SCH.kinds = r.kinds || [];
     SCH.companies = r.companies || []; SCH.peopleByCompany = r.peopleByCompany || {};
-    SCH.me = r.me || {}; SCH.today = r.today || '';
+    SCH.me = r.me || {}; SCH.today = r.today || ''; SCH.warnDays = r.warnDays || 3;
     renderSched();
+    renderDashTerms();
+    // 要対応にも合流させているので、集計が先に来ていれば描き直す
+    if (S.summary) renderAlerts();
   }, function(e){ toast(String(e && e.message || e), true); });
 }
 
@@ -3497,7 +3532,8 @@ function schIsSoon(r){
   if (r.kind !== 'タスク' || !r.date) return false;
   if (r.status !== '未着手' && r.status !== '停滞中') return false;
   if (r.date < SCH.today) return false;
-  return schDayDiff(SCH.today, r.date) <= 3;
+  // 何日前から出すかは設定で変えられる（§4-4）。**画面に3を直書きしない**
+  return schDayDiff(SCH.today, r.date) <= (SCH.warnDays || 3);
 }
 
 /** 日付の差（日）。どちらも yyyy-MM-dd */
@@ -3623,7 +3659,12 @@ function renderSched(){
     return SCH_F.done || !schIsDone(r);
   }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
 
-  var tb = $('#schTerms');
+  schPaintTerms($('#schTerms'), terms, true);
+}
+
+/** 期間の帯を描く。制作スケジュールとダッシュボードで**同じものを使う** */
+function schPaintTerms(tb, terms, clickable){
+  if (!tb) return;
   tb.hidden = terms.length === 0;
   tb.innerHTML = terms.map(function(r){
     var all = schDayDiff(r.date, r.endDate) + 1;
@@ -3633,12 +3674,22 @@ function renderSched(){
     var state = (SCH.today < r.date)
       ? ('開始まであと' + schDayDiff(SCH.today, r.date) + '日')
       : (left < 0 ? '終了しました' : '残り' + left + '日');
-    return '<div class="sch-term" data-sid="' + esc(r.id) + '" style="cursor:pointer">'
+    return '<div class="sch-term"' + (clickable ? ' data-sid="' + esc(r.id)
+        + '" style="cursor:pointer"' : '') + '>'
       + '<div class="n">' + esc(r.title) + '</div>'
       + '<div class="d">' + esc(schShowDate(r.date)) + '〜' + esc(schShowDate(r.endDate))
       + '　' + esc(state) + '</div>'
       + '<div class="gauge"><i style="width:' + pct + '%"></i></div></div>';
   }).join('');
+}
+
+/** ダッシュボードの帯。**いま動いているものだけ**を出す（§4-8） */
+function renderDashTerms(){
+  var now = (SCH.rows || []).filter(function(r){
+    return r.kind === '期間' && r.date && r.endDate
+        && r.date <= SCH.today && SCH.today <= r.endDate;
+  });
+  schPaintTerms($('#dashTerms'), now, false);
 
   // 隠れているものの件数。**0件ならボタン自体を出さない**
   var doneCount = SCH.rows.filter(schIsDone).length;
@@ -4215,6 +4266,9 @@ function html() {
       <div class="panel totals" id="totals" hidden></div>
       ${howto('dash')}
       <div class="asof" id="asOf"></div>
+      <!-- いま動いている期間（§4-8）。制作スケジュールの期間の行から作る。
+           ここでは**見えるだけ**で、直すのは制作スケジュールの画面 -->
+      <div class="sch-terms" id="dashTerms" hidden></div>
       <div class="todo" id="todo"></div>
       <div class="panel todos">
         <div class="todohead">

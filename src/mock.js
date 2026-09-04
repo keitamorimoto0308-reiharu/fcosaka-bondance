@@ -205,7 +205,8 @@ const DB = {
       due: '2026-08-25', author: '山田 太郎', createdAt: '2026-08-20', doneAt: '', memo: '期日を過ぎた例' },
   ],
   settings: { '締切日時': '2026-09-30 18:00', '区画総数': '50', '目標出店社数': '',
-              '要対応_経過日数': '3', '担当社員への結果通知': 'ON',
+              '要対応_経過日数': '3', 'スケジュールの警告日数': '3',
+              '担当社員への結果通知': 'ON',
               '問い合わせメール': 'fcosaka_bondance@kreha-c.com',
               // ふだんはOFF（本番の既定と同じ）。模擬で通しを試すときにONにする
               'テストデータの削除': 'OFF',
@@ -1234,6 +1235,12 @@ function handle(payload) {
         companies,
         peopleByCompany: people.byCompany,
         me: { person: auth.person, company: me ? me.org : '' },
+        // 「まもなく」と出す日数。設定から読む（本番の schedWarnDays_ と同じ倒し方で、
+        // 読めなければ3に落とす。0にすると色が一度も出なくなる）
+        warnDays: (() => {
+          const n = Number(DB.settings['スケジュールの警告日数']);
+          return (isFinite(n) && n >= 1 && n === Math.floor(n)) ? Math.min(n, 30) : 3;
+        })(),
         // 本番はサーバーの日付を返す。端末の時計を見ない（§3-1）
         today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo
       };

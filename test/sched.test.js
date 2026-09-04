@@ -144,6 +144,14 @@ function makeBox(opts) {
     // schedToday_() は today を返し、シートから来る Date はそのまま扱われる
     Date: BoxDate,
     SHEET: { SCHED: '制作スケジュール', PEOPLE: '関係者', TODO: '確認事項', HISTORY: '変更履歴' },
+    // 設定シートの読み取りの代役。本番は gas/Config.gs の configNumber
+    configNumber: (k) => {
+      if (k !== 'スケジュールの警告日数') return null;
+      const v = opts.warnDays;
+      if (v === undefined) return 3;
+      const n = Number(v);
+      return (typeof v === 'number' || typeof v === 'string') && isFinite(n) ? n : null;
+    },
     sheet_: name => {
       if (!sheets[name]) sheets[name] = makeSheet([], []);
       return sheets[name];
@@ -1337,5 +1345,74 @@ describe('① 画面の規則を、実際に呼んで確かめる（§5-4 の 5�
     const html = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
     assert.ok(html.indexOf('function schShowDate') >= 0, '曜日を付ける関数がありません');
     assert.ok(html.indexOf("'曜日'") < 0, '曜日を列として持とうとしています');
+  });
+});
+
+describe('①「まもなく」の日数は、設定から変えられる（§4-4）', () => {
+
+  test('サーバーが、警告日数を返す', () => {
+    const b = makeBox({});
+    assert.strictEqual(typeof load(b).warnDays, 'number',
+      'warnDays を返していません');
+    assert.ok(load(b).warnDays >= 1, '既定値が入っていません');
+  });
+
+  test('設定を変えると、返る値も変わる', () => {
+    const b = makeBox({ warnDays: 7 });
+    assert.strictEqual(load(b).warnDays, 7);
+  });
+
+  test('設定が空・読めないときは、既定の3にする', () => {
+    // 「空欄なら0」にすると、まもなくの色が**一度も出なくなる**
+    // （単価が空欄で0円になった件と同じ倒し方をしない）
+    for (const bad of [null, '', 'あ', 0, -5]) {
+      const b = makeBox({ warnDays: bad });
+      assert.strictEqual(load(b).warnDays, 3, JSON.stringify(bad) + ' で既定に落ちません');
+    }
+  });
+
+  test('画面の「まもなく」判定が、その日数を使う', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+    const s = html.indexOf('function schIsSoon(');
+    const e = html.indexOf('\n}\n', s) + 3;
+    const body = html.slice(s, e);
+    assert.ok(body.indexOf('SCH.warnDays') >= 0,
+      '画面が設定の日数を見ていません（3が直書きされています）: ' + body);
+  });
+});
+
+describe('① ダッシュボードへの合流（§4-8）', () => {
+
+  const ADMIN = () => fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+
+  test('要対応に、遅れとまもなくが出る', () => {
+    const h = ADMIN();
+    assert.ok(h.indexOf("'遅れている作業'") >= 0 || h.indexOf('遅れている作業') >= 0,
+      '遅れが要対応に出ていません');
+    assert.ok(h.indexOf('まもなく期日') >= 0, 'まもなくが要対応に出ていません');
+  });
+
+  test('リンクの言葉が、飛び先と合っている', () => {
+    // 「一覧」は出店者一覧のこと。制作スケジュールへ飛ぶのに「一覧で見る」と
+    // 書いていて、押す前に誤解される形だった（2026-09-04・目で見て気づいた）
+    const h = ADMIN();
+    assert.ok(h.indexOf("tabLabel(to.slice(4)) + 'で見る →'") >= 0,
+      '飛び先の名前をリンクに使っていません');
+  });
+
+  test('ダッシュボードでは、期間の帯を押しても編集できない', () => {
+    // §4-8「ダッシュボードからは追加も編集もできない」。
+    // 入口を2つにすると、片方の直し忘れが必ず起きる
+    const h = ADMIN();
+    assert.ok(h.indexOf("schPaintTerms($('#dashTerms'), now, false)") >= 0,
+      'ダッシュボードの帯が押せる形になっています');
+  });
+
+  test('帯を描く処理は、2つの画面で同じものを使っている', () => {
+    const h = ADMIN();
+    assert.strictEqual((h.match(/function schPaintTerms/g) || []).length, 1,
+      '帯を描く処理が2つあります（片方だけ直す事故が起きます）');
+    assert.ok(h.indexOf("schPaintTerms($('#schTerms')") >= 0);
+    assert.ok(h.indexOf("schPaintTerms($('#dashTerms')") >= 0);
   });
 });

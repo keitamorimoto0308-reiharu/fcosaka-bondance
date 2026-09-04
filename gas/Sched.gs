@@ -78,6 +78,23 @@ var SCHED_DETAIL_MAX = 1000;
 var SCHED_MEMO_MAX   = 500;
 var SCHED_LIST_MAX   = 20;   // 担当会社・担当者の件数の上限
 
+var SCHED_WARN_DEFAULT_ = 3;
+
+/**
+ * 「まもなく期日」と出す日数。設定シートで変えられる（§4-4）。
+ *
+ * **空欄・読めない値のときは既定の3に落とす。**
+ * 0 に倒すと「まもなく」の色が一度も出なくなる
+ * （単価が空欄で0円になり、無料で受注した件と同じ倒し方をしない）。
+ */
+function schedWarnDays_() {
+  var n = configNumber('スケジュールの警告日数');
+  if (n === null || n === undefined || !(n >= 1) || n !== Math.floor(n)) {
+    return SCHED_WARN_DEFAULT_;
+  }
+  return Math.min(n, 30);
+}
+
 /** サーバーの今日。端末の時計はずれるので、遅れの判定はこれで行う（§3-1） */
 function schedToday_() {
   return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
@@ -509,6 +526,7 @@ function adminSched_(auth) {
      * テストが auth を自分で作って company を持たせていたので気づけなかった。
      * 所属は関係者シートから引く。
      */
+    warnDays: schedWarnDays_(),
     me: { person: (auth && auth.person) || '',
           company: (auth && people.byName[auth.person]) || '' },
     today: schedToday_(),

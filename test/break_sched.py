@@ -233,11 +233,14 @@ CASES = [
     ], 'は既にあります'),
 
     # 模擬が本番より緩い／そもそも動かない形
-    ('模擬の切り出しで、改行の正規化をやめる', [
-        (M, "  const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8'));\n"
-            "  const adminSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8'));",
-            "  const src = fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8');\n"
-            "  const adminSrc = fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8');"),
+    # 正規化を「外す」だけでは落ちないことがある。gas/Admin.gs は改行が**混在**
+    # していて、CRLF のまま探しても LF だけの行にたまたま当たり、
+    # **別の場所まで含んだ大きな塊**が切り出されてしまう（それでも動く）。
+    # だから確実に壊れる形（全部 CRLF にする）で確かめる。
+    # ——「外しても落ちなかった」ので、この検査自体を作り直した（2026-09-04）
+    ('模擬の切り出しで、改行の正規化を逆にする', [
+        (M, "const norm = t => t.split('\\r\\n').join('\\n');",
+            "const norm = t => t.split('\\n').join('\\r\\n');"),
     ], 'を切り出せませんでした'),
 
     ('模擬が、行のIDを照合しない', [
@@ -331,6 +334,30 @@ CASES = [
     ('詳細のリンク化を、素の esc で済ませる', [
         (B, "linkifyDetail(r.detail, esc)", "esc(r.detail)"),
     ], '詳細の描画が linkifyDetail を通っていません'),
+
+    # ── ダッシュボードへの合流／警告日数（§4-4・§4-8）────────
+    ('警告日数を、読めないとき 0 に倒す（まもなくの色が一度も出なくなる）', [
+        (S, 'return SCHED_WARN_DEFAULT_;', 'return 0;'),
+    ], 'で既定に落ちません'),
+
+    ('画面に警告日数を直書きする（設定が効かなくなる）', [
+        (B, '  return schDayDiff(SCH.today, r.date) <= (SCH.warnDays || 3);',
+            '  return schDayDiff(SCH.today, r.date) <= 3;'),
+    ], '画面が設定の日数を見ていません'),
+
+    ('サーバーが警告日数を返さない', [
+        (S, '    warnDays: schedWarnDays_(),', ''),
+    ], 'warnDays を返していません'),
+
+    ('ダッシュボードの帯を、押して編集できるようにする', [
+        (B, "schPaintTerms($('#dashTerms'), now, false)",
+            "schPaintTerms($('#dashTerms'), now, true)"),
+    ], 'ダッシュボードの帯が押せる形になっています'),
+
+    ('リンクの言葉を、飛び先と関係なく「一覧で見る」にする', [
+        (B, "            : to.indexOf('tab:') === 0 ? tabLabel(to.slice(4)) + 'で見る →'\n",
+            ''),
+    ], '飛び先の名前をリンクに使っていません'),
 
     ('模擬の「今日」を、時差のある基準に戻す', [
         (M, "        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo",
