@@ -1058,3 +1058,118 @@ describe('① 担当会社の上限（際限なく書けない）', () => {
     assert.strictEqual(r.ok, true, JSON.stringify(r));
   });
 });
+
+describe('① 型を見る：読み取れないものは、読み取れないと返す', () => {
+
+  test('タスク名にオブジェクトを入れても「[object Object]」にしない', () => {
+    // 検証役の指摘（2026-09-04）：配列での文字数回避は塞いだのに、
+    // オブジェクトは素通りして台帳に「[object Object]」の行が残っていた
+    const b = makeBox({});
+    // ラベルは typeof で作る。String({toString:1}) は例外を投げるので、
+    // 検査のメッセージを組むところで落ちてしまう（実際に落ちた）
+    for (const bad of [{}, { toString: 1 }, [], [[]], () => 1, true, false]) {
+      const r = save(b, { row: 0, item: Object.assign({}, TASK, { title: bad }) });
+      assert.strictEqual(r.ok, false,
+        typeof bad + ' の値が通りました：' + JSON.stringify(r));
+    }
+    assert.strictEqual(load(b).rows.length, 0, '行が作られました');
+  });
+
+  test('詳細・備考も、オブジェクトなら断る', () => {
+    for (const key of ['detail', 'memo']) {
+      const b = makeBox({});
+      const item = Object.assign({}, TASK); item[key] = { a: 1 };
+      const r = save(b, { row: 0, item: item });
+      assert.strictEqual(r.ok, false, key + ' にオブジェクトが通りました');
+    }
+  });
+
+  test('文字と数は、そのまま受ける', () => {
+    const b = makeBox({});
+    const r = save(b, { row: 0, item: Object.assign({}, TASK, { title: '第1期', memo: 3 }) });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+  });
+
+  test('row が読めないときは、黙って新規追加にしない', () => {
+    // Number(payload.row) || 0 だったので、"2abc" や {} が全部「新規」になり、
+    // 画面が壊れて row を落とすたびに重複行が増えていた
+    const b = makeBox({});
+    save(b, { row: 0, item: TASK });
+    for (const bad of ['2abc', {}, [], 'あ', '２', true, 2.5, Infinity]) {
+      const r = save(b, { row: bad, id: 'x', item: TASK });
+      assert.strictEqual(r.ok, false,
+        'row=' + typeof bad + ' が通りました：' + JSON.stringify(r));
+    }
+    assert.strictEqual(load(b).rows.length, 1, '行が増えました');
+  });
+
+  test('row を省いたときだけ、新規追加になる', () => {
+    const b = makeBox({});
+    assert.strictEqual(save(b, { item: TASK }).ok, true);
+    assert.strictEqual(save(b, { row: 0, item: TASK }).ok, true);
+    assert.strictEqual(load(b).rows.length, 2);
+  });
+
+  test('payload や item が壊れていたら、そう伝える', () => {
+    // 「領域が正しくありません。」と返っていたので、読んだ人は領域欄を探しに行く
+    const b = makeBox({});
+    for (const bad of [null, 'もじ', [], 0, true]) {
+      const r = save(b, { row: 0, item: bad });
+      assert.strictEqual(r.ok, false);
+      assert.ok(!/領域/.test(r.message || ''),
+        '関係のない「領域」が理由に出ました：' + JSON.stringify(r));
+    }
+  });
+
+  test('領域を選んでいないときは、そう言う', () => {
+    const b = makeBox({});
+    const item = Object.assign({}, TASK); delete item.area;
+    const r = save(b, { row: 0, item: item });
+    assert.strictEqual(r.ok, false);
+    assert.ok(/領域をお選び/.test(r.message || ''),
+      '「正しくありません」では、何をすればよいか分かりません：' + JSON.stringify(r));
+  });
+});
+
+describe('① 日付は、日付の形のものだけ受ける', () => {
+
+  test('文字列の一部から日付を拾わない', () => {
+    // normalizeDue_ の正規表現に ^…$ が無いので、任意の文字列から
+    // 4桁の並びを拾っていた（検証役の指摘）
+    const b = makeBox({});
+    for (const bad of ['鈴木2026-09-08です', 'javascript:2026-01-01', 'x 2026-09-08']) {
+      const r = save(b, { row: 0, item: Object.assign({}, TASK, { date: bad }) });
+      assert.strictEqual(r.ok, false, bad + ' が通りました');
+    }
+  });
+
+  test('実在しない日付は断る', () => {
+    const b = makeBox({});
+    for (const bad of ['2026-02-31', '2026-04-31', '2027-02-29']) {
+      const r = save(b, { row: 0, item: Object.assign({}, TASK, { date: bad }) });
+      assert.strictEqual(r.ok, false, bad + ' が通りました');
+    }
+  });
+
+  test('うるう年の2/29は通る', () => {
+    const b = makeBox({});
+    const r = save(b, { row: 0, item: Object.assign({}, TASK, { date: '2028-02-29' }) });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+  });
+
+  test('ふつうの書き方は通る', () => {
+    for (const ok of ['2026-09-08', '2026/9/8', '9/8', '２０２６-０９-０８']) {
+      const b = makeBox({});
+      const r = save(b, { row: 0, item: Object.assign({}, TASK, { date: ok }) });
+      assert.strictEqual(r.ok, true, ok + ' が断られました：' + JSON.stringify(r));
+    }
+  });
+
+  test('マイルストーンには日付が要る', () => {
+    // 日付が空だと、どの週にも入らず画面から見えなくなる。期間は必須にしてあるのに
+    // マイルストーンだけ空で通っていた
+    const b = makeBox({});
+    const r = save(b, { row: 0, item: { kind: 'マイルストーン', area: '全体', title: '本番' } });
+    assert.strictEqual(r.ok, false, '日付のないマイルストーンが通りました');
+  });
+});

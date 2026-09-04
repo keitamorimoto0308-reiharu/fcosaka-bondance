@@ -113,6 +113,63 @@ function schedHalfWidth_(v) {
     .replace(/／/g, '/');
 }
 
+/**
+ * 文字の欄を読む。**読み取れないものは、読み取れないと返す。**
+ *
+ * `asText_` は何でも `String()` に通すので、`{}` を送ると
+ * **「[object Object]」というタスク名の行が台帳に残る**（検証役の指摘・2026-09-04）。
+ * 配列での文字数回避は塞いだのに、オブジェクトだけ素通りしていた。
+ *
+ * 受けるのは文字と数だけ。真偽値・配列・オブジェクト・関数は断る。
+ * この案件には既に「配列や文字列で送られてきたら読み取れないと返す」作法がある
+ * （`test/apply.test.js` 系）ので、それに揃える。
+ */
+function schedText_(v, label) {
+  if (v === null || v === undefined) return { value: '' };
+  var t = typeof v;
+  if (t === 'number') {
+    if (!isFinite(v)) return { message: label + 'を読み取れませんでした。' };
+    return { value: String(v) };
+  }
+  if (t !== 'string') return { message: label + 'を読み取れませんでした。' };
+  return { value: v.trim() };
+}
+
+/**
+ * 日付の欄を読む。**日付の形のものだけを受ける。**
+ *
+ * `normalizeDue_` の正規表現には `^…$` が無いので、任意の文字列から
+ * 4桁の並びを拾ってしまう（`鈴木2026-09-08です` → `2026-09-08`）。
+ * 月末の実在も見ていないので `2026-02-31` が通る。
+ * どちらも「読めないものを勝手に別の値にする」ほうで、この案件が禁じてきた形。
+ *
+ * `normalizeDue_` 自体は確認事項タブも使っているので触らず、
+ * **①の入口で厳しくする**。
+ */
+function schedParseDate_(v, label) {
+  var t = schedText_(v, label);
+  if (t.message) return t;
+  var s = schedHalfWidth_(t.value).trim();
+  if (!s) return { value: '' };
+
+  var m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (!m) {
+    var m2 = s.match(/^(\d{1,2})[-\/.](\d{1,2})$/);   // 「9/8」は今年として扱う
+    if (!m2) {
+      return { message: label + 'は「2026-09-08」の形でご入力ください。' };
+    }
+    m = [null, String(new Date().getFullYear()), m2[1], m2[2]];
+  }
+  var y = Number(m[1]), mo = Number(m[2]), da = Number(m[3]);
+  // 実在する日かを、その月の日数で確かめる（2026-02-31 を通さない）
+  var days = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28,
+              31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (mo < 1 || mo > 12 || da < 1 || da > days[mo - 1]) {
+    return { message: label + 'にその日はありません。' };
+  }
+  return { value: y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + da).slice(-2) };
+}
+
 /** カンマ区切りの欄を配列にする。空は落とす */
 function schedList_(v) {
   return asText_(v).split(',').map(function (s) { return s.trim(); })
@@ -157,46 +214,73 @@ function schedPeople_() {
  * （「単価が空欄なら0円」で無料受注が起きた件と同じ轍）。
  */
 function validateSchedRow_(item, people) {
-  item = item || {};
   people = people || { byName: Object.create(null) };
 
-  var kind = asText_(item.kind).trim() || 'タスク';
+  /*
+   * 送られたものが入れ物の形をしているか、先に見る。
+   * これを見ずに進むと、payload が null や文字列のときに
+   * **「領域が正しくありません。」**と返っていた（検証役の指摘・2026-09-04）。
+   * 読んだ人は領域欄を探しに行ってしまう。
+   */
+  if (item === null || item === undefined || typeof item !== 'object'
+      || Array.isArray(item)) {
+    return { message: '送信された内容を読み取れませんでした。'
+                    + '画面を読み込み直してから、もう一度お願いします。' };
+  }
+
+  var kindT = schedText_(item.kind, '種類');
+  if (kindT.message) return kindT;
+  var kind = kindT.value || 'タスク';
   if (SCHED_KINDS_.indexOf(kind) < 0) {
     return { message: '種類が正しくありません。' };
   }
 
-  var area = asText_(item.area).trim();
+  var areaT = schedText_(item.area, '領域');
+  if (areaT.message) return areaT;
+  var area = areaT.value;
+  // 「正しくありません」では、選び忘れなのか値が変なのか分からない
+  if (!area) return { message: '領域をお選びください。' };
   if (SCHED_AREAS_.indexOf(area) < 0) {
     return { message: '領域が正しくありません。' };
   }
 
-  // asText_ を必ず通してから長さを見る。
-  // 先に item.title.length を見ると、**配列で制限を回避できる**
-  // （検証役が実際に見つけた抜け道）。
-  var title = asText_(item.title).trim();
+  // 文字と数だけを受ける。**先に長さを見ると配列で制限を回避できる**ので、
+  // 必ず schedText_ を通してから length を見る（検証役が見つけた抜け道）
+  var titleT = schedText_(item.title, 'タスク名');
+  if (titleT.message) return titleT;
+  var title = titleT.value;
   if (!title) return { message: 'タスク名をご記入ください。' };
   if (title.length > SCHED_TITLE_MAX) {
     return { message: 'タスク名は' + SCHED_TITLE_MAX + '文字までです。' };
   }
 
-  var detail = asText_(item.detail).trim();
+  var detailT = schedText_(item.detail, '詳細');
+  if (detailT.message) return detailT;
+  var detail = detailT.value;
   if (detail.length > SCHED_DETAIL_MAX) {
     return { message: '詳細は' + SCHED_DETAIL_MAX + '文字までです。' };
   }
-  var memo = asText_(item.memo).trim();
+  var memoT = schedText_(item.memo, '備考');
+  if (memoT.message) return memoT;
+  var memo = memoT.value;
   if (memo.length > SCHED_MEMO_MAX) {
     return { message: '備考は' + SCHED_MEMO_MAX + '文字までです。' };
   }
 
-  var date = normalizeDue_(schedHalfWidth_(item.date));
+  var date = schedParseDate_(item.date, '日付');
   if (date.message) return { message: date.message };
+  // マイルストーンは「その日」を指すもの。日付が無いとどの週にも入らず、
+  // 画面から見えなくなる（期間は必須にしてあるのに、ここだけ空で通っていた）
+  if (kind === 'マイルストーン' && !date.value) {
+    return { message: 'マイルストーンには日付が必要です。' };
+  }
 
   // 終了日は**期間のときだけ**持つ。ほかの種類で送られてきたら落とす。
   // 断らずに落とすのは、画面が誤って送っても人の作業を止めないため。
   var endDate = '';
   if (kind === '期間') {
     if (!date.value) return { message: '期間には開始日が必要です。' };
-    var end = normalizeDue_(schedHalfWidth_(item.endDate));
+    var end = schedParseDate_(item.endDate, '終了日');
     if (end.message) return { message: end.message };
     if (!end.value) return { message: '期間には終了日が必要です。' };
     // 「2026-09-30」の形にそろえてあるので、文字列のまま比べられる
@@ -286,6 +370,31 @@ function schedRowObject_(values) {
       ? schedDate_(values[i]) : asText_(values[i]);
   });
   return o;
+}
+
+/**
+ * `row` を読む。**読み取れないものを、黙って「新規追加」にしない。**
+ *
+ * `Number(payload.row) || 0` と書いていたので、`"2abc"` も `{}` も `NaN` も
+ * すべて 0 に落ちて「新規」になっていた（検証役の指摘・2026-09-04）。
+ * 画面が壊れて row を落とすだけで、編集のたびに重複行が増える。
+ * 仕様書自身が「黙って既定値に落とさない」と書いている形。
+ *
+ * 小数も断る。`getRange(2.5, …)` は原因の分からない例外になる。
+ */
+function schedRowArg_(payload) {
+  var raw = payload ? payload.row : undefined;
+  if (raw === undefined || raw === null || raw === '') return { row: 0 };
+  if (typeof raw !== 'number' && typeof raw !== 'string') {
+    return { message: 'どの行かを読み取れませんでした。'
+                    + '画面を読み込み直してから、もう一度お願いします。' };
+  }
+  var n = Number(raw);
+  if (!isFinite(n) || n !== Math.floor(n) || n < 0 || String(raw).trim() === '') {
+    return { message: 'どの行かを読み取れませんでした。'
+                    + '画面を読み込み直してから、もう一度お願いします。' };
+  }
+  return { row: n };
 }
 
 /**
@@ -408,13 +517,19 @@ function adminSched_(auth) {
 
 /** 1行の追加または更新。row が無ければ追加 */
 function adminSchedSave_(auth, payload) {
-  var row = Number(payload && payload.row) || 0;   // 0 なら新規
+  var got = schedRowArg_(payload);
+  if (got.message) return { ok: false, error: 'bad_value', message: got.message };
+  var row = got.row;                                // 0 なら新規
+
   var v = validateSchedRow_(payload && payload.item, schedPeople_());
   if (v.message) return { ok: false, error: 'bad_value', message: v.message };
   var item = v.value;
 
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(LOCK_WAIT_MS)) return { ok: false, error: 'busy' };
+  if (!lock.tryLock(LOCK_WAIT_MS)) {
+    return { ok: false, error: 'busy',
+             message: 'ほかの方が保存中です。少し待ってから、もう一度お願いします。' };
+  }
   try {
     var S = schedRows_();
     var sh = S.sheet;
@@ -501,10 +616,15 @@ function adminSchedSave_(auth, payload) {
  *   画面には押す前に「元に戻すには変更履歴から手で入れ直すことになります」と出す。
  */
 function adminSchedDelete_(auth, payload) {
-  var row = Number(payload && payload.row) || 0;
+  var got = schedRowArg_(payload);
+  if (got.message) return { ok: false, error: 'bad_value', message: got.message };
+  var row = got.row;
 
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(LOCK_WAIT_MS)) return { ok: false, error: 'busy' };
+  if (!lock.tryLock(LOCK_WAIT_MS)) {
+    return { ok: false, error: 'busy',
+             message: 'ほかの方が保存中です。少し待ってから、もう一度お願いします。' };
+  }
   try {
     var sh = schedSheet_();
     // **行番号だけで消してはいけない。**他人が先に1行消していると、

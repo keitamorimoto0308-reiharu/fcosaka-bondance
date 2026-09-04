@@ -235,6 +235,44 @@ CASES = [
 
     # UTC に戻す壊し方だと、JST 09:00〜24:00 のあいだは同じ日付になり落ちない
     # （最初そう書いて、実際に落ちなかった）。必ず違う日にして、いつ流しても効くようにする
+    # ── 型を見る（2026-09-04 の検証で指摘）────────────────
+    ('文字の欄を asText_ で読む（{} が「[object Object]」になる）', [
+        (S, "  if (t !== 'string') return { message: label + 'を読み取れませんでした。' };",
+            "  if (t !== 'string') return { value: String(v) };"),
+    ], 'object の値が通りました'),
+
+    ('row を Number(...)||0 に戻す（読めない row が新規追加になる）', [
+        (S, "  if (typeof raw !== 'number' && typeof raw !== 'string') {",
+            "  if (false) {"),
+        (S, "  if (!isFinite(n) || n !== Math.floor(n) || n < 0 || String(raw).trim() === '') {",
+            "  if (false) {"),
+    ], 'が通りました'),
+
+    ('日付の前後を固定しない（文字列の一部から拾う）', [
+        (S, r"  var m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);",
+            r"  var m = s.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);"),
+    ], 'が通りました'),
+
+    ('実在しない日付の検査を外す（2026-02-31 が通る）', [
+        (S, '  if (mo < 1 || mo > 12 || da < 1 || da > days[mo - 1]) {',
+            '  if (mo < 1 || mo > 12 || da < 1 || da > 31) {'),
+    ], '2026-02-31 が通りました'),
+
+    ('マイルストーンの日付を必須にしない', [
+        (S, "  if (kind === 'マイルストーン' && !date.value) {", '  if (false) {'),
+    ], '日付のないマイルストーンが通りました'),
+
+    # 以前の書き方（item = item || {} で先へ進む）に戻すと、
+    # payload が壊れているのに「領域が…」と返る
+    ('送られた内容の形を確かめない（理由が「領域」になる）', [
+        (S, "  if (item === null || item === undefined || typeof item !== 'object'\n"
+            "      || Array.isArray(item)) {\n"
+            "    return { message: '送信された内容を読み取れませんでした。'\n"
+            "                    + '画面を読み込み直してから、もう一度お願いします。' };\n"
+            "  }",
+            '  item = item || {};'),
+    ], '関係のない「領域」が理由に出ました'),
+
     ('模擬の「今日」を、時差のある基準に戻す', [
         (M, "        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo",
             "        today: new Date(Date.now() - 86400000).toISOString().slice(0, 10),"),

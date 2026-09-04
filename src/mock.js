@@ -1245,7 +1245,11 @@ function handle(payload) {
       if (v.message) return { ok: false, error: 'bad_value', message: v.message };
       const item = v.value;
       const today = nowText().slice(0, 10);
-      const row = Number(payload.row) || 0;
+      // row の読み方も本番から借りる。Number(...)||0 だと
+      // 「読めない row が黙って新規追加になる」形が模擬にだけ残る
+      const got = SCHED.schedRowArg_(payload);
+      if (got.message) return { ok: false, error: 'bad_value', message: got.message };
+      const row = got.row;
       const settled = SCHED.schedSettled_(item.status);
 
       if (!row) {
@@ -1273,7 +1277,9 @@ function handle(payload) {
     }
 
     case 'adminSchedDelete': {
-      const found = schedFindMock(Number(payload.row) || 0, payload.id);
+      const gotDel = SCHED.schedRowArg_(payload);
+      if (gotDel.message) return { ok: false, error: 'bad_value', message: gotDel.message };
+      const found = schedFindMock(gotDel.row, payload.id);
       if (found.message) return { ok: false, error: found.error, message: found.message };
       const i = found.i;
       // 削除は変更履歴に**行の全文**を残す。これが唯一の復元手段（本番と同じ）
