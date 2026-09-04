@@ -6,7 +6,7 @@
 <!-- 万一DOMに文字列が入り込んでも、外部への通信と読み込みを止める。
      GitHub Pages ではHTTPヘッダを付けられないため meta で指定する。 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com http://localhost:4174; script-src 'unsafe-inline'; form-action 'none'; base-uri 'none'">
-<title>出展者管理 ｜ 夕照祭2026 FC大阪 秋のサステナ盆踊り</title>
+<title>出店者管理 ｜ 夕照祭2026 FC大阪 秋のサステナ盆踊り</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;500;700;900&display=swap">
@@ -154,6 +154,52 @@ h2.sec .ic{color:var(--brand-deep);width:17px;height:17px}
 .applicant-lock p{margin:0 0 10px;font-size:12.5px;line-height:1.9;color:var(--muted)}
 .applicant-lock .ghost{background:#fff}
 #apFields .editrow input,#apFields .editrow textarea{width:100%}
+/* メール文面の編集。ふだんは畳んでおく（送るのが主で、直すのはたまに） */
+.tplbox{margin:12px 0;border:1px solid #E6E2DC;border-radius:10px;background:#fff}
+.tplbox>summary{cursor:pointer;padding:10px 14px;font-weight:700;font-size:14px;
+  list-style:none;display:flex;align-items:center;gap:8px}
+.tplbox>summary::-webkit-details-marker{display:none}
+.tplbox>summary::before{content:'▸';color:#8A8178}
+.tplbox[open]>summary::before{content:'▾'}
+.tplstate{font-weight:400;font-size:12.5px;color:#8A8178}
+.tplin{padding:0 14px 14px}
+.tpll{display:block;margin:10px 0;font-size:13px;font-weight:700}
+.tpll input,.tpll textarea{display:block;width:100%;margin-top:4px;padding:8px 10px;
+  border:1px solid #D9D4CC;border-radius:8px;font-size:13.5px;font-weight:400;
+  background:#fff;box-sizing:border-box}
+.tpll textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  line-height:1.75;resize:vertical;min-height:16em}
+/* スマホでは行数が足りず、40行のメールを直せない（2026-09-04 の検証） */
+@media (max-width:600px){ .tpll textarea{min-height:22em} }
+.tplhelp{margin-top:8px}
+.tplhelp>summary{cursor:pointer;font-weight:700;color:var(--brand-deep);font-size:12.5px}
+.tplhelp dl{margin:8px 0 0;font-size:12.5px;line-height:1.7}
+.tplhelp dt{margin-top:8px}
+.tplhelp dt code{background:#F4F1EC;padding:1px 5px;border-radius:4px;
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+.tplhelp dd{margin:2px 0 0 12px;color:#6B6259}
+.tplsample{display:block;color:#8A8178;margin-top:2px}
+.tplcount{display:block;margin-top:3px;font-size:12px;font-weight:400;color:#8A8178}
+.tplcount.over{color:var(--error);font-weight:700}
+/* 未提出の社名。誰に催促するかが、その場で分かるように */
+.cardwho{margin-top:6px;font-size:11.5px;line-height:1.6;color:#8A5A3C}
+.cardwho a{color:var(--brand-deep);font-weight:700;white-space:nowrap}
+/* 欄が無い理由を出すときの見た目 */
+.dnote.off{background:#F4F1EC;padding:8px 10px;border-radius:8px}
+.tplvars{margin:8px 0;font-size:12.5px;color:#6B6259}
+.tplvars>div{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tplvar{padding:9px 12px;border:1px solid #D9D4CC;border-radius:999px;background:#FAF8F5;
+  font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;cursor:pointer;
+  min-height:40px}  /* 22pxだと隣を押す（2026-09-04 の実測） */
+.tplvar:hover{background:#F0EBE4}
+#tplErr ul,#tplWarn ul{margin:6px 0 0 18px;padding:0;line-height:1.7}
+/* 文中のボタン。押せることが分かる見た目にする（リンクのように見せる） */
+.linkish{background:none;border:0;padding:0;margin-left:6px;font:inherit;
+  color:var(--brand-deep);font-weight:700;text-decoration:underline;cursor:pointer}
+.apconfirm{margin-top:10px;padding:12px 14px;border:1px solid #E4C9A8;
+  border-radius:10px;background:#FFF8F0}
+.apconfirm p{margin:0 0 6px}
+.apconfirm ul{margin:0 0 10px 18px;padding:0;font-size:13px;line-height:1.7}
 #apEdit .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
 table.list td.wrapcell{white-space:normal;max-width:22em}
 .pform{margin-top:12px}
@@ -267,7 +313,10 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .pchecks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
 .pchecks select{padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-family:inherit}
 .pchecks input:disabled+*,.pchecks label:has(input:disabled){opacity:.5}
-.pbtns{margin-top:14px;display:flex;gap:8px}
+.pbtns{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+/* 長いエラー文に押されて、ボタンが幅20pxの縦書きに潰れていた
+   （2026-09-04 の最終確認で発見）。縮まない・折り返さないようにする */
+.pbtns>button{flex:0 0 auto;white-space:nowrap}
 .pbtns .ghost{background:transparent;border:1px solid var(--border);border-radius:6px;
   padding:8px 14px;font-family:inherit;font-size:13px;cursor:pointer}
 .perr{margin:10px 0 0;font-size:13px;color:var(--error);font-weight:700}
@@ -399,6 +448,13 @@ table.list tbody tr:hover{background:var(--brand-pale)}
 .savebar button.ghost{background:#fff;color:var(--ink);border:1px solid var(--border)}
 .savebar .msg{font-size:12.5px;color:var(--brand-deep);font-weight:700}
 .savebar .msg.err{color:var(--error)}
+/* 保存の合図。**「.msg」に見た目が付いておらず、
+   保存できたのか分からない**という指摘（2026-09-04）。
+   本文の色に埋もれない太さと色を与え、成功はチェック印を付ける */
+.msg{font-size:12.5px;font-weight:700;color:var(--brand-deep)}
+.msg.err{color:var(--error)}
+.msg.ok{color:#1F7A4D}
+.msg.ok::before{content:'✓ ';font-weight:900}
 
 /* ── マップ */
 .maplayout{display:grid;grid-template-columns:1fr 300px;gap:14px;align-items:start}
@@ -497,7 +553,23 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   .tablewrap{border:0;overflow:visible}
   table.list{white-space:normal;font-size:9pt}
   @page{size:A4 landscape;margin:10mm}
+  /* 画面でしか意味の無いものは刷らない。
+     「見かた」の帯と押せないボタンが場所を取り、
+     肝心の見出しが無い紙になっていた（2026-09-04 の検証） */
+  .howto,.pwarn,.linkish,.hint-print{display:none!important}
+  /* 何の紙なのかを、いちばん上に出す */
+  .printhead{display:block!important}
+  .printhead h1{margin:0 0 2mm;font-size:13pt}
+  .printhead p{margin:0;font-size:9pt;color:#000}
+  /* 当日ステータスは、紙では手で書き込む（押せないボタンは要らない） */
+  .daybtn{display:none!important}
+  /* 紙では電話番号を黒字に。青い下線のまま刷られていた */
+  td.tel a{color:#000!important;text-decoration:none!important}
+  td[data-l="当日ステータス"]::after{
+    content:'□未着　□搬入済　□設営完了　□撤収完了';
+    font-size:8.5pt;letter-spacing:.02em}
 }
+.printhead{display:none}
 </style>
 </head><body>
 
@@ -508,7 +580,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 <div class="gate">
   <div class="box">
     <div class="logo"><img src="assets/logo/event-logo-wide.png" alt="夕照祭2026 FC大阪 秋のサステナ盆踊り" width="1200" height="428"></div>
-    <h1>出展者管理</h1>
+    <h1>出店者管理</h1>
     <p class="sub">夕照祭2026 FC大阪 秋のサステナ盆踊り</p>
     <div class="err" id="gErr" style="display:none"></div>
 
@@ -537,7 +609,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 <!-- ── 本体 ───────────────────────────────── -->
 <div class="app">
   <header class="bar"><div class="in">
-    <span class="name">出展者管理<span>秋のサステナ盆踊り</span></span>
+    <span class="name">出店者管理<span>秋のサステナ盆踊り</span></span>
     <span class="who"><span id="who"></span><span class="role" id="role"></span>
       <button class="out" id="out">退出</button></span>
   </div></header>
@@ -550,7 +622,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <button data-tab="history" aria-selected="false">変更履歴</button>
     <button data-tab="docs" aria-selected="false">資料置き場</button>
     <button data-tab="mail" aria-selected="false" class="admin-only" hidden>メール送信</button>
-    <button data-tab="people" aria-selected="false" class="admin-only" hidden>関係者</button>
+    <button data-tab="people" aria-selected="false" class="admin-only" hidden>FC大阪の担当者</button>
     <button data-tab="settings" aria-selected="false" class="admin-only" hidden>設定</button>
   </div></nav>
 
@@ -559,7 +631,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <section class="view on" id="v-dash">
       <!-- 数を集める項目の合計。schema.js の aggregate から自動で並ぶ -->
       <div class="panel totals" id="totals" hidden></div>
-      <details class="howto"><summary>ダッシュボードの見かた</summary><dl><dt>要対応</dt><dd>手が止まっている応募です。「審査中」のまま設定した日数を過ぎたもの、連絡が返っていないものが出ます。</dd><dt>確認事項</dt><dd>チームで持ち回る宿題です。ここに書いたものは全員に見えます。</dd><dt>進捗バー</dt><dd>設定の「目標の出店社数」を分母にしています。空欄なら出ません。</dd></dl></details>
+      <details class="howto"><summary>ダッシュボードの見かた</summary><dl><dt>要対応</dt><dd>手が止まっている応募です。「審査中」のまま設定した日数を過ぎたもの、連絡が返っていないものが出ます。</dd><dt>確認事項</dt><dd>チームで持ち回る宿題です。ここに書いたものは全員に見えます。</dd><dt>いちばん上の帯</dt><dd>当日お渡しするもの（スタッフ人数・関係者パス・駐車証・チケット）の合計です。<b>まだ全社そろっていないあいだは、いま出ている分だけの合計</b>で、母数も添えて出します。</dd><dt>区画の充足</dt><dd>割り当て済みの区画数 ÷ 設定の「区画の総数」です。</dd><dt>総応募数の「／ 目標」</dt><dd>設定の「目標の出店社数」です。空欄なら出ません。</dd></dl></details>
       <div class="asof" id="asOf"></div>
       <div class="todo" id="todo"></div>
       <div class="panel todos">
@@ -610,7 +682,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- 一覧 -->
     <section class="view" id="v-list">
-      <details class="howto"><summary>出店者一覧の見かた</summary><dl><dt>ステータス</dt><dd>審査中 → 採択／不採択。<b>ここを変えても、メールは自動では飛びません。</b>採択のご連絡は「メール送信」タブから行います。</dd><dt>受付ID</dt><dd>応募を受け付けた順の通し番号です。事業者へのご連絡でも使います。</dd><dt>行を押す</dt><dd>応募内容の全項目と、これまでの変更履歴が開きます。</dd></dl></details>
+      <details class="howto"><summary>出店者一覧の見かた</summary><dl><dt>ステータス</dt><dd>審査中 → 採択／不採択。<b>ここを変えても、メールは自動では飛びません。</b>採択・不採択のご連絡は「メール送信」タブから行います。<b>このタブは管理者だけに出ます。</b>一般でお使いの方は、ステータスを変えたあと、管理者にお伝えください。</dd><dt>受付ID</dt><dd>応募を受け付けた順の通し番号です。事業者へのご連絡でも使います。</dd><dt>行を押す</dt><dd>応募内容の全項目が開きます。変更の記録は「変更履歴」タブにまとまっています。</dd><dt>表示する列</dt><dd>標準では主な列だけを出しています。「表示する列を選ぶ」で、応募フォームと出店確定情報の全項目を出せます。<b>横にスクロールします。</b></dd><dt>自分が担当</dt><dd>担当社員として登録されている方は、<b>最初からご自身の担当分だけ</b>が出ています。全社を見るときはチェックを外してください。</dd></dl></details>
       <div class="toolbar">
         <input type="search" id="fQ" placeholder="企業名・受付ID・担当者などで検索">
         <select id="fStatus"></select>
@@ -637,17 +709,20 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
       <div class="panel purge admin-only" id="purgeBox" hidden>
         <h3>テストデータの一括削除</h3>
         <p class="pnote">
-          応募・出店確定情報・区画の割当・提出物を、まとめて
-          <b>「削除済み」シートへ移します</b>（完全には消しません）。
-          公開前の掃除にお使いください。変更履歴は残します。
+          応募・出店確定情報・変更履歴・区画の割当・提出物を、まとめて
+          <b>完全に消します</b>。<b>元に戻せません。</b>
+          受付IDも SB-0001 から採り直しになります。
+          公開前の掃除にだけお使いください。<br>
+          消す直前に、台帳を丸ごと複製した控えをDriveに作ります
+          （控えを作れなかったときは、削除を行いません）。
         </p>
         <button class="ghost" id="purgeCheck">消える対象を確かめる</button>
         <div id="purgeStep2" hidden>
           <div id="purgeList"></div>
           <p class="pnote warn" id="purgeWarn"></p>
           <div class="purge-run">
-            <label>消す件数をご入力ください
-              <input id="purgeCount" inputmode="numeric" maxlength="4" placeholder="例：12"></label>
+            <label>上の一覧の件数を、そのままご入力ください
+              <input id="purgeCount" inputmode="numeric" maxlength="4"></label>
             <button class="danger" id="purgeRun">控えを取って、すべて消す</button>
           </div>
         </div>
@@ -657,14 +732,17 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- 当日運営：区画番号順・1行1社・印刷して持ち歩ける -->
     <section class="view" id="v-day">
-      <details class="howto"><summary>当日運営の見かた</summary><dl><dt>この画面</dt><dd>当日、現場で開くための一覧です。印刷にも耐える形にしてあります。</dd><dt>搬入時間</dt><dd>採択後の「出店確定情報フォーム」で事業者に書いてもらった希望です。</dd><dt>現場責任者</dt><dd>当日その場にいる方の連絡先です。応募時のご担当者とは別のことがあります。</dd></dl></details>
+      <details class="howto"><summary>当日運営の見かた</summary><dl><dt>この画面</dt><dd>当日、現場で開くための一覧です。印刷にも耐える形にしてあります。</dd><dt>当日は電波が切れます</dt><dd><b>前日までに印刷して持ってください。</b></dd><dt>搬入・撤収</dt><dd><b>主催が決めた時刻</b>です（出店者一覧で行を開くと直せます）。まだ決めていないときは、事業者からの希望を「希望 9:30〜10:00」の形で出します。</dd><dt>現場責任者・現場の携帯</dt><dd><b>当日その場にいる方</b>です。出店確定情報フォームでご記入いただいた内容で、未提出のときは「（未提出）」と出ます。携帯が未提出のときは、応募時のお電話番号を出します。</dd><dt>応募時の連絡先</dt><dd>応募フォームでご記入いただいたご担当者の番号です。会社にいらっしゃることがあるので、当日は現場の携帯を先にお使いください。</dd><dt>はじめの絞り込み</dt><dd>「区画が決まっている分だけ」に<b>最初からチェックが入っています</b>。全社を見るときは外してください。</dd></dl></details>
       <div class="toolbar">
         <span class="daycount" id="dayCount"></span>
         <label style="font-size:13px"><input type="checkbox" id="dOnlyAssigned" checked> 区画が決まっている分だけ</label>
         <label style="font-size:13px"><input type="checkbox" id="dFire"> 火気・発電機のみ</label>
         <button class="print" id="dPrint">印刷する（A4横）</button>
+        <p class="pwarn" id="dayPrintWarn" hidden></p>
       </div>
       <p class="hint-print">当日は電波が切れることがあります。前日までに印刷して持ってください。</p>
+      <!-- 紙にだけ出る見出し。画面では隠れている -->
+      <div class="printhead" id="dayPrintHead"></div>
       <div class="tablewrap">
         <table class="list day"><thead id="dayHead"></thead><tbody id="dayBody"></tbody></table>
         <div class="empty" id="dayEmpty">区画が決まっている出店者がまだいません。</div>
@@ -673,7 +751,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- マップ -->
     <section class="view" id="v-map">
-      <details class="howto"><summary>出店エリアマップの見かた</summary><dl><dt>マス目</dt><dd>1つが1区画（約2.7m×3.6m）です。数は設定の「区画の総数」で決まります。</dd><dt>割り当て</dt><dd>出店者を選んでマスを押すと決まります。2区画の事業者は、続いた2マスを使います。</dd></dl></details>
+      <details class="howto"><summary>出店エリアマップの見かた</summary><dl><dt>マス目</dt><dd>1つが1区画（約2.7m×3.6m）です。数は設定の「区画の総数」で決まります。</dd><dt>割り当て</dt><dd><b>右の「区画の割り当て」で</b>出店者を選んでから、マスを押すと決まります。2区画の事業者は、続いた2マスを使います。</dd><dt>やめるとき</dt><dd><b>右でその出店者を選ぶ</b>と、下に「この出店者の割当を解除」が出ます。割り当てていない出店者を選んでいるあいだは出ません。</dd><dt>引っ越すとき</dt><dd>いったん解除してから、新しいマスを押してください。埋まっているマスには重ねて置けません。</dd><dt>会場のどちら向きか</dt><dd>いまは<b>ただの並び</b>で、ステージ・入口・本部などは入っていません。会場図（区画図）が届いたら、<b>事務局でマップの下敷きに設定します</b>。それまでは番号の管理にお使いください。</dd></dl></details>
       <div class="maplayout">
         <div>
           <div class="mapbox" id="map"></div>
@@ -719,7 +797,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- ── 関係者（管理者のみ） ─────────────── -->
     <section class="view" id="v-people">
-      <details class="howto"><summary>関係者の見かた</summary><dl><dt>応募フォーム</dt><dd>応募フォームの「FC大阪の担当社員」プルダウンに、その方を出すか。外しても行は消えないので、いつでも戻せます。</dd><dt>管理ページ</dt><dd>この管理ページに入れるかどうか。メールアドレスの登録が要ります。</dd><dt>役割</dt><dd>管理者はメール送信・設定変更・関係者の編集ができます。一般は閲覧と、自分の担当分の更新までです。</dd><dt>通知</dt><dd><b>ON … 新しい応募がすべて届きます。</b><b>OFF … 自分が担当社員として選ばれた応募だけ届きます。</b>どちらでも、担当に選ばれた応募は必ず届きます。メールアドレスが未登録の方には届きません。</dd><dt>辞めた方</dt><dd><b>消さずに</b>「応募フォーム」と「管理ページ」の両方を外してください。消すと、過去の応募に残っている担当社員名の行き先が分からなくなります。</dd></dl></details>
+      <details class="howto"><summary>FC大阪の担当者の見かた</summary><dl><dt>応募フォーム</dt><dd>応募フォームの「FC大阪の担当社員」プルダウンに、その方を出すか。外しても行は消えないので、いつでも戻せます。</dd><dt>管理ページ</dt><dd>この管理ページに入れるかどうか。メールアドレスの登録が要ります。</dd><dt>役割</dt><dd>管理者は<b>メール送信・設定・この一覧</b>を触れます。一般はそれ以外（ステータスの変更・区画の割当・応募内容の修正）をお使いいただけます。<b>担当が誰であっても操作できます</b>が、どなたが直したかは変更履歴に残ります。</dd><dt>通知</dt><dd><b>ON … 新しい応募がすべて届きます。</b><b>OFF … 自分が担当社員として選ばれた応募だけ届きます。</b>どちらでも、担当に選ばれた応募は必ず届きます。メールアドレスが未登録の方には届きません。</dd><dt>辞めた方</dt><dd><b>消さずに</b>「応募フォーム」と「管理ページ」の両方を外してください。消すと、過去の応募に残っている担当社員名の行き先が分からなくなります。</dd></dl></details>
       <div class="toolbar">
         <span class="pcount" id="peopleCount"></span>
         <button class="print" id="pNew">新しく登録する</button>
@@ -772,7 +850,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
          Driveを直接共有すると相手にGoogleアカウントが要る。
          管理ページのパスワードだけで置けるようにする。 -->
     <section class="view" id="v-docs">
-      <details class="howto"><summary>資料置き場の見かた</summary><dl><dt>図面・議事録・その他</dt><dd>主催側の資料です。Driveの共有フォルダとつながっています。</dd><dt>出店者提出物</dt><dd>事業者から届いたロゴや写真です。<b>このフォルダは共有していません</b>（他社の素材が混ざるため）。Driveで開く必要がある方は、けいたに個別の共有をご依頼ください。</dd><dt>未提出</dt><dd>まだ1件も出していない採択先です。催促の目安に使えます。</dd><dt>削除</dt><dd>管理者のみです。ゴミ箱に入るだけなので、Driveから戻せます。</dd></dl></details>
+      <details class="howto"><summary>資料置き場の見かた</summary><dl><dt>図面・議事録・その他</dt><dd>主催側の資料です。Driveの共有フォルダとつながっています。</dd><dt>出店者提出物</dt><dd>事業者から届いたロゴや写真です。<b>このフォルダは共有していません</b>（他社の素材が混ざるため）。Driveで開く必要がある方は、事務局に個別の共有をご依頼ください（連絡先は「設定」タブの「事務局の連絡先」に出ています）。</dd><dt>未提出</dt><dd>まだ1件も出していない採択先です。催促の目安に使えます。</dd><dt>削除</dt><dd>管理者のみです。ゴミ箱に入るだけなので、Driveから戻せます。</dd></dl></details>
       <div class="panel">
         <h3>資料置き場</h3>
         <p class="pnote" id="docsIntro">読み込んでいます…</p>
@@ -794,7 +872,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
          取り消せない操作なので、対象一覧 → プレビュー → 送信 の3段にする。
          段を飛ばせないよう、次の段は前の段を通らないと出さない。 -->
     <section class="view" id="v-mail">
-      <details class="howto"><summary>メール送信の見かた</summary><dl><dt>この画面ですること</dt><dd>採択が決まった事業者に、出店決定のご案内を一斉に送ります。</dd><dt>3つの段階</dt><dd>①送る相手を確かめる → ②本文を読む → ③送る。②まではメールは飛びません。</dd><dt>送ったあと</dt><dd>取り消せません。同じ方に二度送らないよう、送信済みの方は次から対象に出ません。</dd><dt>届かなかったら</dt><dd>結果に失敗として出ます。原因（宛先違いなど）を直して、その方だけもう一度送れます。</dd></dl></details>
+      <details class="howto"><summary>メール送信の見かた</summary><dl><dt>この画面ですること</dt><dd><b>採択のご連絡</b>と<b>不採択のご連絡</b>を、一斉にお送りします。画面の上で種類をお選びください。</dd><dt>3つの段階</dt><dd>①送る相手を確かめる → ②本文を読む → ③送る。②まではメールは飛びません。</dd><dt>1通ずつ送ります</dt><dd>1社ずつ別々にお送りするので、他社のメールアドレスが相手に見えることはありません。</dd><dt>文面を直す</dt><dd>「文面を編集する」を開くと、件名と本文をここで直せます（管理者のみ）。<b>{{お名前}} のような差し込み</b>は、送るときに1社ずつの値に置き換わります。直したら必ず「本文を確認する」で、実際に届く形をご覧ください。「はじめの文面に戻す」でいつでも元に戻せます。</dd><dt>文面で断られたら</dt><dd><b>うっかり事故を防ぐために、断っている場合があります。</b><b>不採択にリンクは入れられません</b>（その方が出店確定情報フォームを開けてしまうため）。<b>採択からリンクは外せません</b>（次に何をすればよいか伝わらないため）。差し込みの綴りが違うときも断ります（そのまま送るとメールに {{名前}} と出てしまうため）。</dd><dt>不採択のご連絡</dt><dd>件名に「不採択」とは書きません（受信箱の一覧に出ないように）。<b>理由は書かず、リンクも載せません。</b>確定情報フォームのURLが未設定でも送れます。</dd><dt>送ったあと</dt><dd>取り消せません。同じ方に二度送らないよう、送信済みの方は次から対象に出ません。</dd><dt>行き違いを防ぐしくみ</dt><dd>採択のご連絡を送ったあとにステータスを不採択へ直しても、その方は<b>一斉送信の対象から自動で外れます</b>。画面に理由が出るので、お電話などで事情をお伝えください。</dd><dt>届かなかったら</dt><dd>結果に失敗として出ます。原因（宛先違いなど）を直して、その方だけもう一度送れます。宛先は「出店者一覧」で行を開き、「応募内容を修正する」から直せます。</dd></dl></details>
       <div class="panel">
         <h3>選考結果の一括送信</h3>
         <div class="mailkind">
@@ -805,6 +883,43 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         </div>
         <p class="pnote" id="mailIntro">読み込んでいます…</p>
 
+        <!-- 文面の編集（けいた指示・2026-09-03）。
+             「文面もその送信機能の範疇でそこで作って送信できるように」。
+             ただしメーラーにはしない。守るものは保存の時点でサーバーが断る
+             （不採択にリンクを入れない／採択からリンクを落とさない／
+               知らない差し込みを送らない）。 -->
+        <details class="tplbox" id="tplBox">
+          <summary>文面を編集する<span class="tplstate" id="tplState"></span></summary>
+          <div class="tplin">
+            <p class="pnote">
+              ここで直した文面が、そのまま送られます。
+              <b>差し込み</b>（{{お名前}} など）は、送るときに1社ずつの値に置き換わります。
+              下の「本文を確認する」で、実際に届く形を必ずご確認ください。
+            </p>
+            <label class="tpll">件名
+              <input id="tplSubject" maxlength="200">
+              <span class="tplcount" id="tplSubjLen" hidden></span></label>
+            <label class="tpll">本文
+              <textarea id="tplBody" rows="18" spellcheck="false"></textarea></label>
+            <div class="tplvars">
+              <b>差し込み</b>（押すと本文に入ります）
+              <div id="tplVars"></div>
+              <details class="tplhelp">
+                <summary>それぞれの意味と例を見る</summary>
+                <dl id="tplVarHelp"></dl>
+              </details>
+            </div>
+            <p class="perr" id="tplErr" hidden></p>
+            <p class="pwarn" id="tplWarn" hidden></p>
+            <div class="pbtns">
+              <button class="print" id="tplSave">この文面で保存する</button>
+              <button class="ghost" id="tplReload">編集をやめて戻す</button>
+              <button class="ghost" id="tplReset">はじめの文面に戻す</button>
+              <span class="msg" id="tplMsg"></span>
+            </div>
+          </div>
+        </details>
+
         <div id="mailWarn" hidden></div>
 
         <div class="mail-step" id="mailStep1">
@@ -814,8 +929,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
         <div class="mail-step" id="mailStep2" hidden>
           <h4>2. 本文を確認する</h4>
-          <p class="pnote">1件目の宛先に送られる、実際の文面です。
-            リンクは受付IDごとに変わります。</p>
+          <p class="pnote" id="mailPrevNote"></p>
           <div class="mail-prev">
             <div class="mp-h"><b>差出人</b><span id="mailFrom"></span></div>
             <div class="mp-h"><b>宛先</b><span id="mailTo"></span></div>
@@ -841,15 +955,18 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     </section>
 
     <section class="view" id="v-settings">
-      <details class="howto"><summary>設定の見かた</summary><dl><dt>変更したら</dt><dd>保存した内容は、募集ページ・募集要項PDF・メール本文にすぐ反映されます。</dd><dt>パスワード</dt><dd>空欄のままにすると変更しません。変えると、いま入っている方も次回から新しいパスワードが要ります。</dd><dt>各項目</dt><dd>入力欄の下に、それぞれ何に使う値かを書いています。</dd></dl></details>
+      <details class="howto"><summary>設定の見かた</summary><dl><dt>変更したら</dt><dd>保存した内容は、<b>募集ページ・応募フォーム・メール本文</b>にすぐ反映されます。</dd><dt>募集要項PDF（紙）</dt><dd><b>自動では変わりません。</b>金額を変えると、紙を刷り直すまでフォームと紙で違う金額が出ます。食い違っているあいだは、レンタル備品の表の上に警告が出ます。</dd><dt>レンタル備品</dt><dd>この画面の一番上の表で、品目・単価・上限をそのまま直せます。スプレッドシートを開く必要はありません。単価を空欄にすると「調整中」になり、その品目は応募フォームに出ません。</dd><dt>テストデータの一括削除</dt><dd>ONにすると、「出店者一覧」タブの下に削除の入口が出ます。<b>応募・確定情報・変更履歴を完全に消します（元に戻せません）。</b>公開前の掃除にだけお使いください。実行すると自動でOFFに戻ります。</dd><dt>パスワード</dt><dd>空欄のままにすると変更しません。変えると、いま入っている方も次回から新しいパスワードが要ります。</dd><dt>各項目</dt><dd>入力欄の下に、それぞれ何に使う値かを書いています。</dd></dl></details>
 
       <!-- レンタル品目。単価はお金の話なので管理者のみ。
            **紙面（募集要項PDF）とのずれを、必ずここに出す** -->
       <div class="panel rental">
         <h3>レンタル備品の品目と単価</h3>
         <p class="pnote">
-          ここを直すと、<b>応募フォームの選択肢と金額がすぐ変わります</b>。
-          単価を空欄にすると「調整中」と表示され、その品目は選べなくなります。
+          ここを直すと、<b>応募フォームの選択肢と金額がその場で変わります</b>。
+          単価を空欄にすると「調整中」と表示され、その品目は選べなくなります。<br>
+          ただし<b>募集要項PDF（印刷物）は自動では変わりません</b>。
+          金額を変えると、PDFを刷り直すまでフォームと紙で違う金額を出すことになるので、
+          下に警告を出します。
         </p>
         <div id="rentalPaper"></div>
         <div id="rentalList">読み込んでいます…</div>
@@ -863,7 +980,8 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
           <div class="pgrid">
             <label>品目名<span class="req">必須</span>
               <input id="rName" maxlength="60" placeholder="例：長机（1800×450）"></label>
-            <label>種別<span class="req">必須</span><select id="rKind"></select></label>
+            <label>種別<span class="req">必須</span><select id="rKind"></select>
+              <span class="hint" id="rKindNote" hidden></span></label>
             <label>単価（円・税込）
               <input id="rPrice" inputmode="numeric" maxlength="7" placeholder="空欄なら調整中">
             </label>
@@ -917,18 +1035,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         </div>
       </div>
 
-      <div class="panel">
-        <h3>レンタル品目の単価</h3>
-        <p class="pnote" style="margin-top:0">
-          レンタル備品の品目と単価は、台帳の<b>「レンタル品目」シート</b>で管理しています。
-          行を足すと応募フォームの欄が増えます。
-          単価が空欄・0円のあいだは、その品目はフォームに出ません。
-        </p>
-        <p class="pnote">
-          品目を足したときは、<b>募集要項PDFの料金表も直す必要があります</b>。
-          紙とフォームで違うことを言わないよう、食い違ったままではPDFを作れない仕組みにしています。
-        </p>
-      </div>
+
     </section>
   </main>
 </div>
@@ -967,6 +1074,20 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
              お電話などで訂正のご連絡をいただいた場合にかぎり、こちらで直せます。
              変更すると、変更前の内容とあわせて変更履歴に残ります。</p>
           <button class="ghost" id="apUnlock">応募内容を修正する</button>
+          <!-- 2段階目。ダイアログではなく画面の中に出す
+               （ブラウザでダイアログを止められると、押しても何も起きなくなるため） -->
+          <div class="apconfirm" id="apConfirm" hidden>
+            <p><b>ここから先は、事業者さまが申告された内容の修正です。</b></p>
+            <ul>
+              <li>お電話などで訂正のご連絡をいただいた場合にかぎってください</li>
+              <li>変更前の内容とあわせて、変更履歴に残ります</li>
+              <li>選択式の項目は、事業者さまご本人に直していただいてください</li>
+            </ul>
+            <div class="pbtns">
+              <button class="danger" id="apYes">了解しました。修正に進む</button>
+              <button class="ghost" id="apNo">やめる</button>
+            </div>
+          </div>
         </div>
         <div id="apEdit" hidden>
           <div id="apFields"></div>
@@ -996,6 +1117,10 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 'use strict';
 var GAS_URL = "https://script.google.com/macros/s/AKfycbwWrbDS3BxTNj5qQiYCFjsiA19lF4oVQrFByzApAK61S9EzWmCUy7tckvvTySXTW-MMMQ/exec";
 var KEY = 'bondance.admin.session';
+// 紙の見出しに使う。src/content.js が正（ここに書き写さない）
+var EV_NAME  = "夕照祭2026 FC大阪 秋のサステナ盆踊り";
+var EV_DATE  = "2026年10月24日（土）";
+var EV_VENUE = "東大阪市花園ラグビー場（場外エリア）";
 var S = { token:'', person:'', role:'', pw:'', names:[], list:null, spaces:null, pick:null, sort:{col:'受付ID',dir:1} };
 
 var $  = function (s, r) { return (r || document).querySelector(s); };
@@ -1042,6 +1167,19 @@ function toast(msg, isErr){
  * Content-Type を text/plain にしているのは、プリフライトを起こさないため
  * （GASはOPTIONSに応答できない）。応募フォームと同じ作法。
  */
+/** 入室が切れたときの合図。呼び出し側は、これなら何も言わない */
+var SESSION_ENDED = '__session_ended__';
+
+/**
+ * 通信に失敗したときの言い方。
+ * 入室切れは api() が入室画面で説明済みなので、ここでは黙る。
+ * それ以外は、何をしようとして失敗したのかを日本語で言う。
+ */
+function netFail(e, what){
+  if (e && e.message === SESSION_ENDED) return;
+  toast(what + '（通信に失敗しました）', true);
+}
+
 function api(action, body){
   if (!GAS_URL) return Promise.reject(new Error('接続先が設定されていません（表示確認用のページです）'));
   var payload = Object.assign({ action: action, token: S.token }, body || {});
@@ -1053,9 +1191,15 @@ function api(action, body){
   }).then(function(r){ return r.json(); }).then(function(j){
     busy(false);
     if (j && j.error === 'unauthorized') {
-      // なぜ切れたのかはサーバーしか知らない。そのまま伝える
-      signOut(j.message || 'セッションが切れました。もう一度お入りください。');
-      throw new Error('unauthorized');
+      // なぜ切れたのかはサーバーしか知らない。そのまま伝える。
+      // 入室画面に文言を出したうえで、**呼び出し側には黙っていてもらう**印を投げる。
+      // 以前は 'unauthorized' をそのまま投げていたので、
+      // 入室画面の上に「割り当てできませんでした: unauthorized」という
+      // 読めない英語が重なっていた（2026-09-03 の検証で指摘）
+      signOut(j.message
+        || '入室の時間が切れました。いま入力した内容は保存されていません。'
+         + 'もう一度パスワードを入れてお入りください。');
+      throw new Error(SESSION_ENDED);
     }
     return j;
   }, function(e){ busy(false); throw e; });
@@ -1140,6 +1284,13 @@ function recallPassword(){
 
 function signOut(msg){
   try { localStorage.removeItem(KEY); } catch(e){}
+  // **開いている引き出しを閉じてから**入室画面を出す。
+  // 閉じないと、入室画面の後ろに事業者さまの氏名・メール・電話が見えたまま残る
+  // （2026-09-03 の検証で指摘）
+  try {
+    var dw = document.querySelector('.drawer');
+    if (dw) dw.classList.remove('on');
+  } catch(e2){}
   S.token=''; S.person=''; S.role='';
   $('.app').classList.remove('on');
   $('.gate').style.display='';
@@ -1180,21 +1331,72 @@ function renderTotals(totals){
   if (!box) return;
   if (!totals.length){ box.innerHTML = ''; box.hidden = true; return; }
   box.hidden = false;
+  // **大きい数字だけを見て「これが当日の必要数だ」と読まれる**のがいちばん困る。
+  // 実際は「いま出ている分の合計」で、未提出があればまだ増える。
+  // 数字の下に、母数と「まだ増える」ことを必ず書く（2026-09-03 の検証で指摘）
+  var anyPartial = totals.some(function(t){ return t.missing; });
+  // 母数が0のときに「全社そろっています」と出ると嘘になる。
+  // 一括削除の直後に必ず見える（2026-09-04 の最終確認で指摘）
+  var anyRow = totals.some(function(t){ return (t.filled + t.missing) > 0; });
   box.innerHTML = '<h3>当日お渡しするもの・人数</h3>'
+    + (!anyRow
+        ? '<p class="pnote">まだ採択した出店者がいないため、数はありません。</p>'
+        : anyPartial
+        ? '<p class="pnote warn">まだ全社そろっていません。'
+          + '下の数は<b>いま出ている分だけの合計</b>で、未提出の分が届くと増えます。</p>'
+        : '<p class="pnote">全社そろっています。下の数がそのまま当日の必要数です。</p>')
     + '<div class="cards">' + totals.map(function(t){
+        var total = t.filled + t.missing;
         var note = t.missing
-          ? t.filled + '社ぶん（未提出 ' + t.missing + '社）'
-          : t.filled + '社ぶん';
+          ? total + '社中 ' + t.filled + '社ぶん（確定情報が未提出 ' + t.missing + '社）'
+          : (total ? total + '社ぶん（全社そろいました）' : '対象がまだありません');
+        // **誰が未提出なのか辿れない**、という指摘（2026-09-04）。
+        // 5手順かけて自力で調べることになっていた
+        var who = (t.missingNames || []).length
+          ? '<div class="cardwho">未提出：' + t.missingNames.map(esc).join('／')
+            + (t.missingMore ? ' ほか' + t.missingMore + '社' : '')
+            + ' <a href="#" data-jump="status:採択">一覧で見る →</a></div>'
+          : '';
         return '<div class="card' + (t.missing ? ' partial' : '') + '">'
           + '<div class="k">' + esc(t.label) + '</div>'
           + '<div class="v">' + Number(t.sum).toLocaleString('ja-JP')
           + (t.unit ? '<small>' + esc(t.unit) + '</small>' : '')
-          + '</div><div class="sub">' + esc(note) + '</div></div>';
+          + '</div><div class="sub">' + esc(note) + '</div>' + who + '</div>';
       }).join('') + '</div>';
+  bindJumps('#totals');
+}
+
+/**
+ * 「一覧で見る →」の結線。
+ *
+ * **要対応の中にしか結線していなかった**ので、
+ * ダッシュボードの「未提出：◯◯／◯◯ 一覧で見る →」は
+ * 押しても何も起きなかった（2026-09-04 の最終確認で発見）。
+ * リンクを足した人が結線を忘れる形だったので、関数にして呼ぶだけにする。
+ */
+function bindJumps(root){
+  $$(root + ' a[data-jump]').forEach(function(a){
+    if (a.getAttribute('data-bound')) return;
+    a.setAttribute('data-bound', '1');
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      var to = a.getAttribute('data-jump');
+      if (to.indexOf('scroll:') === 0){
+        var el = document.getElementById(to.slice(7));
+        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+        return;
+      }
+      jumpToList(to);
+    });
+  });
 }
 
 function bars(obj, order){
   var keys = order || Object.keys(obj);
+  // 空のまま返すと、見出しだけの**白い箱**になる。
+  // 読み込み中なのか、壊れているのか、まだ無いのかが分からない
+  //（2026-09-03 の検証で指摘）
+  if (!keys.length) return '<p class="none">まだ該当する応募はありません。</p>';
   var max = 0;
   keys.forEach(function(k){ max = Math.max(max, obj[k] || 0); });
   return '<div class="rows2">' + keys.map(function(k){
@@ -1230,23 +1432,22 @@ function renderAlerts(){
     var over = (S.todos || []).filter(function(t){
       return t.state !== '完了' && t.due && t.due < todayText();
     }).length;
-    if (over) todo.push(['期日を過ぎた確認事項', over, '']);
+    // 行き先が無いと、同じ見た目なのに押せない行になる（2026-09-03 の検証で指摘）。
+    // どちらも同じダッシュボードの下にあるので、そこまで送る
+    if (over) todo.push(['期日を過ぎた確認事項', over, 'scroll:todoList']);
     var unreplied = ((S.inbox && S.inbox.rows) || []).filter(function(m){ return !m.replied; }).length;
-    if (unreplied) todo.push(['未返信の問い合わせ', unreplied, '']);
+    if (unreplied) todo.push(['未返信の問い合わせ', unreplied, 'scroll:inboxPanel']);
     $('#todo').innerHTML = todo.length
       ? '<h3>要対応</h3><ul>' + todo.map(function(t){
+          var to = t[2];
+          var label = to.indexOf('scroll:') === 0 ? 'この下で見る →' : '一覧で見る →';
           return '<li><b>'+t[1]+'</b><span>'+esc(t[0])+'</span>'
-               + (t[2] ? '<a href="#" data-jump="'+esc(t[2])+'">一覧で見る →</a>' : '')
+               + (to ? '<a href="#" data-jump="'+esc(to)+'">'+label+'</a>' : '')
                + '</li>';
         }).join('') + '</ul>'
       : '<h3>要対応</h3><p class="none">いま対応が必要なものはありません。</p>';
     $('#todo').classList.toggle('clear', !todo.length);
-    $$('#todo a[data-jump]').forEach(function(a){
-      a.addEventListener('click', function(ev){
-        ev.preventDefault();
-        jumpToList(a.getAttribute('data-jump'));
-      });
-    });
+    bindJumps('#todo');
 }
 
 function loadSummary(){
@@ -1267,7 +1468,9 @@ function loadSummary(){
       ['総応募数', c.total, c.goal ? '／ 目標 ' + c.goal : '', 'dark'],
       ['締切まで', r.daysLeft == null ? '—' : r.daysLeft, r.daysLeft == null ? '' : '日', 'dark'],
       ['区画の充足', r.spaces.rate + '%', r.spaces.assigned + ' / ' + r.spaces.total + ' 区画'],
-      ['備品の概算', r.pricesKnown ? yen(r.revenue) : '調整中', r.pricesKnown ? '' : '単価未設定'],
+      // 「概算」だけでは、もらうお金か払うお金か分からなかった
+      ['備品レンタルの売上見込み', r.pricesKnown ? yen(r.revenue) : '調整中',
+       r.pricesKnown ? '応募内容から自動計算' : '単価未設定'],
       ['消費電力の合計', Number(c.powerWatt||0).toLocaleString('ja-JP'), 'W' + (c.powerUnknown ? '（不明 '+c.powerUnknown+'件）' : '')],
     ].map(function(x){
       return '<div class="card '+(x[3]||'')+'"><div class="k">'+esc(x[0])+'</div>'
@@ -1298,7 +1501,7 @@ function loadSummary(){
                + '<span class="pill '+esc(x.status)+'">'+esc(x.status||'未確認')+'</span></div>';
         }).join('')
       : '<p class="none" style="color:var(--muted);font-size:13px;margin:0">まだ応募はありません。</p>';
-  }, function(e){ toast('集計を取得できませんでした: ' + e.message, true); });
+  }, function(e){ netFail(e, 'ダッシュボードを読み込めませんでした'); });
 }
 
 // ─────────────────────────── 一覧
@@ -1318,7 +1521,7 @@ function loadList(){
     if (S.role === '管理者') loadPurgeBox();
     renderList();
     renderDay();
-  }, function(e){ toast('一覧を取得できませんでした: ' + e.message, true); });
+  }, function(e){ netFail(e, '出店者一覧を読み込めませんでした'); });
 }
 
 /** 絞り込みの選択肢を、いま来ている応募から作る */
@@ -1442,15 +1645,30 @@ function renderColumnPicker(){
  *   ② 件数を打ち込む（惰性で押せないように）
  *   ③ 実行。**下見のときと対象が変わっていたらサーバーが断る**
  */
-var PURGE = { ids: null };
+// 「確かめる」を押した瞬間の控え。**書き換えてよいのは purgeCheck だけ**。
+// 一覧の再読み込みで黙って差し替えると、人が見ている一覧は古いまま
+// 送る対象だけが新しくなる（2026-09-03 の検証で見つかった穴）。
+// ticket は、その集合に対してサーバーが出した引換券
+var PURGE = { ids: null, ticket: '' };
 
 function loadPurgeBox(){
-  // 設定でONのときだけ入口が開く。OFFなら箱ごと出さない
+  // 設定でONのときだけ入口が開く。OFFなら箱ごと出さない。
+  // **ここでは PURGE を触らない**。入口の開け閉めだけが仕事
   api('adminPurgePreview').then(function(r){
     var on = !!(r && r.ok);
     $('#purgeBox').hidden = !on || S.role !== '管理者';
-    if (on) PURGE.ids = r.ids || [];
+    if (!on) purgeForget('');
   }, function(){ $('#purgeBox').hidden = true; });
+}
+
+/** 控えを捨てて、②の欄を閉じる。もう一度①からやり直しになる */
+function purgeForget(msg){
+  PURGE.ids = null;
+  PURGE.ticket = '';
+  var box = $('#purgeStep2');
+  if (box) box.hidden = true;
+  var m = $('#purgeMsg');
+  if (m && msg){ m.className = 'msg err'; m.textContent = msg; }
 }
 
 function purgeCheck(){
@@ -1463,15 +1681,20 @@ function purgeCheck(){
       return;
     }
     PURGE.ids = r.ids || [];
+    PURGE.ticket = r.ticket || '';
     var items = r.items || [];
     $('#purgeList').innerHTML = '<div class="purge-list"><table>' + items.map(function(x){
       return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.company)
            + '</td><td>' + esc(x.status) + '</td><td>' + esc(x.at) + '</td></tr>';
     }).join('') + '</table></div>';
-    $('#purgeWarn').textContent = 'この ' + items.length + ' 件を「削除済み」シートへ移します。'
-      + '出店確定情報・区画の割当・提出物のフォルダも一緒に片づきます。'
-      + (r.tooMany ? '（一度に移せるのは ' + r.max + ' 件までです）' : '');
+    $('#purgeWarn').textContent = 'この ' + items.length + ' 件を完全に消します（元に戻せません）。'
+      + '出店確定情報・変更履歴・区画の割当・提出物のフォルダも一緒に消えます。'
+      + '消す直前に、台帳を丸ごと複製した控えをDriveに作ります。'
+      + (r.ticketMin ? '（確かめてから' + r.ticketMin + '分を過ぎると、やり直しになります）' : '')
+      + (r.tooMany ? '（一度に消せるのは ' + r.max + ' 件までです）' : '');
     $('#purgeCount').value = '';
+    // ひな型は**実際の件数**にする。関係のない数を例に出すと、それを打ってしまう
+    $('#purgeCount').placeholder = String(items.length);
     $('#purgeStep2').hidden = false;
   }, function(){ toast('確かめられませんでした', true); });
 }
@@ -1488,15 +1711,19 @@ function purgeRun(){
     $('#purgeMsg').textContent = '件数が違います。' + PURGE.ids.length + ' とご入力ください。';
     return;
   }
-  if (!confirm(PURGE.ids.length + ' 件を「削除済み」シートへ移します。'
+  if (!confirm(PURGE.ids.length + ' 件を完全に消します。変更履歴も残りません。'
       + String.fromCharCode(10) + 'よろしいですか。')) return;
 
   $('#purgeRun').disabled = true;
   $('#purgeMsg').className = 'msg';
-  $('#purgeMsg').textContent = '移しています…';
-  api('adminPurgeRun', { ids: PURGE.ids, count: n }).then(function(r){
+  $('#purgeMsg').textContent = '消しています…';
+  api('adminPurgeRun', { ids: PURGE.ids, count: n, ticket: PURGE.ticket }).then(function(r){
     $('#purgeRun').disabled = false;
     if (!r || !r.ok){
+      // 対象が変わった／券が古い、はやり直してもらうしかない。
+      // 控えを持ったままだと、同じボタンをもう一度押せてしまう
+      var redo = { changed:1, stale_ticket:1, no_ticket:1, bad_ticket:1, expired_ticket:1 };
+      if (r && redo[r.error]){ purgeForget(r.message); return; }
       $('#purgeMsg').className = 'msg err';
       $('#purgeMsg').textContent = (r && r.message) || '消せませんでした。';
       return;
@@ -1511,8 +1738,7 @@ function purgeRun(){
          ? '<br>控え：<a href="' + esc(r.backupUrl) + '" target="_blank" rel="noopener">'
            + 'Driveで開く</a>（ご確認のうえ、不要になったら捨ててください）'
          : '');
-    $('#purgeStep2').hidden = true;
-    PURGE.ids = null;
+    purgeForget('');
     loadList();
     loadPurgeBox();
   }, function(){
@@ -1635,7 +1861,7 @@ function openDetail(id){
     $('#dSave').setAttribute('data-id', id);
     $('#dMsg').textContent = '';
     $('.drawer').classList.add('on');
-  }, function(e){ toast('詳細を取得できませんでした: ' + e.message, true); });
+  }, function(e){ netFail(e, 'この出店者の詳細を読み込めませんでした'); });
 }
 
 /**
@@ -1690,13 +1916,24 @@ function renderConfirmBlock(cf, status){
 function renderCountEntry(fields, cf, id){
   var box = $('#dCounts');
   if (!box) return;
-  if (!fields.length || S.role !== '管理者'){ box.innerHTML = ''; return; }
+  if (!fields.length){ box.innerHTML = ''; return; }
+  // **黙って消さない。** 欄が無い理由をその場に出す。
+  // 一般で開くと欄ごと消えるので「自分の画面が壊れた」と思われた
+  //（2026-09-04 の検証で指摘）
+  if (S.role !== '管理者'){
+    box.innerHTML = '<h4 class="dsec">枚数・人数の打ち込み</h4>'
+      + '<p class="dnote off">この入力は<b>管理者のみ</b>です。'
+      + 'お電話で伺った数がある場合は、管理者にお伝えください。</p>';
+    return;
+  }
 
   var vals = (cf && cf.values) || {};
   box.innerHTML = '<h4 class="dsec">枚数・人数の打ち込み'
     + '<span class="dcount">管理者のみ</span></h4>'
     + '<p class="dnote">お電話などで伺った数を、ここに入れられます。'
-    + '入れた数はダッシュボードの合計に入り、変更履歴に残ります。</p>'
+    + '<b>上の「採択後にいただいた情報」を、この数で置き換えます</b>'
+    + '（足し算ではありません）。空欄のままなら、事業者さまの申告どおりです。'
+    + 'いつ誰が変えたかは変更履歴に残ります。</p>'
     + '<div class="pgrid">' + fields.map(function(f){
         var v = vals[f.sheet] == null ? '' : vals[f.sheet];
         return '<label>' + esc(f.label)
@@ -1717,12 +1954,25 @@ function renderCountEntry(fields, cf, id){
       $('#cntSave').disabled = false;
       if (!r || !r.ok){
         $('#cntMsg').className = 'msg err';
+        // どの項目がなぜ断られたかを、項目名で出す。
+        // 以前は黙って読み飛ばして「変更はありません」とだけ出していたので、
+        // **電話で聞いた数が消えた**（2026-09-03 の検証で指摘）
         $('#cntMsg').textContent = (r && r.message) || '保存できませんでした。';
         return;
       }
-      $('#cntMsg').textContent = r.changed ? '保存しました（' + r.changed + '件）'
-                                           : '変更はありません';
+      var said = r.changed
+        ? r.changed + '件を保存しました（上の表示にも反映されます）'
+        : '打ち込んだ数は、いまの内容と同じでした（変更なし）';
       loadSummary();     // ダッシュボードの合計にすぐ効かせる
+      openDetail(id);    // 上の「採択後にいただいた情報」を、いまの値にする
+      // **openDetail が引き出しを作り直すので、先に書いたメッセージは消える。**
+      // 作り直したあとに、もう一度出す（2026-09-04 の検証で指摘）。
+      // 画面の隅の小さな文字だけでは見落とすので、トーストも出す
+      setTimeout(function(){
+        var m = $('#cntMsg');
+        if (m){ m.className = 'msg ok'; m.textContent = said; }
+      }, 400);
+      toast(said);
     }, function(){
       $('#cntSave').disabled = false;
       $('#cntMsg').className = 'msg err';
@@ -1802,7 +2052,16 @@ var DAY_COLS = [
   ['区画',   function(x){ return x['割当開始区画'] || ''; }, 'sp'],
   ['出店名', function(x){ return x['出店名'] || x['企業名'] || ''; }, 'head'],
   ['企業名', function(x){ return x['企業名'] || ''; }, ''],
-  ['連絡先', function(x){ return x['担当者電話'] || ''; }, 'tel'],
+  // **当日その場にいる人**の番号を先に出す（けいた指示・2026-09-03）。
+  // 応募時のご担当者は会社にいることがあり、現場では通じない。
+  // 当日は電波が切れるので、印刷する表に載っている必要がある
+  ['現場責任者', function(x){
+      return x['確定：現場責任者'] || '（未提出）';
+    }, ''],
+  ['現場の携帯', function(x){
+      return x['確定：現場責任者携帯'] || x['担当者電話'] || '';
+    }, 'tel'],
+  ['応募時の連絡先', function(x){ return x['担当者電話'] || ''; }, 'tel'],
   ['テント', function(x){
       var t = x['テント'] || '';
       if (t.indexOf('レンタル') >= 0) return 'レンタル ' + (String(x['テントサイズ']).indexOf('3間') >= 0 ? '大' : '小');
@@ -1815,8 +2074,17 @@ var DAY_COLS = [
       if (p.indexOf('レンタル') >= 0) return 'レンタル' + (w ? '（' + w + 'W）' : '');
       return p;
     }, ''],
-  ['搬入',   function(x){ return x['搬入予定時刻'] || ''; }, ''],
-  ['撤収',   function(x){ return x['撤収予定時刻'] || ''; }, ''],
+  // 主催が決めた時刻が先。決まっていなければ、事業者の希望を「希望」と付けて出す。
+  // 空欄のままだと、現場では「聞いていない」のか「未定」なのか分からない
+  ['搬入',   function(x){
+      if (x['搬入予定時刻']) return x['搬入予定時刻'];
+      var w = x['確定：搬入希望1'];
+      return w ? '希望 ' + w : '';
+    }, ''],
+  ['撤収',   function(x){
+      if (x['撤収予定時刻']) return x['撤収予定時刻'];
+      return x['確定：早期撤収希望'] ? '早期希望' : '';
+    }, ''],
 ];
 
 /** 発電機の持ち込みは、消防・騒音・配置の確認対象として目立たせる */
@@ -1846,9 +2114,19 @@ function renderDay(){
   // 8:30から動く人が一番知りたいのは「まだ来ていないのが何社か」
   var n = { 未着:0, 搬入済:0, 設営完了:0, 撤収完了:0 };
   rows.forEach(function(x){ n[x['当日ステータス'] || '未着'] = (n[x['当日ステータス'] || '未着'] || 0) + 1; });
-  $('#dayCount').innerHTML = '未着 <b class="warn">' + n['未着'] + '</b>／'
+  // **絞り込んだあとの数だけ**を出していたので、
+  // 「全1社」と読めて、印刷して持って行くと1社ぶんしかなかった
+  //（2026-09-03 の検証で指摘）。絞る前の数も添える
+  var allDay = S.list.rows.filter(function(x){
+    return ['不採択','辞退','キャンセル','重複（無効）'].indexOf(x['ステータス']) < 0;
+  }).length;
+  $('#dayCount').innerHTML = '未着（まだ来場していない） <b class="warn">' + n['未着'] + '</b>／'
     + '搬入済 <b>' + n['搬入済'] + '</b>／設営完了 <b>' + n['設営完了'] + '</b>'
-    + '／撤収完了 <b>' + n['撤収完了'] + '</b>　全 ' + rows.length + ' 社';
+    + '／撤収完了 <b>' + n['撤収完了'] + '</b>　'
+    + (rows.length === allDay
+        ? '全 ' + allDay + ' 社'
+        : '<b class="warn">' + allDay + ' 社のうち ' + rows.length + ' 社を表示中</b>'
+          + '（絞り込みが効いています）');
 
   $('#dayHead').innerHTML = '<tr>'
     + DAY_COLS.map(function(c){ return '<th>' + esc(c[0]) + '</th>'; }).join('')
@@ -1875,6 +2153,39 @@ function renderDay(){
   }).join('');
 
   $('#dayEmpty').style.display = rows.length ? 'none' : '';
+
+  // 紙の見出し。何の紙なのかが書いていなかった（2026-09-04 の検証）。
+  // 現場のスタッフに配ると「これ何の紙？」と聞かれる
+  var ph = $('#dayPrintHead');
+  if (ph){
+    ph.innerHTML = '<h1>' + esc(EV_NAME) + '｜当日運営名簿'
+      + '（' + rows.length + '社'
+      + (rows.length === allDay ? '' : ' ／ 全 ' + allDay + '社') + '）</h1>'
+      + '<p>' + esc(EV_DATE) + '　' + esc(EV_VENUE) + '</p>'
+      + '<p>印刷日 ' + todayText() + '</p>';
+  }
+
+  // 「印刷する」の隣で、いま何社ぶんが刷られるのかを言う。
+  // 絞り込みに気づかず1社だけの名簿を現場に持って行きかけた、という指摘
+  var pw = $('#dayPrintWarn');
+  if (pw){
+    if (rows.length === allDay){
+      pw.hidden = true;
+    } else {
+      pw.hidden = false;
+      pw.innerHTML = '<b>印刷もこの ' + rows.length + ' 社だけ</b>になります'
+        + '（全 ' + allDay + ' 社）。'
+        + '<button type="button" class="linkish" id="dayShowAll">'
+        + '絞り込みを外して全 ' + allDay + ' 社にする</button>';
+      var sa = $('#dayShowAll');
+      if (sa) sa.addEventListener('click', function(){
+        $('#dOnlyAssigned').checked = false;
+        $('#dFire').checked = false;
+        renderDay();
+      });
+    }
+  }
+
 
   // 押した瞬間に保存する。プルダウン＋保存ボタンでは50社は回らない
   $$('#dayBody .daybtn button').forEach(function(b){
@@ -1922,7 +2233,7 @@ function loadSpaces(){
         return '<option value="'+esc(id)+'">'+esc(id)+'　'+esc(o.name)+mark+'</option>';
       }).join('');
     renderMap();
-  }, function(e){ toast('区画を取得できませんでした: ' + e.message, true); });
+  }, function(e){ netFail(e, '区画マップを読み込めませんでした'); });
 }
 
 /**
@@ -2050,7 +2361,7 @@ function onSpaceClick(no, id){
     toast('割り当てました（' + r.spaces.join('・') + '番）');
     loadSpaces(); loadSummary(); loadList();
     setTimeout(onWhoChange, 600);   // 「現在：未割当」の表示を残さない
-  }, function(e){ toast('割り当てできませんでした: ' + e.message, true); });
+  }, function(e){ netFail(e, '区画の割り当てができませんでした'); });
 }
 
 function unassign(){
@@ -2063,7 +2374,7 @@ function unassign(){
     toast('解除しました');
     loadSpaces(); loadSummary(); loadList();
     setTimeout(onWhoChange, 600);
-  }, function(e){ toast('解除できませんでした: ' + e.message, true); });
+  }, function(e){ netFail(e, '区画の割り当てを外せませんでした'); });
 }
 
 function onWhoChange(){
@@ -2084,15 +2395,67 @@ function onWhoChange(){
  * タブの切り替え。URLの # にも書く。
  * 「マップを見てください」を admin.html#map で伝えられるようにするため。
  */
+/**
+ * 管理者だけのタブ。
+ *
+ * ボタンは admin-only の印で消しているが、**URLの #settings を直接開けば出せた**。
+ * （この行にバッククォートは書かないこと。ここはテンプレートリテラルの中で、
+ *   1つ書いた時点で文字列が切れる。同じ事故がこれで3回目）
+ * ブックマークやURL共有で普通に起きる。値は漏れない（サーバーが全部断る）が、
+ * ITに不慣れな人には「触ったら怒られた／壊した」と映る。
+ * 隠すのは見た目の話で、守りはサーバー側（Admin.gs の adminOnly）にある。
+ */
+var ADMIN_TABS = ['people', 'settings', 'mail'];
+
+/**
+ * 選んだタブを、帯の中の見える位置へ寄せる。
+ *
+ * ■ なぜ自前で書くか
+ *   scrollIntoView だけだと、**帯の左右の余白ぶん足りない**。
+ *   いちばん右のタブ（設定）を選んだとき、右端が帯の外に残っていた
+ *   （2026-09-03 の検証で、幅360〜768pxのすべてで再現）。
+ *
+ * ■ offsetLeft を使わない
+ *   ボタンの offsetParent は .tabs で、横に動くのは内側の .in。
+ *   基準が違うので、offsetLeft で計算すると**いつも少しずれる**。
+ *   画面上の実寸（getBoundingClientRect）どうしで比べれば、基準の話が消える。
+ *
+ * ■ 少し待ってからもう一度
+ *   タブを切り替えた直後は、まだ幅が確定していないことがある。
+ */
+function scrollTabIntoView(b){
+  var run = function(){
+    try {
+      var strip = b.parentNode;
+      if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+      var pad = 16;
+      var r = b.getBoundingClientRect();
+      var sr = strip.getBoundingClientRect();
+      if (r.right + pad > sr.right)      strip.scrollLeft += (r.right + pad - sr.right);
+      else if (r.left - pad < sr.left)   strip.scrollLeft -= (sr.left - r.left + pad);
+    } catch (e) {}
+  };
+  run();
+  setTimeout(run, 0);
+}
+
 function showTab(name, keepHash){
+  if (ADMIN_TABS.indexOf(name) >= 0 && S.role && S.role !== '管理者'){
+    toast('「' + tabLabel(name) + '」は管理者のみが開けます', true);
+    name = 'dash';
+    keepHash = false;
+  }
   $$('.tabs button').forEach(function(b){
     var on = (b.getAttribute('data-tab') === name);
     b.setAttribute('aria-selected', String(on));
     // スマホではタブ行が横にはみ出す。選んだものを見える位置へ寄せないと、
-    // 資料置き場・当日運営・変更履歴が**そこにあると気づけない**
-    if (on && b.scrollIntoView) {
-      try { b.scrollIntoView({ inline:'center', block:'nearest' }); } catch (e) {}
-    }
+    // 資料置き場・当日運営・変更履歴が**そこにあると気づけない**。
+    //
+    // scrollIntoView だけだと、**帯の左右の余白ぶん足りない**。
+    // いちばん右のタブ（設定）を選んだとき、右端が帯の外に残っていた
+    //（2026-09-03 の検証で、幅360〜768pxのすべてで再現）。
+    // 自分で位置を出して、余白を足す
+    if (on) scrollTabIntoView(b);
   });
   $$('.view').forEach(function(v){ v.classList.toggle('on', v.id === 'v-' + name); });
   if (name === 'map' && !S.spaces) loadSpaces();
@@ -2104,7 +2467,7 @@ function showTab(name, keepHash){
   // メール送信だけは毎回読み直す。他のタブは一度読んだら使い回すが、
   // ここは「いま送る対象が何件か」を見せる画面なので、
   // 古い件数を見せたまま送信させると、見せた覚えのない相手に届く。
-  if (name === 'mail') loadNotify();
+  if (name === 'mail'){ loadNotify(); loadTemplate(); }
   // 資料置き場も毎回読み直す。誰かが足したものが見えないと意味がない
   if (name === 'docs') loadDocs();
   if (!keepHash && location.hash.slice(1).split('/')[0] !== name){
@@ -2134,10 +2497,48 @@ function applyHash(){
  * 隠すのは見た目の話であって、守りではない。
  * 実際の可否はサーバー側（adminOnly）で決まっている。
  */
+/** タブの名前。案内の文に使うので、画面のボタンから読む（二重管理にしない） */
+/**
+ * 「ここから先は事務局にご相談ください」と案内する先。
+ *
+ * 以前は個人名（森本／けいた）が画面に直書きされていた。
+ * **新しく入った営業には誰か分からず、メールも電話も書いていない**ので、
+ * 連絡のしようがなかった（2026-09-03 の検証で指摘）。
+ * 設定「事務局の連絡先」に入れてもらい、そこを出す。
+ */
+function officeContact(){
+  var v = (S.summary && S.summary.office) || '';
+  return String(v).trim() || '実行委員会事務局';
+}
+
+function tabLabel(name){
+  var b = $$('.tabs button').filter(function(x){
+    return x.getAttribute('data-tab') === name;
+  })[0];
+  return (b && b.textContent.trim()) || name;
+}
+
 function applyRole(){
   var isAdmin = (S.role === '管理者');
-  $$('.admin-only').forEach(function(el){ el.hidden = !isAdmin; });
-  if (!isAdmin && location.hash.slice(1).split('/')[0] === 'people') showTab('dash');
+  $$('.admin-only').forEach(function(el){
+    // 一括削除の入口だけは、**設定のスイッチで開け閉めする**（loadPurgeBox の仕事）。
+    // ここで一律に開けていたので、ステータスを保存するなど
+    // ダッシュボードを取り直す操作をするたび、OFF のはずの赤い削除ボックスが
+    // 勝手に現れていた（2026-09-04 の最終確認で発見）。
+    // 設定の説明文（「ONにすると現れます」）とも食い違っていた
+    if (el.id === 'purgeBox') return;
+    el.hidden = !isAdmin;
+  });
+  // 役割が分かるのは入室したあと。**それまでに開いていたタブ**を閉じ直す。
+  // people だけを見ていたので、#settings や #mail は開いたままだった
+  if (!isAdmin){
+    var now = location.hash.slice(1).split('/')[0];
+    if (ADMIN_TABS.indexOf(now) >= 0) showTab('dash');
+    ADMIN_TABS.forEach(function(t){
+      var v = document.getElementById('v-' + t);
+      if (v) v.classList.remove('on');
+    });
+  }
 }
 
 function loadPeople(){
@@ -2273,18 +2674,39 @@ function renderHistory(){
 function applicantLock(){
   $('#apLock').hidden = false;
   $('#apEdit').hidden = true;
+  $('#apConfirm').hidden = true;
+  $('#apUnlock').textContent = '応募内容を修正する';
+  $('#apUnlock').disabled = false;
   $('#apReason').value = '';
   $('#apMsg').textContent = '';
 }
 
+/**
+ * 1回目の押下で注意書きを開き、2回目で編集に入る。
+ *
+ * ■ なぜ confirm() をやめたか
+ *   ブラウザは、同じページが何度もダイアログを出すと
+ *   「このページでのダイアログを無効化」という選択肢を出す。
+ *   一度そうされると、**このボタンは押しても永久に何も起きない**。
+ *   壊れているのか押せていないのか、使う人には区別がつかない
+ *   （2026-09-03 の検証で、実際に「押しても何も出ません」と報告された）。
+ *
+ *   2段階にする意図（触る前に、それが何かを伝える）は変えていない。
+ *   画面の中でやれば、ダイアログの設定に左右されない。
+ */
 function unlockApplicant(){
-  if (!confirm(
-    'ここから先は、事業者さまが申告された内容の修正です。' + String.fromCharCode(10) + String.fromCharCode(10)
-    + '・お電話などで訂正のご連絡をいただいた場合にかぎってください' + String.fromCharCode(10)
-    + '・変更前の内容とあわせて、変更履歴に残ります' + String.fromCharCode(10)
-    + '・選択式の項目は、事業者さまご本人に直していただいてください' + String.fromCharCode(10) + String.fromCharCode(10)
-    + '続けますか。')) return;
+  var box = $('#apConfirm');
+  if (box.hidden){
+    box.hidden = false;
+    $('#apUnlock').textContent = '注意書きをご確認ください';
+    $('#apUnlock').disabled = true;
+    $('#apYes').focus();
+    return;
+  }
+  applicantEditOn();
+}
 
+function applicantEditOn(){
   $('#apLock').hidden = true;
   $('#apEdit').hidden = false;
   renderApplicantFields();
@@ -2412,11 +2834,27 @@ function renderNotify(){
     warn.push('差出人のエイリアスが未登録です。このまま送ると、'
       + '差出人が <b>' + esc(r.mail.from || '') + '</b> になります。');
   }
-  if (!r.urls || !r.urls.confirm){
+  // URLの警告は**採択のときだけ**。不採択の本文にはリンクを載せないので、
+  // URLが空でも送れる（本番 gas/Notify.gs も isReject を見て素通りさせている）。
+  // ここで「送信できません」と出していたため、URLを入れる前に
+  // 不採択だけ先に送る、という普通の順番で担当者が止まっていた
+  if (!isReject && (!r.urls || !r.urls.confirm)){
     warn.push('設定シートの<b>確定情報フォームURL</b>が空です。このままでは送信できません。');
   }
-  if (!r.urls || !r.urls.upload){
+  if (!isReject && (!r.urls || !r.urls.upload)){
     warn.push('素材アップロードURLが未設定のため、その案内は本文に入りません（送信は可能です）。');
+  }
+  var flip = r.flipped || [];
+  if (flip.length){
+    // **反対の通知を送ってしまっている行**。機械で追い打ちをかけない。
+    // 「出店が決定いたしました」のあとに「見送らせていただきました」が
+    // 自動で届くのが、いちばんまずい形
+    warn.push('すでに<b>' + esc(flip[0].sentLabel) + '</b>を送信済みの行が'
+      + flip.length + '件あります。この行は<b>一斉送信の対象から外しています</b>：'
+      + flip.map(function(f){
+          return esc(f.id) + ' ' + esc(f.company) + '（' + esc(f.sentAt) + ' 送信）';
+        }).join(' / ')
+      + '<br>行き違いになるため、<b>お電話などで事情をお伝えください。</b>');
   }
   if (bad.length){
     warn.push('メールアドレスの形が正しくない行が' + bad.length + '件あります。'
@@ -2433,8 +2871,10 @@ function renderNotify(){
   }).join('');
 
   if (!rows.length){
+    // 不採択の画面で「『採択』にすると出ます」と案内すると、逆の操作をさせる
     $('#mailTargets').innerHTML = '<p class="empty">送信する相手はいません。'
-      + '出店者一覧でステータスを「採択」にすると、ここに出ます。</p>';
+      + '出店者一覧でステータスを「' + (isReject ? '不採択' : '採択')
+      + '」にすると、ここに出ます。</p>';
     return;
   }
 
@@ -2458,14 +2898,161 @@ function renderNotify(){
     var s = r.sample;
     if (!s){ toast('本文を組み立てられませんでした', true); return; }
     $('#mailFrom').textContent = (r.mail && r.mail.from) || '';
-    $('#mailTo').textContent = s.to + '（' + s.company + '）ほか '
-      + Math.max(rows.length - 1, 0) + '件';
+    // 「ほか2件」だと、**3社が並んだ1通**（＝他社にアドレスが見える）と読める。
+    // 実際は1社ずつ別々に送っている。そこを書く（2026-09-03 の検証で指摘）
+    $('#mailTo').textContent = rows.length === 1
+      ? s.to + '（' + s.company + '）'
+      : s.to + '（' + s.company + '）ほか ' + (rows.length - 1)
+        + '件 ／ 1社ずつ別々にお送りします（この見本は1件目の宛先です）';
+    $('#mailPrevNote').innerHTML = '1件目の宛先に送られる、<b>実際の文面</b>です。'
+      + (isReject
+          ? '不採択のご連絡にリンクは入りません。'
+          : '<b>この見本のリンクは、送信のときに1社ずつ発行されます。</b>'
+            + 'ここに出ているものをそのまま開いても、つながりません。');
     $('#mailSubject').textContent = s.subject;
     $('#mailBody').textContent = s.body;
     $('#mailStep2').hidden = false;
     $('#mailStep3').hidden = false;
     $('#mailSendLabel').textContent = rows.length + '件に送信する';
     $('#mailStep2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+// ─────────────────────────── メール文面の編集
+/**
+ * 採択・不採択の文面を、この画面で直せるようにする（けいた指示・2026-09-03）。
+ *
+ * ■ 守っているものは、画面ではなくサーバーにある
+ *   ・不採択の文面に採択専用のリンクを入れさせない
+ *     （入れると、その方が出店確定情報フォームを開けてしまう）
+ *   ・採択の文面からリンクを落とさせない
+ *   ・知らない差し込み（{{名前}} など）のまま送らせない
+ *   画面は、断られた理由をそのまま見せるだけにする。
+ *   ここに検査を写すと、片方が古くなる。
+ */
+function loadTemplate(keepMsg){
+  var kind = S.notifyKind || 'accept';
+  if (S.role !== '管理者'){ $('#tplBox').hidden = true; return; }
+  $('#tplBox').hidden = false;
+  // 保存の直後は消さない。**ここで消していたせいで、
+  // 「保存しました」も「このままでは送れません」も一度も出ていなかった**
+  //（2026-09-04 の検証で指摘。私が足した警告を、私が消していた）
+  if (!keepMsg){
+    $('#tplMsg').textContent = '';
+    $('#tplErr').hidden = true;
+    $('#tplWarn').hidden = true;
+  }
+  api('adminMailTemplate', { kind: kind }).then(function(r){
+    if (!r || !r.ok){ $('#tplBox').hidden = true; return; }
+    S.tpl = r;
+    $('#tplSubject').value = r.subject || '';
+    $('#tplBody').value = r.body || '';
+    // maxLength だけだと、長い件名を貼ったときに**何も言わずに切れる**。
+    // サーバーの「長すぎます」には手入力では到達しない（2026-09-04 の検証）
+    $('#tplSubject').maxLength = r.subjectMax || 200;
+    $('#tplSubject').oninput = function(){
+      var max = r.subjectMax || 200;
+      var n = $('#tplSubject').value.length;
+      var note = $('#tplSubjLen');
+      if (!note) return;
+      note.hidden = n < max * 0.9;
+      note.textContent = n >= max
+        ? '件名は ' + max + '文字までです。ここで切れています。'
+        : 'あと ' + (max - n) + '文字です';
+      note.className = n >= max ? 'tplcount over' : 'tplcount';
+    };
+    $('#tplSubject').oninput();
+    // シートの見出しが壊れているときは、**それを先に言う**。
+    // 「はじめの文面のまま」と出すと、保存した文面が消えたように見えるうえ、
+    // 実際には既定の文面が送られる（2026-09-04 の点検で指摘）
+    if (r.headBroken){
+      $('#tplState').textContent = '（台帳のシートが壊れています）';
+      $('#tplErr').hidden = false;
+      $('#tplErr').innerHTML = '<b>台帳の「メール文面」シートを直してください。</b><ul><li>'
+        + mdBold(r.headBrokenMessage || '') + '</li></ul>';
+    } else {
+      $('#tplState').textContent = r.isDefault
+        ? '（はじめの文面のまま）'
+        : '（' + (r.by || '') + ' が ' + (r.at || '') + ' に編集）';
+    }
+    $('#tplVars').innerHTML = (r.vars || []).map(function(v){
+      return '<button type="button" class="tplvar" data-v="' + esc(v.name) + '" title="'
+        + esc(String(v.about).split('**').join('')) + '">{{' + esc(v.name) + '}}</button>';
+    }).join('');
+    // **スマホでは指を乗せられないので、title は一生読めない。**
+    // 11個の似た名前（確定情報フォームURL／素材アップロードURL／
+    // 素材アップロードのご案内）を、名前だけで選べる人はいない（2026-09-04 の検証）
+    $('#tplVarHelp').innerHTML = (r.vars || []).map(function(v){
+      return '<dt><code>{{' + esc(v.name) + '}}</code></dt>'
+        + '<dd>' + mdBold(v.about)
+        + (v.sample ? '<span class="tplsample">例：' + esc(v.sample) + '</span>' : '')
+        + '</dd>';
+    }).join('');
+    $$('#tplVars .tplvar').forEach(function(b){
+      b.addEventListener('click', function(){ insertVar(b.getAttribute('data-v')); });
+    });
+  }, function(e){ netFail(e, '文面を読み込めませんでした'); });
+}
+
+/** 差し込みを、いまカーソルがある場所に入れる */
+function insertVar(name){
+  var t = $('#tplBody');
+  var tag = '{{' + name + '}}';
+  var s = t.selectionStart, e = t.selectionEnd;
+  if (s == null){ t.value += tag; return; }
+  t.value = t.value.slice(0, s) + tag + t.value.slice(e);
+  t.selectionStart = t.selectionEnd = s + tag.length;
+  t.focus();
+}
+
+function saveTemplate(reset){
+  var kind = S.notifyKind || 'accept';
+  if (reset && !confirm('この種類の文面を、はじめの文面に戻します。'
+      + String.fromCharCode(10) + 'いまの編集内容は失われます。よろしいですか。')) return;
+
+  $('#tplSave').disabled = true;
+  $('#tplErr').hidden = true;
+  $('#tplWarn').hidden = true;
+  $('#tplMsg').className = 'msg';
+  $('#tplMsg').textContent = '保存しています…';
+
+  api(reset ? 'adminMailTemplateReset' : 'adminMailTemplateSave', {
+    kind: kind,
+    subject: $('#tplSubject').value,
+    body: $('#tplBody').value,
+  }).then(function(r){
+    $('#tplSave').disabled = false;
+    if (!r || !r.ok){
+      $('#tplMsg').textContent = '';
+      $('#tplErr').hidden = false;
+      // 断られた理由は1つずつ出す。まとめて1行にすると読まれない
+      $('#tplErr').innerHTML = '<b>保存していません。</b><ul>'
+        + ((r && r.errors) || [(r && r.message) || '保存できませんでした。'])
+            .map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('')
+        + '</ul>';
+      return;
+    }
+    // 見本を作り直す。**古い文面のまま送信に進ませない**。
+    // 読み直しでメッセージを消させない（keepMsg）
+    loadTemplate(true);
+    loadNotify();
+
+    $('#tplMsg').className = 'msg ok';
+    $('#tplMsg').textContent = reset ? 'はじめの文面に戻しました' : '保存しました';
+    $('#tplErr').hidden = true;
+    if ((r.warnings || []).length){
+      // **この警告は自動で消さない。**「このままでは送れません」が入りうる
+      $('#tplWarn').hidden = false;
+      $('#tplWarn').innerHTML = '<b>保存しましたが、お伝えしたいことがあります。</b><ul>'
+        + r.warnings.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('')
+        + '</ul>';
+    } else {
+      $('#tplWarn').hidden = true;
+    }
+  }, function(e){
+    $('#tplSave').disabled = false;
+    $('#tplMsg').textContent = '';
+    netFail(e, '文面を保存できませんでした');
   });
 }
 
@@ -2505,7 +3092,8 @@ function sendNotify(){
     }
     $('#mailResult').hidden = false;
     $('#mailResult').innerHTML =
-      '<p class="ok"><b>' + (res.sent || []).length + '件を送信しました。</b></p>'
+      '<p class="ok"><b>' + esc(r.kindLabel || '通知') + ' を '
+      + (res.sent || []).length + '件 送信しました。</b></p>'
       + ((res.failed || []).length
           ? '<p class="pwarn"><b>' + res.failed.length + '件が失敗しています。</b>'
             + res.failed.map(function(f){
@@ -2586,10 +3174,12 @@ function renderDocs(){
        // ここだけ共有していない。押しても開けない人がいる理由を先に書く
        + '<p class="note">応募企業からお預かりしたものです。'
        + '<b>このフォルダは共有していません。</b>'
-       + 'Driveで中身を開く必要がある方には、'
-       + 'けいたから個別に共有をお願いしてください。</p>';
+       + 'Driveで中身を開く必要がある方は、'
+       + esc(officeContact()) + ' へ個別の共有をご依頼ください。</p>';
   // 営業がいちばん知りたいのは「誰がまだ出していないか」
-  if (yet) html += '<p class="note">未提出 ' + yet + '社（下のグレーの行）</p>';
+  // 「未提出」がダッシュボードにもあり、数が違って見えた（2026-09-04 の検証）。
+  // こちらは**素材**、あちらは**確定情報**。何の未提出かを毎回書く
+  if (yet) html += '<p class="note">素材が未提出 ' + yet + '社（下のグレーの行）</p>';
   if (!vend.length){
     html += '<p class="docs-empty">まだご提出はありません。</p>';
   } else {
@@ -2748,8 +3338,12 @@ function renderRental(){
     ? '<div class="paperdiff"><b>募集要項PDFの料金表と食い違っています</b>'
       + '<ul>' + diff.map(function(d){ return '<li>' + esc(d.message) + '</li>'; }).join('')
       + '</ul>'
-      + '<p style="margin:8px 0 0">紙面はこの画面からは直せません。'
-      + '<b>森本にご連絡ください</b>（PDFと配布キットを刷り直します）。</p></div>'
+      + '<p style="margin:8px 0 0"><b>いま応募フォームは、この画面の金額で受け付けています。</b>'
+      + '配布済みの募集要項PDFは古い金額のままです。</p>'
+      + '<p style="margin:6px 0 0">PDFの刷り直しは、この画面からはできません。'
+      + esc(officeContact()) + ' へご連絡ください'
+      + '（募集要項PDFと配布キットを刷り直します）。'
+      + '元に戻す場合は、上の表で単価を紙面の金額に戻してください。</p></div>'
     : '<div class="paperdiff ok"><b>募集要項PDFの料金表と一致しています。</b></div>';
 }
 
@@ -2758,9 +3352,27 @@ function editRental(row){
         || { row: 0, kind: '', name: '', price: '', unit: '個', max: '', note: '', active: true };
   S.rentalRow = row || 0;
   $('#rentalFormTitle').textContent = row ? esc(it.name) + ' を直す' : '品目の登録';
-  $('#rKind').innerHTML = (S.rental.kinds || []).map(function(k){
-    return '<option' + (it.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
-  }).join('');
+  // 新規は**選ばせる**。既定が「テント（1区画）」だったため、
+  // 数量の品目を足したつもりが応募フォームに一切出ない、が起きていた
+  //（テント種別は区画に紐づくもので、数量欄としてはフォームに出ない）。
+  // しかも管理画面の一覧には並ぶので「入っているつもり」になる
+  $('#rKind').innerHTML =
+    (row ? '' : '<option value="" selected>お選びください</option>')
+    + (S.rental.kinds || []).map(function(k){
+        return '<option' + (it.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
+      }).join('');
+  // 種別の意味を、選んだときに出す。名前だけでは違いが分からない
+  $('#rKind').onchange = function(){
+    var v = $('#rKind').value;
+    var note = $('#rKindNote');
+    if (!note) return;
+    note.hidden = !v;
+    note.textContent = v === '数量'
+      ? '応募フォームに「いくつ要るか」の欄として出ます（単価と最大数の両方が必要です）。'
+      : v ? 'テントは区画に紐づく料金です。応募フォームに数量の欄としては出ません。'
+          : '';
+  };
+  $('#rKind').onchange();
   $('#rName').value = it.name || '';
   $('#rPrice').value = (typeof it.price === 'number' && it.price > 0) ? it.price : '';
   $('#rUnit').value = it.unit || '個';
@@ -3142,8 +3754,24 @@ document.addEventListener('DOMContentLoaded', function(){
   $$('input[name="mailKind"]').forEach(function(radio){
     radio.addEventListener('change', function(){
       S.notifyKind = radio.value;
+      // 前の送信結果を消してから切り替える。
+      // 残したままだと「不採択を1件送信しました」が採択の画面に居座り、
+      // **どちらを送ったのか取り違える**（2026-09-03 の検証で指摘）
+      $('#mailResult').hidden = true;
+      $('#mailResult').innerHTML = '';
+      $('#mailMsg').textContent = '';
       loadNotify();
+      loadTemplate();     // 種類ごとに別の文面。切り替えたら読み直す
     });
+  });
+  $('#tplSave').addEventListener('click', function(){ saveTemplate(false); });
+  $('#tplReset').addEventListener('click', function(){ saveTemplate(true); });
+  $('#tplReload').addEventListener('click', function(){
+    // 「この文面で保存する」の隣にあり、スマホでは密集している。
+    // 確認なしだと、押し間違いで書きかけが消える（2026-09-04 の検証で指摘）
+    if (!confirm('編集した内容を捨てて、保存されている文面に戻します。'
+        + String.fromCharCode(10) + 'いまの編集内容は失われます。よろしいですか。')) return;
+    loadTemplate();
   });
   $('#rentalNew').addEventListener('click', function(){ editRental(0); });
   $('#rSave').addEventListener('click', saveRental);
@@ -3162,6 +3790,8 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#hQ').addEventListener('input', renderHistory);
   $('#hReload').addEventListener('click', loadHistory);
   $('#apUnlock').addEventListener('click', unlockApplicant);
+  $('#apYes').addEventListener('click', applicantEditOn);
+  $('#apNo').addEventListener('click', applicantLock);
   $('#apSave').addEventListener('click', saveApplicant);
   $('#apCancel').addEventListener('click', applicantLock);
   $('#pNew').addEventListener('click', function(){ editPerson(0); });
