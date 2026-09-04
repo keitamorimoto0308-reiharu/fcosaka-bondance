@@ -7,8 +7,13 @@ node_modules/
 .clasprc.json
 build/
 __pycache__/
-.locks/          # tools/lock.js が使う作業中の印。実行時だけのもの
-.deploy/         # deploy.js の一時 worktree。失敗したときだけ残る
+# tools/lock.js が使う作業中の印。実行時だけのもの
+# ※ .gitignore は**行末のコメントを解釈しない**（# は行頭だけ）。
+#    「.locks/  # …」と書いたら、その文字列そのものがパターンになって効かなかった
+#    （2026-09-04 の検証で指摘。git check-ignore で確認済み）
+.locks/
+# deploy.js の一時 worktree。失敗したときだけ残る
+.deploy/
 test-results/
 playwright-report/
 .DS_Store

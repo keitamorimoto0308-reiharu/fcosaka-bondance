@@ -469,7 +469,7 @@ function setupSchedSheet_(ss) {
   sh.getRange(2, 3, n, 1).setNumberFormat('m/d(ddd)');
   sh.getRange(2, 11, n, 1).setNumberFormat('m/d(ddd)');
 
-  [90, 110, 110, 80, 140, 140, 300, 340, 90, 220, 110, 70, 100, 100, 100, 130]
+  [90, 110, 110, 80, 140, 140, 300, 340, 90, 220, 110, 70, 100, 100, 100, 130, 90]
     .forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.getRange('B1').setNote('タスクは期日、期間は開始日、マイルストーンはその日を入れます。');
   sh.getRange('C1').setNote('期間のときだけ入れます。ほかの種類では空のままです。');
@@ -481,6 +481,16 @@ function setupSchedSheet_(ss) {
 }
 
 function setupTodoSheet_(ss) {
+  /*
+   * **移行が済んでいたら、作り直さない。**
+   * setup() は setupTodoSheet_ → setupSchedSheet_ の順に走る。
+   * ここで作り直すと、2回目の setup() で
+   * 「確認事項」と「確認事項（移行済み）」が並び、一本化が破れる
+   * （新しく書いた行は制作スケジュールに来なくなる）。
+   * 2026-09-04 の検証で見つかった。
+   */
+  if (schedTodoMigrated_(ss)) return null;
+
   var sh = getOrCreate_(ss, SHEET.TODO);
   var head = ['状態', '内容', '担当', '期日', '起票者', '起票日', '完了日', 'メモ'];
   if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, head.length).setValues([head]);

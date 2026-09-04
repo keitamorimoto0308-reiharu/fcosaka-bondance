@@ -408,13 +408,20 @@ const MAILTPL = (() => {
  * gas/Sched.gs の上部は宣言だけなので、GASのAPIが無くても読める。
  */
 const SCHED = (() => {
-  const src = fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8');
-  const adminSrc = fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8');
+  // **改行を必ず正規化する。** gas/Admin.gs は CRLF なので、これが無いと
+  // 目印が一致せず、切り出しが**空文字**になる。
+  // 2026-09-04、そのせいで模擬の保存が100%「asText_ is not defined」で落ちていた
+  // （それでもテスト832件は全部通っていた。模擬を通しで呼ぶ検査が無かったため）。
+  const norm = t => t.split('\r\n').join('\n');
+  const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8'));
+  const adminSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8'));
   // 検証が使う道具も本番から借りる（正規表現で切ると \s が1層落ちるので indexOf で切る）
   const cutFn = (code, name) => {
     const s = code.indexOf('function ' + name + '(');
     if (s < 0) throw new Error('gas/Admin.gs の ' + name + ' を読めませんでした');
     const e = code.indexOf('\n}\n', s) + 3;
+    // 切り出せなかったら、その場で止める。**空文字のまま進むのがいちばん危ない**
+    if (e <= s) throw new Error('gas/Admin.gs の ' + name + ' を切り出せませんでした');
     return code.slice(s, e);
   };
   const box = { Object, String, Number, Array, JSON, RegExp, Math, isFinite, Date, console };
@@ -424,6 +431,34 @@ const SCHED = (() => {
   vm.runInContext(src, box);
   return box;
 })();
+
+/** 行を見分ける印。本番の schedNewId_ と同じ 8桁 */
+const schedNewIdMock = () => crypto.randomBytes(4).toString('hex');
+
+/**
+ * 「その行が、画面が編集していた行か」を確かめる。本番の schedFindRow_ と同じ考え方。
+ *
+ * 行番号だけで指すと、他人が1行消した瞬間に全部が繰り上がり、
+ * **押した覚えのないタスクが消える／別の行が上書きされる**。
+ * 行がずれただけならIDで探し直し、本当に消えていたときだけ断る。
+ */
+function schedFindMock(row, id) {
+  const reload = '画面を読み込み直してから、もう一度お願いします。';
+  id = (id == null ? '' : String(id)).trim();
+  const i = row - 2;
+  const ok = Number.isInteger(row) && i >= 0 && i < DB.sched.length;
+  const here = ok ? String(DB.sched[i].id || '') : '';
+
+  if (!ok) return { error: 'not_found', message: 'その行は見つかりませんでした。' + reload };
+  if (id && here === id) return { i };
+  if (!here && !id) return { i };
+  if (!id) return { error: 'stale', message: 'この行を指し示せませんでした。' + reload };
+
+  const j = DB.sched.findIndex(r => String(r.id || '') === id);
+  if (j >= 0) return { i: j };
+  return { error: 'moved',
+           message: 'この行は、ほかの方が削除したようです。' + reload };
+}
 
 /** 関係者から「氏名 → 所属」を引く。本番の schedPeople_ が返すものと同じ形 */
 function schedPeopleMock() {
@@ -1189,7 +1224,10 @@ function handle(payload) {
       const me = PEOPLE.find(p => p.name === auth.person);
       return {
         ok: true,
-        rows: DB.sched.map((r, i) => Object.assign({ row: i + 2, order: i }, r)),
+        rows: DB.sched.map((r, i) => {
+          if (!r.id) r.id = schedNewIdMock();   // 種データにも印を振る
+          return Object.assign({ row: i + 2, order: i }, r);
+        }),
         areas: SCHED.SCHED_AREAS_.slice(),
         statuses: SCHED.SCHED_STATUSES_.slice(),
         kinds: SCHED.SCHED_KINDS_.slice(),
@@ -1197,7 +1235,7 @@ function handle(payload) {
         peopleByCompany: people.byCompany,
         me: { person: auth.person, company: me ? me.org : '' },
         // 本番はサーバーの日付を返す。端末の時計を見ない（§3-1）
-        today: new Date().toISOString().slice(0, 10),
+        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo
       };
     }
 
@@ -1206,34 +1244,38 @@ function handle(payload) {
       const v = SCHED.validateSchedRow_(payload.item, schedPeopleMock());
       if (v.message) return { ok: false, error: 'bad_value', message: v.message };
       const item = v.value;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = nowText().slice(0, 10);
       const row = Number(payload.row) || 0;
       const settled = SCHED.schedSettled_(item.status);
 
       if (!row) {
         DB.sched.push(Object.assign({}, item, {
+          id: schedNewIdMock(),
           doneDate: settled ? today : '',
           author: auth.person, createdAt: today,
-          updatedBy: auth.person, updatedAt: today,
+          updatedBy: auth.person, updatedAt: nowText(),
         }));
+        DB.history.unshift({ at: nowText(), who: auth.person, id: '（スケジュール）',
+                             item: '追加', before: '', after: item.title, reason: '' });
         return { ok: true, added: true };
       }
-      const i = row - 2;
-      if (i < 0 || i >= DB.sched.length) return { ok: false, error: 'not_found' };
-      const prev = DB.sched[i];
-      DB.sched[i] = Object.assign({}, item, {
+      const found = schedFindMock(row, payload.id);
+      if (found.message) return { ok: false, error: found.error, message: found.message };
+      const prev = DB.sched[found.i];
+      DB.sched[found.i] = Object.assign({}, item, {
+        id: prev.id,
         // 手で入れた完了日は上書きしない（本番と同じ）
         doneDate: settled ? (prev.doneDate || today) : '',
         author: prev.author, createdAt: prev.createdAt,
-        updatedBy: auth.person, updatedAt: today,
+        updatedBy: auth.person, updatedAt: nowText(),
       });
       return { ok: true, added: false };
     }
 
     case 'adminSchedDelete': {
-      const row = Number(payload.row) || 0;
-      const i = row - 2;
-      if (i < 0 || i >= DB.sched.length) return { ok: false, error: 'not_found' };
+      const found = schedFindMock(Number(payload.row) || 0, payload.id);
+      if (found.message) return { ok: false, error: found.error, message: found.message };
+      const i = found.i;
       // 削除は変更履歴に**行の全文**を残す。これが唯一の復元手段（本番と同じ）
       const gone = DB.sched[i];
       // 列名は who / id。**operator / receiptId ではない**（DB.history の形に合わせる）。

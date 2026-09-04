@@ -26,15 +26,57 @@ var SCHED_KINDS_    = ['タスク', '期間', 'マイルストーン'];
 var SCHED_AREAS_    = ['全体', '会議', '企画', '営業', '制作', '運営'];
 var SCHED_STATUSES_ = ['未着手', '進行中', '確認中', '完了', '停滞中', '見送り'];
 
-/** 仕様書 §2-1 の列。曜日の列は作らない（シートの表示形式 m/d(ddd) で見せる） */
+/**
+ * 仕様書 §2-1 の列 ＋ **ID**。曜日の列は作らない（表示形式 m/d(ddd) で見せる）。
+ *
+ * ■ IDを足した理由（2026-09-04・検証役2体が独立に指摘）
+ *   行を「シートの何行目か」だけで指していた。削除は全員に許す仕様なので、
+ *   甲がBの編集を開いている間に乙がAを消すと、BとCが1つずつ繰り上がる。
+ *   甲が保存すると **Cの中身がBの内容で丸ごと消え、ok:true が返っていた。**
+ *   完了日も起票者も引き継がれるので、シートを見ても事故に見えない。
+ *
+ *   ②タイムスケジュール（design_timetable.md §2-1）は1列目に
+ *   「ID：8桁の乱数。行の並べ替えでも変わらない印」を置いている。
+ *   ①だけ行番号なのが不整合だった。
+ *
+ *   **末尾に置く**のは、人がシートを直接開いたときの読む順番を崩さないため。
+ */
 var SCHED_HEADERS_ = [
   '種類', '日付', '終了日', '領域', '担当会社', '担当者', 'タスク名', '詳細',
   'ステータス', '備考', '完了日', '並び順', '起票者', '起票日', '更新者', '更新日時',
+  'ID',
 ];
+var SCHED_ID_COL_ = 17;   // 1始まり。SCHED_HEADERS_ の 'ID' の位置
+
+/** 行を見分ける印。8桁の英数字。行の並べ替えでも変わらない */
+function schedNewId_() {
+  return Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+}
+
+/**
+ * 日付の欄を読む。
+ *
+ * **シートは日付を Date で返してくる。** 日付列に `m/d(ddd)` の表示形式を
+ * 付けているので、Sheets が値を日付として持つため。
+ * `asText_` は Date を `yyyy-MM-dd HH:mm` に整形するので、
+ * そのまま使うと仕様§3-1 の `date:"2026-09-08"` という約束が破れる
+ * （実際に破れていた。代役シートが文字列を返すのでテストでは再現しなかった）。
+ *
+ * ②の仕様書§2-1 が「シートの時刻値は GAS では Date として読まれ、
+ * タイムゾーンで化ける」と書いているのと同じ話。**読む口を1つにする。**
+ */
+function schedDate_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+  }
+  return asText_(v).trim();
+}
 
 var SCHED_TITLE_MAX  = 200;
 var SCHED_DETAIL_MAX = 1000;
 var SCHED_MEMO_MAX   = 500;
+var SCHED_LIST_MAX   = 20;   // 担当会社・担当者の件数の上限
 
 /** サーバーの今日。端末の時計はずれるので、遅れの判定はこれで行う（§3-1） */
 function schedToday_() {
@@ -181,6 +223,9 @@ function validateSchedRow_(item, people) {
    */
   var chosen = [];
   var list = Array.isArray(item.people) ? item.people : schedList_(item.people);
+  if (list.length > SCHED_LIST_MAX) {
+    return { message: '担当者は' + SCHED_LIST_MAX + '人までです。' };
+  }
   for (var i = 0; i < list.length; i++) {
     var name = asText_(list[i]).trim();
     if (!name) continue;
@@ -199,6 +244,15 @@ function validateSchedRow_(item, people) {
    */
   var companies = [];
   var given = Array.isArray(item.companies) ? item.companies : schedList_(item.companies);
+  /*
+   * **件数の上限を必ず置く。** タスク名200・詳細1000・備考500 は効いていたのに、
+   * ここだけ素通しだった。検証役が3,000件（18万字）を通し、
+   * 10万件では重複除去の indexOf が O(n^2) で9分52秒かかることを実測した
+   * （GASの実行時間6分を超える）。一般パスワードは営業に広く配る前提。
+   */
+  if (given.length > SCHED_LIST_MAX) {
+    return { message: '担当会社は' + SCHED_LIST_MAX + '件までです。' };
+  }
   given.forEach(function (c) {
     var name = asText_(c).trim().slice(0, 60);
     if (name && companies.indexOf(name) < 0) companies.push(name);
@@ -220,6 +274,72 @@ function schedSettled_(status) {
   return status === '完了' || status === '見送り';
 }
 
+/**
+ * 1行を、列名つきの入れ物にする。変更履歴に「行の全文」を残すために使う。
+ * 更新者・更新日時は除く（触れば必ず変わるので、比べる意味がない）。
+ */
+function schedRowObject_(values) {
+  var o = {};
+  SCHED_HEADERS_.forEach(function (h, i) {
+    if (h === '更新者' || h === '更新日時') return;
+    o[h] = (h === '日付' || h === '終了日' || h === '完了日' || h === '起票日')
+      ? schedDate_(values[i]) : asText_(values[i]);
+  });
+  return o;
+}
+
+/**
+ * 「その行が、画面が編集していた行か」を確かめる。
+ *
+ * ■ なぜ要るか（2026-09-04・検証役2体が独立に指摘）
+ *   行番号だけで指すと、他人が1行消した瞬間に全部が繰り上がる。
+ *   甲がBを保存したつもりで、**Cを丸ごと上書きして ok:true が返っていた。**
+ *   削除も同じで、押した覚えのないタスクが消えた。
+ *
+ * ■ 見つからなければ探しに行く
+ *   行がずれていても、IDが一致する行があればそれが目的の行。
+ *   断って読み直させるより、**そのまま正しい行を直すほうが親切**で、しかも安全。
+ *   本当に消えていたときだけ断る。
+ *
+ * @return {{row:number, values:Array}} または {{error:string, message:string}}
+ */
+function schedFindRow_(sh, row, id) {
+  var n = SCHED_HEADERS_.length;
+  var last = sh.getLastRow();
+  var reload = '画面を読み込み直してから、もう一度お願いします。';
+
+  // 整数でない行番号を Sheets に渡すと、原因の分からない例外になる
+  if (!(row >= 2) || row !== Math.floor(row) || row > last) {
+    return { error: 'not_found',
+             message: 'その行は見つかりませんでした。' + reload };
+  }
+
+  var values = sh.getRange(row, 1, 1, n).getValues()[0];
+  var here = asText_(values[SCHED_ID_COL_ - 1]).trim();
+
+  if (id && here === id) return { row: row, values: values };
+
+  // IDを持たない行（人がシートに直接足した行）は、そのまま受ける
+  if (!here && !id) return { row: row, values: values };
+
+  if (!id) {
+    return { error: 'stale',
+             message: 'この行を指し示せませんでした。' + reload };
+  }
+
+  // 行がずれただけかもしれない。IDで探し直す
+  if (last >= 2) {
+    var col = sh.getRange(2, SCHED_ID_COL_, last - 1, 1).getValues();
+    for (var i = 0; i < col.length; i++) {
+      if (asText_(col[i][0]).trim() === id) {
+        return { row: i + 2, values: sh.getRange(i + 2, 1, 1, n).getValues()[0] };
+      }
+    }
+  }
+  return { error: 'moved',
+           message: 'この行は、ほかの方が削除したようです。' + reload };
+}
+
 /** 全行を返す。絞り込みはしない（40〜80行なので画面側で足りる） */
 function adminSched_(auth) {
   var S = schedRows_();
@@ -233,9 +353,10 @@ function adminSched_(auth) {
     if (!title) continue;               // 空行は無いものとして扱う
     out.push({
       row: i + 2,
+      id:        asText_(r[idx['ID']]).trim(),
       kind:      asText_(r[idx['種類']]).trim() || 'タスク',
-      date:      asText_(r[idx['日付']]).trim(),
-      endDate:   asText_(r[idx['終了日']]).trim(),
+      date:      schedDate_(r[idx['日付']]),
+      endDate:   schedDate_(r[idx['終了日']]),
       area:      asText_(r[idx['領域']]).trim(),
       companies: schedList_(r[idx['担当会社']]),
       people:    schedList_(r[idx['担当者']]),
@@ -243,10 +364,10 @@ function adminSched_(auth) {
       detail:    asText_(r[idx['詳細']]).trim(),
       status:    asText_(r[idx['ステータス']]).trim(),
       memo:      asText_(r[idx['備考']]).trim(),
-      doneDate:  asText_(r[idx['完了日']]).trim(),
+      doneDate:  schedDate_(r[idx['完了日']]),
       order:     Number(r[idx['並び順']]) || 0,
       author:    asText_(r[idx['起票者']]).trim(),
-      createdAt: asText_(r[idx['起票日']]).trim(),
+      createdAt: schedDate_(r[idx['起票日']]),
       updatedBy: asText_(r[idx['更新者']]).trim(),
       updatedAt: asText_(r[idx['更新日時']]).trim(),
     });
@@ -272,7 +393,15 @@ function adminSched_(auth) {
     kinds: SCHED_KINDS_.slice(),
     companies: companies,
     peopleByCompany: people.byCompany,
-    me: { person: auth && auth.person, company: auth && auth.company },
+    /*
+     * **auth は { person, role } しか持たない**（gas/Auth.gs:154）。
+     * auth.company を読んでいたので undefined になり、
+     * 仕様§4-3 の「自社の担当だけ」が本番で必ず死んでいた。
+     * テストが auth を自分で作って company を持たせていたので気づけなかった。
+     * 所属は関係者シートから引く。
+     */
+    me: { person: (auth && auth.person) || '',
+          company: (auth && people.byName[auth.person]) || '' },
     today: schedToday_(),
   };
 }
@@ -294,9 +423,12 @@ function adminSchedSave_(auth, payload) {
 
     // 既存行なら、先に読む。完了日と起票者は**前の値を引き継ぐ**必要がある
     var before = null;
+    var id = asText_(payload && payload.id).trim();
     if (row) {
-      if (row < 2 || row > sh.getLastRow()) return { ok: false, error: 'not_found' };
-      before = sh.getRange(row, 1, 1, SCHED_HEADERS_.length).getValues()[0];
+      var found = schedFindRow_(sh, row, id);
+      if (found.message) return { ok: false, error: found.error, message: found.message };
+      row = found.row;
+      before = found.values;
     }
 
     /*
@@ -306,7 +438,7 @@ function adminSchedSave_(auth, payload) {
      */
     var doneDate = '';
     if (schedSettled_(item.status)) {
-      var prev = before ? asText_(before[10]).trim() : '';
+      var prev = before ? schedDate_(before[10]) : '';
       doneDate = prev || today;
     }
 
@@ -320,6 +452,7 @@ function adminSchedSave_(auth, payload) {
       sh.getLastRow(),                     // 並び順（末尾に追加）
       safeCellText_(auth.person), today,   // 起票者・起票日は名乗らせない
       safeCellText_(auth.person), now,
+      id || schedNewId_(),                 // ID。行がずれても変わらない印
     ];
 
     if (!row) {
@@ -329,11 +462,27 @@ function adminSchedSave_(auth, payload) {
       return { ok: true, added: true };
     }
 
-    line[11] = before[11];                 // 並び順は変えない
-    line[12] = asText_(before[12]);        // 起票者も変えない
-    line[13] = asText_(before[13]);        // 起票日も変えない
+    line[11] = before[11];                          // 並び順は変えない
+    line[12] = safeCellText_(asText_(before[12]));  // 起票者も変えない
+    line[13] = schedDate_(before[13]);              // 起票日も変えない
+    line[16] = asText_(before[16]).trim() || schedNewId_();   // IDは引き継ぐ
     sh.getRange(row, 1, 1, SCHED_HEADERS_.length).setValues([line]);
     SpreadsheetApp.flush();
+
+    /*
+     * **更新も変更履歴に残す。**
+     * 削除は全文を残すのに、上書きは痕跡ゼロだった（検証役2体が指摘・2026-09-04）。
+     * 全員が編集できる画面では、他人にタスク名や期日を書き換えられたとき、
+     * 削除より復元しにくい状態になっていた。
+     *
+     * 変わっていないときは残さない。ステータスのチップを押すたびに増えると、
+     * 本当の変更が埋もれる（警報を増やしすぎない、と同じ考え方）。
+     */
+    var beforeText = JSON.stringify(schedRowObject_(before));
+    var afterText = JSON.stringify(schedRowObject_(line));
+    if (beforeText !== afterText) {
+      appendHistory(auth.person, '（スケジュール）', '更新', beforeText, afterText, '');
+    }
     return { ok: true, added: false };
   } finally {
     lock.releaseLock();
@@ -358,10 +507,13 @@ function adminSchedDelete_(auth, payload) {
   if (!lock.tryLock(LOCK_WAIT_MS)) return { ok: false, error: 'busy' };
   try {
     var sh = schedSheet_();
-    // 1行目は見出し。2行目より前と、最終行より後は受け付けない
-    if (row < 2 || row > sh.getLastRow()) return { ok: false, error: 'not_found' };
+    // **行番号だけで消してはいけない。**他人が先に1行消していると、
+    // 押した覚えのないタスクが消える（削除の再送・連打でも同じことが起きる）
+    var found = schedFindRow_(sh, row, asText_(payload && payload.id).trim());
+    if (found.message) return { ok: false, error: found.error, message: found.message };
+    row = found.row;
 
-    var before = sh.getRange(row, 1, 1, SCHED_HEADERS_.length).getValues()[0];
+    var before = found.values;
     var full = {};
     SCHED_HEADERS_.forEach(function (h, i) { full[h] = asText_(before[i]); });
 
@@ -395,6 +547,19 @@ function adminSchedDelete_(auth, payload) {
  *
  * @return {number} 移した件数
  */
+var SCHED_TODO_DONE_ = '確認事項（移行済み）';
+
+/**
+ * 確認事項の移行が済んでいるか。
+ *
+ * setup() は setupTodoSheet_ → setupSchedSheet_ の順に走る。
+ * これを見ずに2回目を実行すると、**確認事項シートを作り直してしまい**、
+ * 「確認事項」と「確認事項（移行済み）」が並んで一本化が破れる。
+ */
+function schedTodoMigrated_(ss) {
+  return !!ss.getSheetByName(SCHED_TODO_DONE_);
+}
+
 function schedMigrateTodos_(ss) {
   var src = ss.getSheetByName(SHEET.TODO);
   var moved = 0;
@@ -430,8 +595,8 @@ function schedMigrateTodos_(ss) {
       var status = asText_(values[i][idx['状態']]).trim();
       if (SCHED_STATUSES_.indexOf(status) < 0) status = '未着手';
 
-      var due = normalizeDue_(schedHalfWidth_(values[i][idx['期日']]));
-      var done = normalizeDue_(schedHalfWidth_(values[i][idx['完了日']]));
+      var due = normalizeDue_(schedHalfWidth_(schedDate_(values[i][idx['期日']])));
+      var done = normalizeDue_(schedHalfWidth_(schedDate_(values[i][idx['完了日']])));
 
       dst.appendRow([
         'タスク',                       // 種類
@@ -447,14 +612,25 @@ function schedMigrateTodos_(ss) {
         done.value || '',               // 完了日
         dst.getLastRow(),               // 並び順
         safeCellText_(asText_(values[i][idx['起票者']]).trim()),
-        asText_(values[i][idx['起票日']]).trim(),
+        schedDate_(values[i][idx['起票日']]),
         '',                             // 更新者（移行では触っていない）
         '',                             // 更新日時
+        schedNewId_(),                  // ID
       ]);
       moved++;
     }
 
-    if (moved) src.setName(SHEET.TODO + '（移行済み）');
+    if (moved) {
+      /*
+       * **同名のシートがあると setName は例外を投げる。**
+       * 以前は衝突を考えていなかったので、3回目の setup() がここで止まり、
+       * しかも行は追加済みなので押すたびに増え続けた（検証役の指摘・2026-09-04）。
+       * 空いている名前を探してから改名する。
+       */
+      var name = SCHED_TODO_DONE_;
+      for (var n = 2; ss.getSheetByName(name); n++) name = SCHED_TODO_DONE_ + n;
+      src.setName(name);
+    }
   }
 
   console.log('確認事項から制作スケジュールへ ' + moved + ' 件を移しました'

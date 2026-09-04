@@ -81,6 +81,7 @@ def case(label, edits, expect):
 
 F = 'src/linkify.js'
 S = 'gas/Sched.gs'
+M = 'src/mock.js'
 
 # 画面側の esc と同じもの。case5 で「関数の外」に置くために使う
 OUTER_ESC = (
@@ -155,7 +156,7 @@ CASES = [
     ], '完了にしたのに完了日が入りません'),
 
     ('手で入れた完了日を、毎回今日で上書きする', [
-        (S, "var prev = before ? asText_(before[10]).trim() : '';", "var prev = '';"),
+        (S, "var prev = before ? schedDate_(before[10]) : '';", "var prev = '';"),
     ], '手で入れた値を上書きしました'),
 
     # ── 仕様書 §5-4 の 9：削除が全文を残す ────────────────
@@ -170,7 +171,7 @@ CASES = [
 
     # ── 移行（§5-3-10）────────────────────────────────
     ('移行で、元のシートを消す（名前を変えるだけにしない）', [
-        (S, "if (moved) src.setName(SHEET.TODO + '（移行済み）');", 'if (false) { }'),
+        (S, '      src.setName(name);', '      if (false) src.setName(name);'),
     ], '元シートの名前を変えていません'),
 
     ('移行で、関係者にいない名前も担当者に入れる', [
@@ -180,6 +181,64 @@ CASES = [
     ('移行の件数をログに出さない', [
         (S, "console.log('確認事項から制作スケジュールへ '", "if (moved) console.log('確認事項から制作スケジュールへ '"),
     ], 'ログが1行も出ていません'),
+
+    # ── 検証役2体の指摘（2026-09-04）で足した歯止め ────────────
+    # 行を「何行目か」だけで指すと、他人が1行消した瞬間に
+    # 別のタスクを上書き・削除してしまう（ok:true が返る）
+    ('行のIDを照合せず、行番号だけで指す', [
+        (S, '  if (id && here === id) return { row: row, values: values };',
+            '  return { row: row, values: values };'),
+    ], '消えた行への保存が通りました'),
+
+    ('IDが合わないとき、探し直さずに黙って書く', [
+        (S, "  if (!id) {\n    return { error: 'stale',",
+            "  if (true) {\n    return { row: row, values: values };\n  }\n  if (!id) {\n    return { error: 'stale',"),
+    ], 'IDなしの更新が通りました'),
+
+    ('更新を変更履歴に残さない', [
+        (S, '    if (beforeText !== afterText) {', '    if (false) {'),
+    ], '更新が履歴に残っていません'),
+
+    ('担当会社の件数の上限を外す', [
+        (S, '  if (given.length > SCHED_LIST_MAX) {', '  if (false) {'),
+    ], '3000社が通りました'),
+
+    ('担当者の件数の上限を外す', [
+        (S, '  if (list.length > SCHED_LIST_MAX) {', '  if (false) {'),
+    ], '3000人が通りました'),
+
+    ('日付を asText_ で読む（Date が「2026-09-20 00:00」に化ける）', [
+        (S, "      date:      schedDate_(r[idx['日付']]),",
+            "      date:      asText_(r[idx['日付']]).trim(),"),
+    ], 'date が化けました'),
+
+    ('移行済みの印を見ない（setup() の2回目で確認事項が復活する）', [
+        (S, '  return !!ss.getSheetByName(SCHED_TODO_DONE_);', '  return false;'),
+    ], '移行済みの印を見つけられません'),
+
+    ('改名先の衝突を避けない（3回目の setup() が例外で止まる）', [
+        (S, '      for (var n = 2; ss.getSheetByName(name); n++) name = SCHED_TODO_DONE_ + n;',
+            '      name = SCHED_TODO_DONE_;'),
+    ], 'は既にあります'),
+
+    # 模擬が本番より緩い／そもそも動かない形
+    ('模擬の切り出しで、改行の正規化をやめる', [
+        (M, "  const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8'));\n"
+            "  const adminSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8'));",
+            "  const src = fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8');\n"
+            "  const adminSrc = fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8');"),
+    ], 'を切り出せませんでした'),
+
+    ('模擬が、行のIDを照合しない', [
+        (M, '  if (id && here === id) return { i };', '  return { i };'),
+    ], '2回目が通りました'),
+
+    # UTC に戻す壊し方だと、JST 09:00〜24:00 のあいだは同じ日付になり落ちない
+    # （最初そう書いて、実際に落ちなかった）。必ず違う日にして、いつ流しても効くようにする
+    ('模擬の「今日」を、時差のある基準に戻す', [
+        (M, "        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo",
+            "        today: new Date(Date.now() - 86400000).toISOString().slice(0, 10),"),
+    ], '模擬の today が日本時間ではありません'),
 ]
 
 
