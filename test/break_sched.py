@@ -37,6 +37,13 @@ TARGETS = ['test/linkify.test.js', 'test/sched.test.js']
 
 
 def run():
+    # 画面の検査は admin.html を読む。src/build-admin.js を壊したら、
+    # **作り直さないと効かない**（生成物を見る検査の落とし穴）
+    b = subprocess.run(['node', 'src/build-admin.js'], cwd=R, capture_output=True,
+                       text=True, encoding='utf-8', errors='replace', shell=True)
+    if b.returncode != 0:
+        # 組み立てが落ちること自体が「壊れた」証拠。理由をそのまま返す
+        return False, (b.stdout or '') + (b.stderr or '')
     r = subprocess.run(['node', '--test'] + TARGETS, cwd=R, capture_output=True,
                        text=True, encoding='utf-8', errors='replace', shell=True)
     return r.returncode == 0, (r.stdout or '') + (r.stderr or '')
@@ -82,6 +89,10 @@ def case(label, edits, expect):
 F = 'src/linkify.js'
 S = 'gas/Sched.gs'
 M = 'src/mock.js'
+# 画面のコードは src/build-admin.js の中にある（admin.html は生成物）。
+# 壊したら作り直さないと効かないので、run() が毎回ビルドする
+A = 'src/build-admin.js'
+B = 'src/build-admin.js'
 
 # 画面側の esc と同じもの。case5 で「関数の外」に置くために使う
 OUTER_ESC = (
@@ -272,6 +283,54 @@ CASES = [
             "  }",
             '  item = item || {};'),
     ], '関係のない「領域」が理由に出ました'),
+
+    # ── 画面（仕様書 §5-4 の 5・6・6b・7・10・11・12）────────
+    # 画面を壊したあとは admin.html を作り直さないと効かない
+    ('「終わったもの」の判定に、未着手を含める', [
+        (A, "  var settled = (r.status === '完了' || r.status === '見送り');",
+            "  var settled = true;"),
+    ], 'が「終わったもの」に入りました'),
+
+    ('「終わったもの」の判定に、期日前の完了も含める', [
+        (A, "  return settled && !!r.date && r.date < SCH.today;",
+            "  return settled;"),
+    ], '期日前の完了が隠れました'),
+
+    ('隠れているものが0件でも、ボタンを出す', [
+        (A, '  db.hidden = doneCount === 0;', '  db.hidden = false;'),
+    ], '0件のときにボタンを隠していません'),
+
+    ('ボタンから件数を落とす', [
+        (A, "'終わったもの ' + doneCount + '件を表示'", "'終わったものを表示'"),
+    ], 'ボタンに隠れている件数が出ていません'),
+
+    ('遅れの判定を、端末の日付にする', [
+        (A, '  return r.date < SCH.today;',
+            "  return r.date < new Date().toISOString().slice(0, 10);"),
+    ], 'サーバーの today を無視して'),
+
+    ('「あと3日」の注意を、進行中にも出す', [
+        (A, "  if (r.status !== '未着手' && r.status !== '停滞中') return false;",
+            '  if (false) return false;'),
+    ], '進行中にまで注意が出ています'),
+
+    ('HOWTO を消す', [
+        (B, "  sched: ['制作スケジュール表の見かた', [", "  schedX: ['制作スケジュール表の見かた', ["),
+    ], 'HOWTO がありません'),
+
+    ('画面に、ステータスの一覧を直書きする', [
+        (B, "  fill('#schStat', SCH.statuses, row ? row.status : '未着手');",
+            "  fill('#schStat', ['未着手','進行中','確認中','完了','停滞中','見送り'], row ? row.status : '');"),
+    ], 'ステータスの一覧が画面に直書きされています'),
+
+    ('hidden を効かせる規則を消す（種類がタスクでも終了日の欄が出る）', [
+        (B, '.editrow[hidden],.grp[hidden],.sch-bar[hidden],.sch-terms[hidden]{display:none}',
+            '/* 消した */'),
+    ], 'hidden を付けても消えません'),
+
+    ('詳細のリンク化を、素の esc で済ませる', [
+        (B, "linkifyDetail(r.detail, esc)", "esc(r.detail)"),
+    ], '詳細の描画が linkifyDetail を通っていません'),
 
     ('模擬の「今日」を、時差のある基準に戻す', [
         (M, "        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo",

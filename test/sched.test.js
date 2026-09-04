@@ -1173,3 +1173,169 @@ describe('① 日付は、日付の形のものだけ受ける', () => {
     assert.strictEqual(r.ok, false, '日付のないマイルストーンが通りました');
   });
 });
+
+describe('① 画面：hidden が効く形になっているか', () => {
+
+  const ADMIN = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+
+  test('display を持つ入れ物に、hidden を効かせる規則がある', () => {
+    // ブラウザ既定の [hidden]{display:none} は詳細度 0,1,0 しかないので、
+    // .editrow{display:grid} や .sch-bar{display:flex} に負ける。
+    // 2026-09-04、「種類がタスクなのに終了日の欄が出る」形で実際に踏んだ。
+    // HTMLもJSも正しいのに CSS だけで機能が死ぬので、目で見るまで気づけない
+    for (const sel of ['.editrow[hidden]', '.sch-bar[hidden]', '.sch-terms[hidden]']) {
+      assert.ok(ADMIN.indexOf(sel) >= 0,
+        sel + ' の規則がありません。hidden を付けても消えません');
+    }
+  });
+
+  test('画面が、選択肢の一覧を自分で持っていない（§5-5）', () => {
+    /*
+     * 危ないのは**一覧を2か所に持つこと**。選択肢を1つ足したときに、
+     * 画面側だけ古いまま残る。正は gas/Sched.gs の
+     * SCHED_AREAS_ / SCHED_STATUSES_ で、画面は adminSched が返した配列から組む。
+     *
+     * 「完了にしたらえふし君を出す」のように、**その値そのものが意味を持つ**
+     * 処理は別もの。最初これも禁じる書き方にしてしまい、
+     * 正しいコードが落ちた（検査が厳しすぎた）。
+     * ここでは「名前が2つ以上、近くに並んでいる＝一覧」を探す。
+     */
+    const js = ADMIN.slice(ADMIN.indexOf('// ─────────────────────────────────────────── ① 制作スケジュール表'));
+    const near = (a, b) => {
+      const i = js.indexOf("'" + a + "'");
+      if (i < 0) return false;
+      return js.slice(i, i + 90).indexOf("'" + b + "'") >= 0;
+    };
+    assert.ok(!near('未着手', '進行中'), 'ステータスの一覧が画面に直書きされています');
+    assert.ok(!near('確認中', '完了'), 'ステータスの一覧が画面に直書きされています');
+    assert.ok(!near('全体', '会議'), '領域の一覧が画面に直書きされています');
+    assert.ok(!near('企画', '営業'), '領域の一覧が画面に直書きされています');
+  });
+
+  test('タブの4か所が、そろって足されている', () => {
+    // ボタン／showTab の許可リスト／HOWTO／<section> のどれかを忘れると、
+    // 「タブはあるのに開かない」「開くのに中身が無い」になる
+    assert.ok(ADMIN.indexOf('data-tab="sched"') >= 0, 'タブのボタンがありません');
+    assert.ok(ADMIN.indexOf("'sched'") >= 0, 'showTab の許可リストにありません');
+    assert.ok(ADMIN.indexOf('id="v-sched"') >= 0, '中身の <section> がありません');
+    assert.ok(ADMIN.indexOf('制作スケジュール表の見かた') >= 0, 'HOWTO がありません');
+  });
+
+  test('詳細のURLは、共有のリンク化関数を通している', () => {
+    // src/linkify.js を .toString() で埋め込んでいること＋実際に呼んでいること。
+    // どちらか片方だけだと、素の esc で済ませても誰も止められない
+    assert.ok(ADMIN.indexOf('function linkifyDetail(text, esc)') >= 0,
+      'linkifyDetail が画面に埋め込まれていません');
+    assert.ok(ADMIN.indexOf('linkifyDetail(r.detail, esc)') >= 0,
+      '詳細の描画が linkifyDetail を通っていません');
+  });
+});
+
+describe('① 画面の規則を、実際に呼んで確かめる（§5-4 の 5・6・6b）', () => {
+  /*
+   * 画面の中の関数を、admin.html から切り出して呼ぶ。
+   * 「終わったもの」の判定は**目で見ても正しさが分からない**（隠れたものは見えない）。
+   * 呼べるようにして呼ぶ、が引き継ぎ書§9 の結論。
+   */
+  function screenBox(today){
+    const html = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+    const cut = (name) => {
+      const s = html.indexOf('function ' + name + '(');
+      assert.ok(s >= 0, name + ' が画面にありません');
+      const e = html.indexOf('\n}\n', s) + 3;
+      assert.ok(e > s, name + ' の終わりが見つかりません');
+      return html.slice(s, e);
+    };
+    const box = vm.createContext({ Math, Date, Number, String, Array, Object });
+    vm.runInContext('var SCH = { today: ' + JSON.stringify(today) + ' };\n'
+      + cut('schIsDone') + cut('schIsLate') + cut('schIsSoon') + cut('schDayDiff'), box);
+    return box;
+  }
+  const call = (box, fn, row) => {
+    box.__r = row;
+    return vm.runInContext(fn + '(__r)', box);
+  };
+
+  const B = () => screenBox('2026-09-10');
+
+  test('未着手は、期日を過ぎても「終わったもの」にしない', () => {
+    // v2では「完了を隠す」だったので、遅れているものが消えかねなかった
+    for (const st of ['未着手', '進行中', '確認中', '停滞中']) {
+      assert.strictEqual(
+        call(B(), 'schIsDone', { kind: 'タスク', status: st, date: '2026-09-01' }), false,
+        st + ' が「終わったもの」に入りました');
+    }
+  });
+
+  test('期日が来ていない完了は、隠さない', () => {
+    // 先の予定を早めに終わらせたものが消えると、やったことが見えなくなる
+    assert.strictEqual(
+      call(B(), 'schIsDone', { kind: 'タスク', status: '完了', date: '2026-09-20' }), false,
+      '期日前の完了が隠れました');
+  });
+
+  test('期日を過ぎて決着したものは、隠す', () => {
+    for (const st of ['完了', '見送り']) {
+      assert.strictEqual(
+        call(B(), 'schIsDone', { kind: 'タスク', status: st, date: '2026-09-01' }), true,
+        st + ' が隠れません');
+    }
+  });
+
+  test('終わった期間・過ぎたマイルストーンも「終わったもの」', () => {
+    assert.strictEqual(call(B(), 'schIsDone',
+      { kind: '期間', date: '2026-08-01', endDate: '2026-09-01' }), true);
+    assert.strictEqual(call(B(), 'schIsDone',
+      { kind: '期間', date: '2026-09-01', endDate: '2026-09-30' }), false);
+    assert.strictEqual(call(B(), 'schIsDone',
+      { kind: 'マイルストーン', date: '2026-09-01' }), true);
+    assert.strictEqual(call(B(), 'schIsDone',
+      { kind: 'マイルストーン', date: '2026-10-24' }), false);
+  });
+
+  test('遅れの判定は、決着したものを含めない', () => {
+    assert.strictEqual(call(B(), 'schIsLate',
+      { kind: 'タスク', status: '未着手', date: '2026-09-01' }), true);
+    assert.strictEqual(call(B(), 'schIsLate',
+      { kind: 'タスク', status: '完了', date: '2026-09-01' }), false);
+    assert.strictEqual(call(B(), 'schIsLate',
+      { kind: 'タスク', status: '未着手', date: '' }), false);
+  });
+
+  test('遅れの判定は、サーバーの今日を使っている（端末の日付を見ない・§5-4の10）', () => {
+    // SCH.today だけを差し替えて、結果が変わることを見る。
+    // 端末の日付を見ていたら、ここを変えても結果は変わらない
+    const early = screenBox('2026-08-01');
+    const late = screenBox('2026-09-10');
+    const row = { kind: 'タスク', status: '未着手', date: '2026-09-01' };
+    assert.strictEqual(call(early, 'schIsLate', row), false,
+      'サーバーの today を無視して、端末の日付で判定しています');
+    assert.strictEqual(call(late, 'schIsLate', row), true,
+      'サーバーの today を無視して、端末の日付で判定しています');
+  });
+
+  test('「あと3日」の注意は、未着手と停滞中だけに出す', () => {
+    const b = () => screenBox('2026-09-10');
+    assert.strictEqual(call(b(), 'schIsSoon',
+      { kind: 'タスク', status: '未着手', date: '2026-09-12' }), true);
+    assert.strictEqual(call(b(), 'schIsSoon',
+      { kind: 'タスク', status: '進行中', date: '2026-09-12' }), false,
+      '進行中にまで注意が出ています');
+    assert.strictEqual(call(b(), 'schIsSoon',
+      { kind: 'タスク', status: '未着手', date: '2026-09-20' }), false);
+  });
+
+  test('「終わったもの」のボタンは、件数を出し、0件なら出さない（§5-4の6b）', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+    assert.ok(html.indexOf("db.hidden = doneCount === 0") >= 0,
+      '0件のときにボタンを隠していません');
+    assert.ok(html.indexOf("'終わったもの ' + doneCount + '件を表示'") >= 0,
+      'ボタンに隠れている件数が出ていません');
+  });
+
+  test('曜日は列として持たず、表示のときに付ける（§5-4の7）', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+    assert.ok(html.indexOf('function schShowDate') >= 0, '曜日を付ける関数がありません');
+    assert.ok(html.indexOf("'曜日'") < 0, '曜日を列として持とうとしています');
+  });
+});

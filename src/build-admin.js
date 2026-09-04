@@ -26,6 +26,13 @@ const ROOT = path.resolve(__dirname, '..');
 const C = require('./content.js');
 const IMG = require('./imgsize.js');
 const { TOKENS: T, icon } = require('./theme.js');
+/*
+ * 詳細欄のURLのリンク化。**①と②で同じ関数を共有する**（2つ書くと必ずズレる）。
+ * src/schema.js と同じ「.toString() を画面に書き出す」方式なので、
+ * あの関数は自分の引数だけで完結している必要がある
+ * （esc をモジュールから呼ばず、引数で受け取っているのはそのため）。
+ */
+const { linkifyDetail } = require('./linkify.js');
 
 const endpointPath = path.join(ROOT, 'src', 'endpoint.json');
 const ENDPOINT = fs.existsSync(endpointPath)
@@ -598,6 +605,114 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     font-size:8.5pt;letter-spacing:.02em}
 }
 .printhead{display:none}
+
+/* **hidden 属性を効かせる。**
+   ブラウザ既定の [hidden]{display:none} は詳細度が 0,1,0 しかないので、
+   .editrow{display:grid} や .sch-bar{display:flex} のような
+   作者側の規則に**あとから書かれたぶんだけ負ける**。
+   2026-09-04、「種類がタスクなのに終了日の欄が出る」形で実際に踏んだ。
+   HTMLもJSも正しいのにCSSだけで機能が死ぬので、目で見るまで気づけない。
+   .editrow は他のパネルでも使っているので、そちらの穴もここで塞がる。 */
+.editrow[hidden],.grp[hidden],.sch-bar[hidden],.sch-terms[hidden]{display:none}
+
+/* ─────────────── ① 制作スケジュール表
+   このタブのCSSは**全部 sch- で始める**。
+   設計案v2で class="wk alert" と付けたら、②の警告帯用の .alert が当たって
+   勝手に色が付いた。同じ名前を別の意味で2回使うと、静かに混ざる。 */
+.sch-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
+.sch-bar .sp{margin-left:auto}
+.sch-chip{background:#fff;border:1px solid var(--line);border-radius:999px;
+  padding:7px 14px;font-size:12.5px;cursor:pointer;color:var(--ink)}
+.sch-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.sch-note{font-size:11.5px;color:var(--muted);margin:0 0 14px;line-height:1.7}
+
+/* いま動いている期間の帯 */
+.sch-terms{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 16px}
+.sch-term{flex:1 1 240px;background:#fff;border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:6px;padding:11px 14px}
+.sch-term .n{font-weight:700;font-size:13px;margin-bottom:5px}
+.sch-term .d{font-size:11.5px;color:var(--muted)}
+.sch-term .gauge{height:5px;background:#EFEBE9;border-radius:3px;margin-top:8px;overflow:hidden}
+.sch-term .gauge i{display:block;height:100%;background:var(--accent)}
+
+.sch-group{margin:0 0 22px}
+.sch-group h3{font-size:12px;letter-spacing:.08em;color:var(--muted);
+  margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.sch-group h3 .c{background:#EFEBE9;border-radius:999px;padding:1px 8px;font-size:11px}
+.sch-group.late h3{color:var(--error)}
+
+.sch-table{width:100%;border-collapse:collapse;background:#fff;
+  border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.sch-table td{padding:10px 12px;border-top:1px solid var(--line);font-size:13px;
+  vertical-align:top}
+.sch-table tr:first-child td{border-top:0}
+.sch-row{cursor:pointer}
+.sch-row:hover{background:#FBFAF9}
+.sch-row .dt{white-space:nowrap;color:var(--muted);font-size:12px;width:1%}
+.sch-row .ttl{font-weight:600}
+.sch-row .dsc{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.6;
+  white-space:pre-wrap;word-break:break-word}
+.sch-row .dsc a{color:var(--brandDeep)}
+.sch-row .who{white-space:nowrap;width:1%}
+
+/* 遅れ・注意は**塗りと左の線の2つで**示す。色だけに頼らない
+   （水色ボタンが1.81:1で見えなかった事故のあと、この案件の原則） */
+.sch-row.late td{background:#FDF3F2}
+.sch-row.late td:first-child{box-shadow:inset 3px 0 0 var(--error)}
+.sch-row.late .dt{color:var(--error);font-weight:700}
+.sch-row.soon td{background:#FDF7EF}
+.sch-row.soon td:first-child{box-shadow:inset 3px 0 0 #C97A16}
+.sch-row.soon .dt{color:#9A5B24}
+.sch-row.done td{background:#F5F5F4}
+.sch-row.done td:first-child{box-shadow:inset 3px 0 0 #CFCBC9}
+.sch-row.done .dt,.sch-row.done .ttl{color:var(--muted)}
+.sch-row.done .ttl{text-decoration:line-through}
+.sch-row.mile td{background:var(--accentPale)}
+.sch-row.mile td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+
+/* 会社の頭文字。Bebas Neue は使わない
+   （src/theme.js のコメントどおり「数字が主役になる」ための縦長で詰まった書体。
+     1文字の英字ではつぶれる。v2で実際につぶれて指摘を受けた） */
+.sch-ico{display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;
+  font-family:${T.fontBody};margin-right:3px;vertical-align:middle}
+.sch-ico.dotted{background:#fff;border:1px dashed #8C8481;color:#6E6763}
+
+.sch-status{display:inline-block;border:1px solid var(--line);border-radius:999px;
+  padding:3px 10px;font-size:11.5px;background:#fff;cursor:pointer;white-space:nowrap}
+.sch-status.s2{border-color:var(--brandDeep);color:var(--brandDeep)}
+.sch-status.s3{border-color:var(--accent);color:var(--accent)}
+.sch-status.s4{background:#EFEBE9;color:var(--muted)}
+.sch-status.s5{border-color:#C97A16;color:#9A5B24}
+.sch-status.s6{background:#F5F5F4;color:var(--muted);text-decoration:line-through}
+
+.sch-add{width:100%;background:none;border:1px dashed var(--line);border-radius:6px;
+  padding:9px;font-size:12px;color:var(--muted);cursor:pointer;margin-top:6px}
+.sch-add:hover{border-color:var(--brandDeep);color:var(--brandDeep)}
+.sch-empty{background:#fff;border:1px solid var(--line);border-radius:6px;
+  padding:26px;text-align:center;color:var(--muted);font-size:13px}
+
+/* 完了にしたときのえふし君。**クリックは通り抜ける**（操作を止めない） */
+.sch-efushi{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;z-index:60}
+.sch-efushi img{width:180px;height:180px;animation:schPop 2s ease forwards}
+@keyframes schPop{
+  0%{transform:scale(.6) translateY(20px);opacity:0}
+  15%{transform:scale(1.08) translateY(0);opacity:1}
+  25%{transform:scale(1)}
+  75%{transform:scale(1);opacity:1}
+  100%{transform:scale(.96);opacity:0}
+}
+/* 酔いを避ける。headless Chrome はこちらを返すので、撮影は自動的にこの経路になる */
+@media (prefers-reduced-motion: reduce){
+  .sch-efushi img{animation:schFade 2s ease forwards}
+  @keyframes schFade{0%{opacity:0}10%{opacity:1}80%{opacity:1}100%{opacity:0}}
+}
+
+@media (max-width:700px){
+  .sch-table td{padding:9px 10px}
+  .sch-row .who{display:none}
+}
 `;
 }
 
@@ -1948,6 +2063,9 @@ function showTab(name, keepHash){
     if (on) scrollTabIntoView(b);
   });
   $$('.view').forEach(function(v){ v.classList.toggle('on', v.id === 'v-' + name); });
+  // 制作スケジュールは毎回読み直す。全員が触れる画面なので、
+  // 開いたときに古い並びを見せると、他の人が入れたものに気づけない
+  if (name === 'sched') loadSched();
   if (name === 'map' && !S.spaces) loadSpaces();
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
@@ -1969,7 +2087,7 @@ function showTab(name, keepHash){
 function applyHash(){
   var parts = location.hash.replace(/^#/, '').split('/');
   var tab = parts[0];
-  if (['dash','list','map','day','docs','mail','people','history','settings'].indexOf(tab) < 0) return;
+  if (['dash','sched','list','map','day','docs','mail','people','history','settings'].indexOf(tab) < 0) return;
   showTab(tab, true);
   if (tab === 'list' && parts[1]){
     var wait = setInterval(function(){
@@ -3301,6 +3419,7 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#dClose').addEventListener('click', closeDetail);
   $('.drawer').addEventListener('click', function(e){ if (e.target === $('.drawer')) closeDetail(); });
   $('#dSave').addEventListener('click', saveDetail);
+  bindSched();
   $('#aWho').addEventListener('change', onWhoChange);
   $('#aDel').addEventListener('click', unassign);
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDetail(); });
@@ -3319,6 +3438,464 @@ document.addEventListener('DOMContentLoaded', function(){
     recallPassword();
   }
 });
+
+// ─────────────────────────────────────────── ① 制作スケジュール表
+/*
+ * 選択肢（領域・ステータス・種類）は**画面に直書きしない**。
+ * サーバーが返したものを使う。直書きすると、選択肢を足したときに
+ * ここだけ古いまま残る（test/aggregate.test.js と同じ向きの検査がある）。
+ */
+var SCH = { rows: [], areas: [], statuses: [], kinds: [], companies: [],
+            peopleByCompany: {}, me: {}, today: '', editing: null };
+var SCH_KEY = 'bondance.sched.filters.v1';
+var SCH_F = { done: false, mine: false, only: [] };
+
+/** 詳細欄のURLのリンク化。src/linkify.js から書き出したもの（①②で共有） */
+${linkifyDetail.toString()}
+
+function schReadFilters(){
+  try {
+    var s = JSON.parse(localStorage.getItem(SCH_KEY) || 'null');
+    if (s) { SCH_F.done = !!s.done; SCH_F.mine = !!s.mine;
+             SCH_F.only = Array.isArray(s.only) ? s.only : []; }
+  } catch(e){}
+}
+function schWriteFilters(){
+  try { localStorage.setItem(SCH_KEY, JSON.stringify(SCH_F)); } catch(e){}
+}
+
+function loadSched(){
+  api('adminSched').then(function(r){
+    if (!r || !r.ok){
+      toast((r && r.message) || '制作スケジュールを読み込めませんでした', true);
+      return;
+    }
+    SCH.rows = r.rows || [];
+    SCH.areas = r.areas || []; SCH.statuses = r.statuses || []; SCH.kinds = r.kinds || [];
+    SCH.companies = r.companies || []; SCH.peopleByCompany = r.peopleByCompany || {};
+    SCH.me = r.me || {}; SCH.today = r.today || '';
+    renderSched();
+  }, function(e){ toast(String(e && e.message || e), true); });
+}
+
+/** 「終わったもの」の定義（仕様§1-11）。**未着手・進行中・確認中・停滞中は隠さない** */
+function schIsDone(r){
+  if (r.kind === '期間') return !!r.endDate && r.endDate < SCH.today;
+  if (r.kind === 'マイルストーン') return !!r.date && r.date < SCH.today;
+  var settled = (r.status === '完了' || r.status === '見送り');
+  // **期日が過ぎて決着したもの**だけを隠す。
+  // 先の予定を早めに終わらせたものが消えると、やったことが見えなくなる
+  return settled && !!r.date && r.date < SCH.today;
+}
+
+function schIsLate(r){
+  if (r.kind !== 'タスク' || !r.date) return false;
+  if (r.status === '完了' || r.status === '見送り') return false;
+  return r.date < SCH.today;
+}
+function schIsSoon(r){
+  if (r.kind !== 'タスク' || !r.date) return false;
+  if (r.status !== '未着手' && r.status !== '停滞中') return false;
+  if (r.date < SCH.today) return false;
+  return schDayDiff(SCH.today, r.date) <= 3;
+}
+
+/** 日付の差（日）。どちらも yyyy-MM-dd */
+function schDayDiff(a, b){
+  var pa = a.split('-'), pb = b.split('-');
+  var da = Date.UTC(+pa[0], +pa[1]-1, +pa[2]);
+  var db = Date.UTC(+pb[0], +pb[1]-1, +pb[2]);
+  return Math.round((db - da) / 86400000);
+}
+/** その週の月曜。「この週に追加」で日付を先に入れるのに使う */
+function schMondayOf(ymd, plusWeeks){
+  var p = ymd.split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1]-1, +p[2]));
+  var dow = d.getUTCDay();                 // 0=日
+  d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1) + 7 * (plusWeeks || 0));
+  var out = d.toISOString().slice(0, 10);
+  // 過ぎた日を先に入れると、開いた瞬間に「遅れ」の行を作ることになる
+  return out < SCH.today ? SCH.today : out;
+}
+
+/** その週の日曜（週の終わり）。月曜始まりで数える */
+function schSundayOf(ymd, plusWeeks){
+  var p = ymd.split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1]-1, +p[2]));
+  var dow = d.getUTCDay();                 // 0=日
+  var toSun = (dow === 0) ? 0 : 7 - dow;
+  d.setUTCDate(d.getUTCDate() + toSun + 7 * (plusWeeks || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+function schGroupOf(r){
+  if (schIsLate(r)) return 0;              // 遅れは週に関係なく先頭
+  var key = (r.kind === '期間') ? (r.endDate || r.date) : r.date;
+  if (!key) return 3;                      // 日付が無いものは「それ以降」の末尾
+  if (key <= schSundayOf(SCH.today, 0)) return 1;
+  if (key <= schSundayOf(SCH.today, 1)) return 2;
+  return 3;
+}
+
+function schCompanyIcon(name){
+  var map = { 'FC大阪': ['O', '${T.brandDeep || '#2F8FC4'}'],
+              'UPDATER': ['U', '${T.accent || '#B5714C'}'],
+              'LOP': ['L', '#5E7A6B'] };
+  var m = map[name];
+  var ch = m ? m[0] : (name || '?').charAt(0);
+  var bg = m ? m[1] : '#8C8481';
+  return { ch: ch, bg: bg };
+}
+
+function schWhoHtml(r){
+  var out = '';
+  var people = r.people || [], companies = r.companies || [];
+  if (people.length){
+    people.forEach(function(p){
+      // 担当者の所属は、保存のときにサーバーが担当会社へ足している
+      var co = '';
+      Object.keys(SCH.peopleByCompany).forEach(function(c){
+        if ((SCH.peopleByCompany[c] || []).indexOf(p) >= 0) co = c;
+      });
+      var ic = schCompanyIcon(co);
+      out += '<span class="sch-ico" style="background:' + ic.bg + '" title="'
+           + esc(p + (co ? '（' + co + '）' : '')) + '">' + esc(ic.ch) + '</span>';
+    });
+    return out;
+  }
+  // 担当者が未定で、会社だけ決まっているもの（印刷会社など）は点線で出す
+  companies.forEach(function(c){
+    var ic = schCompanyIcon(c);
+    out += '<span class="sch-ico dotted" title="' + esc(c + '（担当者は未定）') + '">'
+         + esc(ic.ch) + '</span>';
+  });
+  return out;
+}
+
+function schRowHtml(r){
+  var cls = ['sch-row'];
+  if (schIsLate(r)) cls.push('late');
+  else if (schIsSoon(r)) cls.push('soon');
+  if (r.status === '完了' || r.status === '見送り') cls.push('done');
+  if (r.kind === 'マイルストーン') cls.push('mile');
+
+  var when = r.date ? schShowDate(r.date) : '日付なし';
+  if (r.kind === '期間' && r.endDate) when += '〜' + schShowDate(r.endDate);
+
+  var si = SCH.statuses.indexOf(r.status);
+  var status = (r.kind === 'タスク')
+    ? '<button class="sch-status s' + (si + 1) + '" data-sid="' + esc(r.id)
+      + '" title="押すとステータスを変えられます">' + esc(r.status) + '</button>'
+    : '<span class="sch-status s4">' + esc(r.kind) + '</span>';
+
+  return '<tr class="' + cls.join(' ') + '" data-sid="' + esc(r.id) + '">'
+    + '<td class="dt">' + esc(when) + '</td>'
+    + '<td><div class="ttl">' + esc(r.title) + '</div>'
+    + (r.detail ? '<div class="dsc">' + linkifyDetail(r.detail, esc) + '</div>' : '')
+    + (r.memo ? '<div class="dsc">' + esc(r.memo) + '</div>' : '')
+    + '</td>'
+    + '<td class="who">' + schWhoHtml(r) + '</td>'
+    + '<td class="who">' + status + '</td>'
+    + '</tr>';
+}
+
+/** 画面に出す日付。曜日は表示のときに付ける（列としては持たない） */
+function schShowDate(ymd){
+  var p = ymd.split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1]-1, +p[2]));
+  var w = ['日','月','火','水','木','金','土'][d.getUTCDay()];
+  return (+p[1]) + '/' + (+p[2]) + '(' + w + ')';
+}
+
+function renderSched(){
+  schReadFilters();
+
+  /*
+   * 期間の帯。**期間はレーンに入れない**（仕様§1-3）。
+   *
+   * 帯を「いま動いているものだけ」にすると、これから始まる期間がどこにも出ない。
+   * レーンに入れないという決めごとを守りつつ見えなくならないよう、
+   * すべての期間を帯に出して、**いまどの状態か**を添える。
+   * 終わった期間は「終わったもの」なので、既定では隠れる（§1-11）。
+   */
+  var terms = SCH.rows.filter(function(r){
+    if (r.kind !== '期間' || !r.date || !r.endDate) return false;
+    return SCH_F.done || !schIsDone(r);
+  }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+  var tb = $('#schTerms');
+  tb.hidden = terms.length === 0;
+  tb.innerHTML = terms.map(function(r){
+    var all = schDayDiff(r.date, r.endDate) + 1;
+    var past = schDayDiff(r.date, SCH.today) + 1;
+    var left = schDayDiff(SCH.today, r.endDate);
+    var pct = Math.max(0, Math.min(100, Math.round(past / all * 100)));
+    var state = (SCH.today < r.date)
+      ? ('開始まであと' + schDayDiff(SCH.today, r.date) + '日')
+      : (left < 0 ? '終了しました' : '残り' + left + '日');
+    return '<div class="sch-term" data-sid="' + esc(r.id) + '" style="cursor:pointer">'
+      + '<div class="n">' + esc(r.title) + '</div>'
+      + '<div class="d">' + esc(schShowDate(r.date)) + '〜' + esc(schShowDate(r.endDate))
+      + '　' + esc(state) + '</div>'
+      + '<div class="gauge"><i style="width:' + pct + '%"></i></div></div>';
+  }).join('');
+
+  // 隠れているものの件数。**0件ならボタン自体を出さない**
+  var doneCount = SCH.rows.filter(schIsDone).length;
+  var db = $('#schDone');
+  db.hidden = doneCount === 0;
+  db.textContent = SCH_F.done ? '終わったものを隠す' : '終わったもの ' + doneCount + '件を表示';
+  db.setAttribute('aria-pressed', String(SCH_F.done));
+  $('#schMine').setAttribute('aria-pressed', String(SCH_F.mine));
+  $('#schStatus').setAttribute('aria-pressed', String(SCH_F.only.length > 0));
+
+  $('#schNote').innerHTML = '「終わったもの」＝<b>期日を過ぎて決着したもの</b>'
+    + '（完了・見送り）、終わった期間、過ぎたマイルストーンです。'
+    + '未着手・進行中・確認中・停滞中は、期日を過ぎても隠れません。';
+
+  var rows = SCH.rows.filter(function(r){
+    // 期間は上の帯に出す。レーンには入れない（仕様§1-3）。
+    // 両方に出すと、いま動いている期間が「それ以降」に並ぶ、という
+    // 読み手に矛盾する見え方になる（実際にそうなっていた）
+    if (r.kind === '期間') return false;
+    if (!SCH_F.done && schIsDone(r)) return false;
+    if (SCH_F.mine && SCH.me.company){
+      if ((r.companies || []).indexOf(SCH.me.company) < 0) return false;
+    }
+    if (SCH_F.only.length && r.kind === 'タスク'
+        && SCH_F.only.indexOf(r.status) < 0) return false;
+    return true;
+  });
+
+  var names = ['遅れている', '今週', '来週', 'それ以降'];
+  var buckets = [[], [], [], []];
+  rows.forEach(function(r){ buckets[schGroupOf(r)].push(r); });
+  buckets.forEach(function(b){
+    b.sort(function(x, y){
+      var a = x.date || '9999-99-99', c = y.date || '9999-99-99';
+      return a < c ? -1 : a > c ? 1 : (x.order || 0) - (y.order || 0);
+    });
+  });
+
+  var html = '';
+  buckets.forEach(function(b, i){
+    if (!b.length) return;                 // **0件の束は、見出しごと出さない**
+    html += '<div class="sch-group' + (i === 0 ? ' late' : '') + '">'
+      + '<h3>' + esc(names[i]) + '<span class="c">' + b.length + '</span></h3>'
+      + '<table class="sch-table"><tbody>'
+      + b.map(schRowHtml).join('')
+      + '</tbody></table>'
+      // 遅れている束には出さない（「遅れに追加する」は意味が通らない）
+      + (i === 0 ? '' : '<button class="sch-add" data-week="' + i + '">＋ '
+          + esc(names[i]) + 'に追加</button>')
+      + '</div>';
+  });
+  if (!html){
+    html = '<div class="sch-empty">出すものがありません。'
+      + (doneCount && !SCH_F.done ? '「終わったもの ' + doneCount + '件を表示」を押すと出ます。'
+                                  : '右上の「＋ タスクを追加」から足せます。') + '</div>';
+  }
+  $('#schList').innerHTML = html;
+
+  // ステータスの絞り込み（選択肢はサーバーが返したもの）
+  var sb = $('#schStatusBox');
+  sb.hidden = SCH_F.only.length === 0 && sb.dataset.open !== '1';
+  if (!sb.hidden){
+    sb.innerHTML = SCH.statuses.map(function(s){
+      return '<button class="sch-chip" data-st="' + esc(s) + '" aria-pressed="'
+        + (SCH_F.only.indexOf(s) >= 0) + '">' + esc(s) + '</button>';
+    }).join('');
+  }
+}
+
+function schFind(id){
+  for (var i = 0; i < SCH.rows.length; i++){
+    if (String(SCH.rows[i].id) === String(id)) return SCH.rows[i];
+  }
+  return null;
+}
+
+/** えふし君。完了にした瞬間だけ、約2秒。**クリックは通り抜ける** */
+function schEfushi(){
+  var d = document.createElement('div');
+  d.className = 'sch-efushi';
+  d.innerHTML = '<img src="assets/efushi-done.png" alt="">';
+  document.body.appendChild(d);
+  setTimeout(function(){ if (d.parentNode) d.parentNode.removeChild(d); }, 2100);
+}
+
+function schOpen(row, week){
+  SCH.editing = row || null;
+  var isNew = !row;
+  $('#schPanelTitle').textContent = isNew ? 'タスクを追加' : 'タスクを編集';
+  var fill = function(sel, list, val, blank){
+    // 「全体」はイベント全体を指す値。個別のタスクの既定にすると、
+    // **選び忘れがそのまま保存される**。先頭に空を置いて、選ばせる
+    var head = blank ? '<option value=""' + (val ? '' : ' selected') + '>'
+      + esc(blank) + '</option>' : '';
+    $(sel).innerHTML = head + list.map(function(v){
+      return '<option' + (v === val ? ' selected' : '') + '>' + esc(v) + '</option>';
+    }).join('');
+  };
+  fill('#schKind', SCH.kinds, row ? row.kind : 'タスク');
+  fill('#schArea', SCH.areas, row ? row.area : '', '選んでください');
+  fill('#schStat', SCH.statuses, row ? row.status : '未着手');
+  // 「今週に追加」なら、その週の月曜を入れた状態で開く（打ち直さなくて済む）
+  $('#schDate').value = row ? (row.date || '')
+    : (week ? schMondayOf(SCH.today, week - 1) : '');
+  $('#schEnd').value = row ? (row.endDate || '') : '';
+  $('#schTitle').value = row ? row.title : '';
+  $('#schDetail').value = row ? (row.detail || '') : '';
+  $('#schMemo').value = row ? (row.memo || '') : '';
+  $('#schCos').value = row ? (row.companies || []).join(', ') : '';
+
+  // 担当者は、会社ごとに分かれた一覧から選ぶ
+  var chosen = row ? (row.people || []) : [];
+  $('#schPeople').innerHTML = Object.keys(SCH.peopleByCompany).map(function(c){
+    return '<div class="editrow"><label>' + esc(c) + '</label><span>'
+      + (SCH.peopleByCompany[c] || []).map(function(p){
+          return '<button class="sch-chip" data-person="' + esc(p) + '" aria-pressed="'
+            + (chosen.indexOf(p) >= 0) + '">' + esc(p) + '</button>';
+        }).join(' ')
+      + '</span></div>';
+  }).join('');
+
+  $('#schDel').hidden = isNew;
+  $('#schMetaBox').hidden = isNew;
+  if (!isNew){
+    $('#schMeta').textContent =
+      (row.author ? row.author + ' さんが ' + (row.createdAt || '') + ' に追加' : '')
+      + (row.updatedBy ? '／' + row.updatedBy + ' さんが ' + (row.updatedAt || '') + ' に更新' : '')
+      + (row.doneDate ? '／' + (row.status === '見送り' ? '見送りにした日' : '完了日')
+                      + ' ' + row.doneDate : '');
+  }
+  schKindChanged();
+  $('#schDrawer').classList.add('on');
+  setTimeout(function(){ $('#schTitle').focus(); }, 40);
+}
+function schClose(){ $('#schDrawer').classList.remove('on'); SCH.editing = null; }
+
+/** 種類によって、見せる欄を変える（期間だけ終了日、タスクだけステータス） */
+function schKindChanged(){
+  var k = $('#schKind').value;
+  $('#schEndRow').hidden = (k !== '期間');
+  $('#schStatusRow').hidden = (k !== 'タスク');
+}
+
+function schCollect(){
+  var people = $$('#schPeople [data-person]')
+    .filter(function(b){ return b.getAttribute('aria-pressed') === 'true'; })
+    .map(function(b){ return b.getAttribute('data-person'); });
+  var cos = $('#schCos').value.split(',').map(function(s){ return s.trim(); })
+    .filter(function(s){ return s; });
+  return {
+    kind: $('#schKind').value,
+    date: $('#schDate').value,
+    endDate: $('#schEnd').value,
+    area: $('#schArea').value,
+    status: $('#schStat').value,
+    title: $('#schTitle').value,
+    detail: $('#schDetail').value,
+    memo: $('#schMemo').value,
+    people: people, companies: cos,
+  };
+}
+
+function schSave(){
+  var row = SCH.editing;
+  var item = schCollect();
+  var wasDone = row && (row.status === '完了' || row.status === '見送り');
+  api('adminSchedSave', { row: row ? row.row : 0, id: row ? row.id : undefined, item: item })
+    .then(function(r){
+      if (!r || !r.ok){ toast((r && r.message) || '保存できませんでした', true); return; }
+      schClose();
+      toast(r.added ? '追加しました' : '保存しました');
+      if (item.status === '完了' && !wasDone) schEfushi();
+      loadSched();
+    }, function(e){ toast(String(e && e.message || e), true); });
+}
+
+function schDelete(){
+  var row = SCH.editing;
+  if (!row) return;
+  if (!confirm('「' + row.title + '」を削除します。\\n\\n'
+    + '元に戻すには、変更履歴から手で入れ直すことになります。よろしいですか？')) return;
+  api('adminSchedDelete', { row: row.row, id: row.id }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '削除できませんでした', true); return; }
+    schClose();
+    toast('削除しました（変更履歴に残っています）');
+    loadSched();
+  }, function(e){ toast(String(e && e.message || e), true); });
+}
+
+/** ステータスのチップを押したときだけ、パネルを開かずに切り替える（いちばん頻度が高い） */
+function schCycleStatus(row){
+  var i = SCH.statuses.indexOf(row.status);
+  var next = SCH.statuses[(i + 1) % SCH.statuses.length];
+  var wasDone = (row.status === '完了' || row.status === '見送り');
+  var item = { kind: row.kind, date: row.date, endDate: row.endDate, area: row.area,
+               status: next, title: row.title, detail: row.detail, memo: row.memo,
+               people: row.people, companies: row.companies };
+  api('adminSchedSave', { row: row.row, id: row.id, item: item }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '変更できませんでした', true); return; }
+    if (next === '完了' && !wasDone) schEfushi();
+    loadSched();
+  }, function(e){ toast(String(e && e.message || e), true); });
+}
+
+function bindSched(){
+  schReadFilters();
+  $('#schAdd').addEventListener('click', function(){ schOpen(null); });
+  $('#schClose').addEventListener('click', schClose);
+  $('#schSave').addEventListener('click', schSave);
+  $('#schDel').addEventListener('click', schDelete);
+  $('#schKind').addEventListener('change', schKindChanged);
+  $('#schDrawer').addEventListener('click', function(e){
+    if (e.target === $('#schDrawer')) schClose();
+  });
+  $('#schDone').addEventListener('click', function(){
+    SCH_F.done = !SCH_F.done; schWriteFilters(); renderSched();
+  });
+  $('#schMine').addEventListener('click', function(){
+    if (!SCH.me.company){ toast('あなたの所属が関係者リストに登録されていません', true); return; }
+    SCH_F.mine = !SCH_F.mine; schWriteFilters(); renderSched();
+  });
+  $('#schStatus').addEventListener('click', function(){
+    var sb = $('#schStatusBox');
+    sb.dataset.open = (sb.dataset.open === '1') ? '0' : '1';
+    if (sb.dataset.open !== '1') SCH_F.only = [];
+    schWriteFilters(); renderSched();
+  });
+  $('#schStatusBox').addEventListener('click', function(e){
+    var b = e.target.closest('[data-st]'); if (!b) return;
+    var s = b.getAttribute('data-st');
+    var i = SCH_F.only.indexOf(s);
+    if (i >= 0) SCH_F.only.splice(i, 1); else SCH_F.only.push(s);
+    schWriteFilters(); renderSched();
+  });
+  $('#schPeople').addEventListener('click', function(e){
+    var b = e.target.closest('[data-person]'); if (!b) return;
+    b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  });
+  // 期間の帯を押しても編集できる（帯にしか出ないので、ここが唯一の入口）
+  $('#schTerms').addEventListener('click', function(e){
+    var t = e.target.closest('[data-sid]'); if (!t) return;
+    var r = schFind(t.getAttribute('data-sid')); if (r) schOpen(r);
+  });
+  // 行を押す → 右パネル。**出店者一覧とまったく同じ操作**
+  $('#schList').addEventListener('click', function(e){
+    var add = e.target.closest('[data-week]');
+    if (add){ schOpen(null, Number(add.getAttribute('data-week'))); return; }
+    var st = e.target.closest('.sch-status[data-sid]');
+    if (st){ var r1 = schFind(st.getAttribute('data-sid')); if (r1) schCycleStatus(r1); return; }
+    var tr = e.target.closest('.sch-row'); if (!tr) return;
+    if (e.target.closest('a')) return;      // 詳細のリンクは、そのまま開かせる
+    var r2 = schFind(tr.getAttribute('data-sid')); if (r2) schOpen(r2);
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && $('#schDrawer').classList.contains('on')) schClose();
+  });
+}
 `;
 }
 
@@ -3352,6 +3929,33 @@ const HOWTO = {
                    + 'いま出ている分だけの合計**で、母数も添えて出します。'],
     ['区画の充足', '割り当て済みの区画数 ÷ 設定の「区画の総数」です。'],
     ['総応募数の「／ 目標」', '設定の「目標の出店社数」です。空欄なら出ません。'],
+  ]],
+  sched: ['制作スケジュール表の見かた', [
+    ['この画面は何か', '本番（10/24）までに**何を・誰が・いつまでに**やるかを、'
+                    + '1本の時間軸に並べたものです。**打ち合わせの宿題もここに入ります**'
+                    + '（以前の「確認事項」タブはここに一本化しました）。'],
+    ['並び', '上から「遅れている」「今週」「来週」「それ以降」の順です。'
+           + '**遅れているものは、週に関係なくいちばん上に集まります。**'],
+    ['色の意味', '**赤っぽい行**は期日を過ぎてまだ終わっていないもの、'
+               + '**黄色っぽい行**はあと数日で期日が来て、まだ手が付いていないものです。'
+               + '左端の縦線でも見分けられます。'],
+    ['終わったもの', '既定では隠れています。ボタンに**隠れている件数**が出るので、'
+                  + '見たいときに押してください。'
+                  + '「終わったもの」＝**期日を過ぎて決着した**（完了・見送り）もの、'
+                  + '終わった期間、過ぎたマイルストーンです。'
+                  + '**先の予定を早めに終わらせたものは隠れません。**'],
+    ['ステータス', '**未着手／進行中／確認中／完了／停滞中／見送り**の6つです。'
+                 + '「停滞中」は、着手したが**こちら側では動かせない**もの'
+                 + '（先方の返事待ちなど）に付けます。'
+                 + '「見送り」は、やらないと決めたものです。**行は残ります。**'],
+    ['書き換え', '行を押すと右から編集の画面が出ます。'
+               + 'ステータスだけなら、行の中の丸いボタンを押せば変えられます。'],
+    ['誰が触れるか', '**全員です。**追加も編集も削除もできます。'
+                  + '代わりに、誰が入れて誰が最後に触ったかが必ず残ります。'
+                  + '**削除したものは「変更履歴」タブに全文が残ります**が、'
+                  + '戻すには手で入れ直すことになります。'],
+    ['担当の丸い印', '会社の頭文字です。Ⓞ＝FC大阪、Ⓤ＝UPDATER、Ⓛ＝LOP。'
+                  + '**点線の丸**は、会社だけ決まっていて担当者が未定のものです。'],
   ]],
   list: ['出店者一覧の見かた', [
     // 「メール送信タブから」と書いてあるのに、一般権限にはそのタブが無かった。
@@ -3575,6 +4179,7 @@ function html() {
 
   <nav class="tabs"><div class="in">
     <button data-tab="dash" aria-selected="true">ダッシュボード</button>
+    <button data-tab="sched" aria-selected="false">制作スケジュール</button>
     <button data-tab="list" aria-selected="false">出店者一覧</button>
     <button data-tab="map"  aria-selected="false">出店エリアマップ</button>
     <button data-tab="day"  aria-selected="false">当日運営</button>
@@ -3586,6 +4191,24 @@ function html() {
   </div></nav>
 
   <main>
+    <!-- ① 制作スケジュール表 -->
+    <section class="view" id="v-sched">
+      ${howto('sched')}
+      <div class="sch-terms" id="schTerms" hidden></div>
+      <div class="sch-bar">
+        <button class="sch-chip" id="schMine" aria-pressed="false">自社の担当だけ</button>
+        <button class="sch-chip" id="schStatus" aria-pressed="false">ステータスで絞る</button>
+        <!-- 隠れているものが0件のときは、このボタン自体を出さない
+             （押しても何も起きないボタンは、迷いを生むだけ） -->
+        <button class="sch-chip" id="schDone" aria-pressed="false" hidden></button>
+        <span class="sp"></span>
+        <button class="btn" id="schAdd">＋ タスクを追加</button>
+      </div>
+      <div class="sch-bar" id="schStatusBox" hidden></div>
+      <p class="sch-note" id="schNote"></p>
+      <div id="schList"></div>
+    </section>
+
     <!-- ダッシュボード -->
     <section class="view on" id="v-dash">
       <!-- 数を集める項目の合計。schema.js の aggregate から自動で並ぶ -->
@@ -3994,6 +4617,49 @@ function html() {
 </div>
 
 <!-- ── 詳細 ───────────────────────────────── -->
+<!-- ① 制作スケジュールの編集。出店者一覧と同じ「行を押す → 右パネル」に揃える
+     （新しい操作を発明しない） -->
+<div class="drawer" id="schDrawer">
+  <div class="sheet">
+    <div class="head">
+      <span class="t" id="schPanelTitle">タスクを追加</span>
+      <button class="x" id="schClose" aria-label="閉じる">×</button>
+    </div>
+    <div class="body">
+      <div class="grp">
+        <div class="editrow"><label for="schKind">種類</label><select id="schKind"></select></div>
+        <div class="editrow"><label for="schDate">日付</label>
+          <input id="schDate" placeholder="例：2026-09-20"></div>
+        <div class="editrow" id="schEndRow" hidden><label for="schEnd">終了日</label>
+          <input id="schEnd" placeholder="例：2026-09-30"></div>
+        <div class="editrow"><label for="schArea">領域</label><select id="schArea"></select></div>
+        <div class="editrow" id="schStatusRow"><label for="schStat">ステータス</label>
+          <select id="schStat"></select></div>
+        <div class="editrow"><label for="schTitle">タスク名</label>
+          <input id="schTitle" maxlength="200"></div>
+        <div class="editrow"><label for="schDetail">詳細</label>
+          <textarea id="schDetail" rows="4" maxlength="1000"></textarea></div>
+        <div class="editrow"><label for="schMemo">備考</label>
+          <textarea id="schMemo" rows="2" maxlength="500"></textarea></div>
+      </div>
+      <div class="grp">
+        <h4>担当</h4>
+        <div id="schPeople"></div>
+        <div class="editrow"><label for="schCos">担当会社</label>
+          <input id="schCos" placeholder="担当者を選ぶと、その方の所属が入ります"></div>
+      </div>
+      <div class="grp" id="schMetaBox" hidden>
+        <h4>記録</h4>
+        <div class="sch-note" id="schMeta"></div>
+      </div>
+      <div class="grp">
+        <button class="btn primary" id="schSave">保存する</button>
+        <button class="btn danger" id="schDel" hidden>削除する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="drawer">
   <div class="sheet">
     <div class="head">

@@ -19,6 +19,12 @@ const BASE = 'http://localhost:4174/admin.html?autologin=';
 /** 撮りたい画面。tab はページ内のタブ、w/h は画面の大きさ */
 const SHOTS = [
   { name: 'dash',       role: 'admin', tab: 'dash', w: 1400, h: 1700 },
+  { name: 'sched',      role: 'admin', tab: 'sched', w: 1400, h: 1400 },
+  { name: 'sched-sp',   role: 'admin', tab: 'sched', w: 390,  h: 1400 },
+  { name: 'sched-panel', role: 'admin', tab: 'sched', w: 1400, h: 1000,
+    after: 'schOpen(null);' },
+  { name: 'sched-efushi', role: 'admin', tab: 'sched', w: 1400, h: 900,
+    after: 'schEfushi();' },
   { name: 'list',       role: 'admin', tab: 'list', w: 1400, h: 900 },
   { name: 'map',        role: 'admin', tab: 'map',  w: 1400, h: 1000 },
   { name: 'detail',     role: 'admin', tab: 'list', w: 1400, h: 1100, open: 'SB-0003' },
@@ -55,18 +61,19 @@ function shot(url, png, w, h, profile) {
  * headless Chrome は「開いてからクリック」ができないので、
  * 読み込み後に自分でタブを押す小さなスクリプトを足しておく。
  */
-function withScript(role, tab, open) {
-  const url = BASE + (role || 'none');
-  const js = [
-    'window.addEventListener("load", function(){',
-    '  setTimeout(function(){',
-    tab ? '    var b = document.querySelector(\'.tabs button[data-tab="' + tab + '"]\'); if (b) b.click();' : '',
-    open ? '    setTimeout(function(){ var tr = document.querySelector(\'#listBody tr[data-id="' + open + '"]\'); if (tr) tr.click(); }, 1400);' : '',
-    '  }, 1600);',
-    '});',
-  ].join('\n');
-  return { url, js };
-}
+/*
+ * ⚠ **スマホ幅（w が 504 未満）の画像は、幅が信用できない。**
+ *
+ * Windows の Chrome はウィンドウを約504pxより細くできない。
+ * --window-size=390 と指定しても 504px で組んだうえで左から390pxを切り取るので、
+ * **ページの不具合ではない「右の切れ」**が写る。
+ * 2026-09-04、実際にこの画像を見て「スマホではみ出している」と誤診しかけた
+ * （実測すると scrollWidth は 390px ちょうどで、はみ出していなかった）。
+ *
+ * src/shot.js と src/contrast.js は iframe に閉じ込めてこれを避けている。
+ * ここは模擬サーバー（別オリジン）を開く必要があってその手が使えないので、
+ * **スマホ幅の判断は画像でせず、必ず実測する**こと。
+ */
 
 function main() {
   fs.mkdirSync(OUT, { recursive: true });
@@ -80,12 +87,22 @@ function main() {
       fs.rmSync(clean, { recursive: true, force: true });
       shot('http://localhost:4174/admin.html', png, s.w, s.h, '.chrome-gate');
     } else {
-      const { url, js } = withScript(s.role, s.tab, s.open);
-      // 模擬サーバーが返すHTMLに、タブを押すスクリプトを足して一時ファイルにする…
-      // ではなく、URLに直接スクリプトは渡せないので、
-      // 模擬サーバーの自動入室ページをそのまま開き、待ち時間で描画を待つ。
-      // タブの切り替えは #hash で行えるようにしておく。
-      shot(url + '#' + s.tab + (s.open ? '/' + s.open : ''), png, s.w, s.h);
+      /*
+       * タブの切り替えは #hash で足りる。
+       * 「パネルを開いた状態」のように**押さないと出ない画面**は、
+       * 模擬サーバーの ?probe= に差し込む（開発用の入口。本番のGASには無い）。
+       *
+       * 以前は withScript() がスクリプトを組み立てていたが、
+       * **その戻り値をどこも使っていなかった**（死んだコード）。
+       * 「撮れているつもりで撮れていない」形だったので、実際に差し込む形にした。
+       */
+      let u = BASE + s.role;
+      if (s.after){
+        u += '&probe=' + encodeURIComponent(
+          Buffer.from('setTimeout(function(){try{' + s.after + '}catch(e){}},2400);',
+                      'utf8').toString('base64'));
+      }
+      shot(u + '#' + s.tab + (s.open ? '/' + s.open : ''), png, s.w, s.h);
     }
     console.log('  画像 : build/admin/' + s.name + '.png');
   }
