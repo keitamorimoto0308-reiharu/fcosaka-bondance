@@ -4,7 +4,26 @@
   "private": true,
   "description": "FC OSAKA×UPDATER サステナ盆踊り 出店応募・出展者管理システム",
   "scripts": {
-    "build": "node src/build.js && node src/build-form.js",
-    "test": "node --test \"test/*.test.js\""
+    "build": "node src/build.js && node src/build-pdf.js && node src/build-kit.js && node src/build-ogp.js && node src/build-form.js && node src/build-confirm.js && node src/build-upload.js && node src/build-admin.js",
+    "test": "node --test \"test/*.test.js\"",
+    "build:pdf": "node src/build-pdf.js",
+    "measure": "node src/measure.js",
+    "build:form": "node src/build.js && node src/build-form.js",
+    "build:kit": "node src/build-kit.js",
+    "build:admin": "node src/build-admin.js",
+    "mock": "node src/mock.js",
+    "shot": "node src/shot.js",
+    "push": "node tools/lock.js take deploy \"npm run push\" && npm test && npx clasp push --force; node tools/lock.js free deploy",
+    "build:ogp": "node src/build-ogp.js",
+    "build:confirm": "node src/build-confirm.js",
+    "build:upload": "node src/build-upload.js",
+    "break": "node tools/lock.js take break \"npm run break\" && python test/break_all.py; node tools/lock.js free break",
+    "lock": "node tools/lock.js check"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4"
   }
 }

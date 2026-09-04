@@ -12,7 +12,15 @@ var SHEET = {
   SPACES:     '区画',
   CONFIG:     '設定',
   PEOPLE:     '関係者',
+  RENTAL:     'レンタル品目',
+  TODO:       '確認事項',
+  // 採択後に集める情報。応募一覧とは**別シート**にしてある。
+  // 応募が始まったあとでも列を足せるようにするため（仕様書の二段階収集）。
+  CONFIRM:    '出店確定情報',
   QUARANTINE: '退避', // 台帳に書けなかった応募の受け皿。通常は空のまま
+  // 採択・不採択のメール文面。管理ページから直せる（けいた指示・2026-09-03）。
+  // 空なら gas/MailTemplate.gs が持つ既定の文面を使うので、消えても壊れない。
+  MAILTPL:    'メール文面',
 };
 
 /** 設定シートの既定値。シートに行が無い場合はこの値が使われる。 */
@@ -21,27 +29,57 @@ var CONFIG_DEFAULTS = [
   ['管理者パスワード',     '',                 '管理ページの管理者用。空だと管理ページは開けません'],
   ['一般パスワード',       '',                 '管理ページの一般用（FC大阪営業など）'],
   ['問い合わせメール',     'fcosaka_bondance@kreha-c.com', 'フォームとメールに表示する問い合わせ先'],
+  // 管理ページの中で「ここから先は事務局にご相談ください」と案内する先。
+  // 以前は画面に個人名だけが直書きされていて、**新しく入った営業には誰か分からず、
+  // 連絡先も書いていなかった**（2026-09-03 の検証で指摘）。
+  // けいた確定（2026-09-03）：森本啓太＋募集ページのフッターと同じアドレス
+  ['事務局の連絡先',       '実行委員会事務局（森本啓太／fcosaka_bondance@kreha-c.com）',
+                          '管理ページで「事務局にご連絡ください」と案内するときに、そのまま出す文字列'],
   // 差出人は問い合わせ先とは別キーにする。同じ値を共用すると、問い合わせ先を
   // FC大阪の担当者に変えた瞬間に差出人まで静かに変わってしまう。
   ['送信元アドレス',       'fcosaka_bondance@kreha-c.com', 'メールの差出人。Gmailにエイリアス登録が必要'],
   ['送信元表示名',         'FC大阪サステナ盆踊り実行委員会', 'メールの差出人名。メール署名とフォームの主催表記にも使われます'],
   ['ReplyTo',             'fcosaka_bondance@kreha-c.com', '返信先。空なら問い合わせメールと同じ'],
-  ['単価_テント_小',       '15000',            'レンタルテント 間口1.5間×奥行2間（約2.7m×3.6m）の単価（円・税込）。※仮単価'],
-  ['単価_テント_大',       '30000',            'レンタルテント 間口3間×奥行2間（約5.4m×3.6m）の単価。※仮単価'],
-  ['単価_長机',           '1000',             '長机1台あたりの単価。※仮単価'],
-  ['単価_パイプ椅子',      '500',              'パイプ椅子1脚あたりの単価。※仮単価'],
+  // 単価は「レンタル品目」シートへ移した。ここに残すと、setup() が
+  // 足しては消す（cleanupOldPriceRows_ が削除する）空回りになる。
   ['区画総数',            '50',               'マップに描く区画の数。図面到着後に調整'],
-  ['資料フォルダID',       '1o7pykyfL0zMOS6cWdj45N91hjH3ueA9y', 'Drive「サステナ盆踊り_資料」のID'],
+  ['目標出店社数',         '',                 'ダッシュボードで「◯件／目標◯件」と出すための分母。空なら表示しません'],
+  // 既定値は空にしておくこと。ここに書くと**公開リポジトリに入る**。
+  // このフォルダには応募企業の提出物が入るので、IDが知られると
+  // 共有設定しだいで中身を読まれる。設定シートだけで持つ。
+  ['資料フォルダID',       '', 'Drive「サステナ盆踊り_資料」のID'],
+  // 出店者の提出物は、資料フォルダの**外**に置く。
+  // 資料フォルダはリンク共有しているので、そこへ入れるとIDを知る誰でも読める。
+  // Drive は共有フォルダの中だけを制限付きにできない（親の共有が子に及ぶ）ため、
+  // 外に出すしかない。この行は setup() が自動で埋める。
+  ['提出物フォルダID',     '', '（自動）出店者の提出物を置くフォルダ。**共有しないこと**'],
+  // 公開前にテストデータを消すための鍵。ふだんはOFF。
+  // 実行すると自動でOFFに戻る（1回ぶんの鍵）。
+  ['テストデータの削除',   'OFF',              'ONにすると、出店者一覧に一括削除が出ます。実行すると自動でOFFに戻ります'],
   ['担当社員への結果通知',  'ON',               '採択・不採択に変わったとき担当社員にも通知するか（ON/OFF）'],
   ['要対応_経過日数',      '3',                '審査中のまま何日経過したら「要対応」に出すか'],
   ['マップ背景画像',       '',                 '会場図面の画像URL。設定するとマップの下敷きになります'],
   ['管理ページURL',        'https://bondance.kreha-c.com/admin.html', '応募通知メールに載せる管理ページのリンク'],
+  // 採択通知メールに載せるリンク。受付IDとトークンを付けて各社に配る
+  // ⚠ 既定値は**空**にしておくこと。
+  //   ここに値を入れると、adminNotifySend_ の「リンクの無い通知は送らない」検査が
+  //   一度も発火しない。ページを公開する前に既定値だけが入っていると、
+  //   50社に「出店決定」と 404 のリンクを配ってから気づくことになる。
+  ['確定情報フォームURL',   '',                 '採択通知に載せる「出店確定情報フォーム」のURL。公開してから入れること'],
+  ['素材アップロードURL',   '',                 '採択通知に載せる「素材アップロード」のURL（未作成の間は空でよい）'],
+  // けいた確定 B11／G17：可否連絡から5営業日
+  ['確定情報の回収期限',    '',                 '出店確定情報フォームの提出期限（例 2026-10-10）。空なら「可否連絡から5営業日以内」と表記します'],
+  ['素材の提出期限',        '',                 '告知素材（ロゴ・写真）の提出期限（例 2026-10-20）。空なら「なるべくお早めに」と表記します'],
   ['色_飲食',             '#F2A65A',          '出店形態の色分け（マップ・一覧）'],
   ['色_ワークショップ',    '#7FCAF1',          ''],
   ['色_展示',             '#9BD4A8',          ''],
   ['色_体験コンテンツ',    '#C9A6D8',          ''],
   ['色_その他',           '#B8B8B8',          ''],
-  ['来場者数の表記',       'FC大阪ホームゲーム開催日。多くの来場者が場外エリアを通過します', 'フォームと募集要項に載せる文言（けいたの判断待ち・Q3）'],
+  // ⚠ 2026-09-02 で使わなくなった。文言は src/content.js が唯一の正。
+  //   シートに残っていても、どこからも読まれない（既存の行は消さなくてよい）。
+  //   二重管理をやめた理由：片方だけ直しても表示が変わらず、
+  //   食い違いに気づくのが「ビルドが止まったとき」だけだった。
+  ['来場者数の表記',       '', '※使っていません。文言は開発側（content.js）が正です'],
 ];
 
 function ss_() {
@@ -76,8 +114,9 @@ function getConfig() {
 function configNumber(key) {
   var v = getConfig()[key];
   if (v === '' || v === null || v === undefined) return null;
-  var n = Number(v);
-  return isNaN(n) ? null : n;
+  // 読み取りは gas/Num.gs に寄せる（全角・カンマも読める）。
+  // 読めなければ null＝「調整中」のまま。0にしない
+  return numAmount_(v);
 }
 
 function configText(key, fallback) {
@@ -146,19 +185,152 @@ function isClosed() {
   }
 }
 
-/** 備品単価をまとめて返す。未設定のものは null。 */
+/**
+ * 備品単価をまとめて返す。未設定のものは null。
+ *
+ * レンタル品目シートへの移行中は、こちらが正のまま。
+ * 先に消してしまい、応募フォームの設定取得ごと落とした（本番で確認）。
+ * 移行が終わるまでは、この関数を消さないこと。
+ */
 function getPrices() {
-  return {
-    tentT1: configNumber('単価_テント_小'),
-    tentT2: configNumber('単価_テント_大'),
-    table:  configNumber('単価_長机'),
-    chair:  configNumber('単価_パイプ椅子'),
+  var items = getRentalItems({ activeOnly: true });
+  var byKind = function (kind) {
+    var hit = items.filter(function (it) { return it.kind === kind; });
+    return hit.length ? hit[0].price : null;
   };
+  var t1 = byKind(RENTAL_KIND.T1);
+  var t2 = byKind(RENTAL_KIND.T2);
+
+  // 品目シートがまだ無い／空のときだけ、設定シートの旧キーを控えとして読む。
+  // ただし setup() は旧キーの行を削除するので、**一度 setup() を回したあとは
+  // この控えは働かない**（移行の途中でだけ意味がある）。
+  // 移行後にテントの単価が消えると、フォームは「調整中」と表示する。
+  return {
+    tentT1: (t1 === null || t1 === undefined) ? configNumber('単価_テント_小') : t1,
+    tentT2: (t2 === null || t2 === undefined) ? configNumber('単価_テント_大') : t2,
+  };
+}
+
+/** フォームに出す「数量で頼む品目」。単価が未設定のものは出さない */
+function getRentalQtyItems() {
+  return getRentalItems({ activeOnly: true })
+    .filter(function (it) { return it.kind === RENTAL_KIND.QTY; })
+    // 単価が決まっていないものは出さない。0円で受注する事故を作らない
+    .filter(function (it) { return typeof it.price === 'number' && it.price > 0; })
+    .filter(function (it) { return it.max > 0; })
+    .map(function (it) {
+      return { name: it.name, price: it.price, unit: it.unit,
+               max: it.max, note: it.note };
+    });
+}
+
+/**
+ * レンタル品目シートを読む。
+ *
+ * ■ なぜ設定シートから分けたか
+ *   単価を「設定」に1行ずつ足していくと、品目が増えるたびに
+ *   コード側にもキー（単価_長机 など）を足す必要があった。
+ *   別シートにして1行＝1品目にすれば、行を足すだけで品目が増える。
+ *
+ * ■ 台帳の形は品目に連動させない
+ *   品目ごとに台帳の列を作ると、応募が集まったあとに品目を足したとき、
+ *   それ以前の応募だけ列が空になり、台帳の整合検査が壊れる。
+ *   台帳は「レンタル明細」と「レンタル合計(円)」の2列に固定し、
+ *   品目をいくつ足しても形が変わらないようにしている。
+ *
+ * 種別は3つだけ：
+ *   テント（1区画） … 区画に紐づく構造物。単価だけをここで持つ
+ *   テント（2区画） … 同上
+ *   数量           … 個数を入れて頼むもの。ここに行を足すと、フォームの欄が増える
+ *
+ * テントを「数量」にしないのは、区画の大きさと不可分だから。
+ * 会場の区画割りが変わらない限り、増減する種類のものではない。
+ */
+var RENTAL_KIND = { T1: 'テント（1区画）', T2: 'テント（2区画）', QTY: '数量' };
+var _rentalCache = null;   // 1回の実行のあいだだけ持つ。応募1件でシートを5回読んでいた
+
+function getRentalItems(opt) {
+  opt = opt || {};
+  if (!_rentalCache) _rentalCache = readRentalSheet_();
+  var out = _rentalCache;
+  if (opt.activeOnly) out = out.filter(function (it) { return it.active; });
+  return out;
+}
+
+function readRentalSheet_() {
+  var ss = ss_();
+  var sh = ss.getSheetByName(SHEET.RENTAL);
+  if (!sh || sh.getLastRow() < 2) return [];
+
+  var rows = sh.getDataRange().getValues();
+  var idx = {};
+  rows[0].forEach(function (h, i) { idx[String(h).trim()] = i; });
+
+  // 列見出しが変わっている／消えているだけで、全品目が0円になりうる。
+  // 黙って続けず、ここで止める。
+  var need = ['種別', '品目', '単価(円)'];
+  for (var k = 0; k < need.length; k++) {
+    if (idx[need[k]] === undefined) {
+      throw new Error('レンタル品目シートに「' + need[k] + '」の列がありません。'
+        + '見出しを直すか、setup() を実行してください。');
+    }
+  }
+
+  var cell = function (r, key) {
+    var i = idx[key];
+    return (i === undefined || r[i] === null || r[i] === undefined) ? '' : String(r[i]).trim();
+  };
+
+  var out = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    var name = cell(r, '品目');
+    if (!name) continue;
+
+    // 空欄は「0円」ではなく「未定」。0円で受注してしまうと、
+    // 応募者の画面にも台帳にも 0 と出て整合するので、誰も気づけない。
+    var rawPrice = cell(r, '単価(円)').replace(/[^0-9.]/g, '');
+    // シートは運用者が直接触る前提。全角で打たれても読めるようにする
+    // （読めなければ null＝「調整中」。0にはしない）
+    var price = (rawPrice === '') ? null : numAmount_(rawPrice);
+    if (!isFinite(price) || price < 0) price = null;
+
+    // 既定値は「出さない側」に倒す。空欄の行がそのまま公開されないように。
+    var kind = cell(r, '種別');
+    var maxRaw = numCount_(cell(r, '最大数'));
+
+    out.push({
+      order:  numCount_(cell(r, '並び順')) === null
+                ? (i + 100) : numCount_(cell(r, '並び順')),
+      kind:   kind,
+      name:   name,
+      price:  price,
+      unit:   cell(r, '単位') || '個',
+      max:    (isFinite(maxRaw) && maxRaw > 0) ? Math.floor(maxRaw) : 0,
+      w:      numAmount_(cell(r, '間口(m)')) || 0,
+      d:      numAmount_(cell(r, '奥行(m)')) || 0,
+      // 許可リストで判定する。「有功」のような打ち間違いを有効と読まない
+      active: cell(r, '有効') === '有効',
+      note:   cell(r, '説明'),
+      row:    i + 1,
+    });
+  }
+  out.sort(function (a, b) { return a.order - b.order; });
+  return out;
+}
+
+/** 品目名から、いま有効な1件を引く。単価は必ずここから取る（画面の値は信じない） */
+function findRentalItem_(name) {
+  var hit = getRentalItems({ activeOnly: true }).filter(function (it) {
+    return it.name === String(name || '').trim();
+  });
+  return hit.length ? hit[0] : null;
 }
 
 /**
  * 関係者シートを読む。
  * @param {Object} opt - { formVisibleOnly: true } でフォーム表示＝有効の行だけ
+ *                       { canLoginOnly: true } で管理ページ利用＝有の行だけ
  */
 function getPeople(opt) {
   opt = opt || {};
@@ -183,6 +355,7 @@ function getPeople(opt) {
       row:         i + 1,
     };
     if (opt.formVisibleOnly && !p.formVisible) continue;
+    if (opt.canLoginOnly && !p.canLogin) continue;   // 管理ページ利用＝有 の人だけ
     out.push(p);
   }
   return out;
@@ -198,13 +371,29 @@ function getStaffOptions() {
   });
 }
 
-/** 応募通知の宛先：選ばれた担当社員 ＋ 管理者かつ通知ONの全員 */
+/**
+ * 応募通知の宛先。
+ *
+ *   通知ON  … すべての応募が届く
+ *   通知OFF … 自分が担当社員として選ばれた応募だけ届く
+ *
+ * ■ 役割（管理者／一般）では絞らない
+ *   2026-09-02 まで「管理者かつ通知ON」だった。
+ *   一般権限の人がONにしても**何も届かない**ので、
+ *   スイッチが嘘をつく状態だった（けいた指摘）。
+ *   一般権限でも出店者一覧は全部見られるので、
+ *   通知だけ止めても守っているものが無い。
+ *
+ * ■ メールが未登録の人には届かない
+ *   ONにしていても、関係者にメールアドレスが無ければ宛先に入らない。
+ *   ここで弾かないと、GmailApp が不正な宛先で落ちて**通知が全員に届かなくなる**。
+ */
 function getNotifyRecipients(staffLabel) {
   var people = getPeople();
   var set = {};
 
   people.forEach(function (p) {
-    if (p.role === '管理者' && p.notify && p.email) set[p.email] = true;
+    if (p.notify && p.email) set[p.email] = true;
   });
 
   if (staffLabel) {

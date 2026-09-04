@@ -101,9 +101,9 @@ var FIELDS = [
     "help": "お声がけした担当者をお選びください。",
     "searchable": true,
     "fallbackOptions": [
-      "わからない／FC大阪以外からの紹介"
+      "その他"
     ],
-    "unknownOption": "わからない／FC大阪以外からの紹介"
+    "unknownOption": "その他"
   },
   {
     "key": "boothTypes",
@@ -175,17 +175,59 @@ var FIELDS = [
     }
   },
   {
+    "key": "packaging",
+    "section": "content",
+    "type": "radio",
+    "label": "容器・包材のご用意",
+    "sheet": "包材の用意",
+    "help": "本イベントでは、容器・カトラリー・袋などの包材をサステナブル素材のみとさせていただきます（紙・木・バガス・生分解性素材など）。使い捨てプラスチックの容器はご遠慮ください。ご支給をご希望の場合、費用は品目のサイズと数量により異なりますので、別途ご相談させていただきます。",
+    "options": [
+      "自分で用意する（サステナブル素材）",
+      "運営からの支給を希望する（費用は別途ご相談）",
+      "ご相談したい"
+    ],
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    },
+    "required": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    }
+  },
+  {
+    "key": "packagingDetail",
+    "section": "content",
+    "type": "textarea",
+    "label": "ご使用予定の包材",
+    "sheet": "使用予定の包材",
+    "maxLength": 500,
+    "rows": 3,
+    "help": "差し支えなければ、品目と素材をお書きください。例）バガス製の容器、木製カトラリー、紙コップ、紙袋",
+    "showIf": {
+      "field": "packaging",
+      "op": "eq",
+      "value": "自分で用意する（サステナブル素材）"
+    },
+    "required": {
+      "field": "packaging",
+      "op": "eq",
+      "value": "自分で用意する（サステナブル素材）"
+    }
+  },
+  {
     "key": "tableware",
     "section": "content",
     "type": "radio",
-    "label": "食器・包材の持込予定",
-    "sheet": "食器・包材",
-    "help": "サステナビリティをテーマとするイベントのため、包材等について主催側からご相談させていただく場合があります。",
+    "label": "食器の持込予定",
+    "sheet": "食器",
+    "help": "リユース食器をお使いいただけると、ごみの持ち帰りも軽くなります。",
     "options": [
       "リユース食器",
-      "紙・木・バイオマス等の環境配慮素材",
-      "プラスチック",
-      "未定"
+      "使い捨て（サステナブル素材）",
+      "食器は使わない"
     ],
     "showIf": {
       "field": "boothTypes",
@@ -237,7 +279,7 @@ var FIELDS = [
     "required": true,
     "label": "電源",
     "sheet": "電源",
-    "help": "レンタルの可否・料金は追ってご案内します。",
+    "help": "電力が必要な場合は、発電機のご持参をお願いしています。ご用意が難しく、かつ電力が必要な場合は「レンタルを希望する」をお選びのうえ、下の欄に使用予定の機器と消費電力をご記入ください。レンタルの可否を検討いたします。",
     "options": [
       "必要（発電機を持ち込む）",
       "レンタルを希望する（要確認）",
@@ -433,30 +475,16 @@ var FIELDS = [
     }
   },
   {
-    "key": "rentalTable",
+    "key": "rentalItems",
     "section": "rental",
-    "type": "number",
+    "type": "rental",
     "required": false,
-    "label": "長机（1800×450）",
-    "sheet": "長机",
-    "min": 0,
-    "max": 20,
-    "default": 0,
-    "priceKey": "table",
-    "unitLabel": "台"
-  },
-  {
-    "key": "rentalChair",
-    "section": "rental",
-    "type": "number",
-    "required": false,
-    "label": "パイプ椅子",
-    "sheet": "パイプ椅子",
-    "min": 0,
-    "max": 40,
-    "default": 0,
-    "priceKey": "chair",
-    "unitLabel": "脚"
+    "label": "レンタル備品",
+    "sheet": "レンタル明細",
+    "extraColumns": [
+      "レンタル合計(円)"
+    ],
+    "help": "ご入用の数をご記入ください。0のままで構いません。"
   },
   {
     "key": "rentalOther",
@@ -565,6 +593,31 @@ var FIELDS = [
         "アルコール・固形燃料",
         "その他"
       ]
+    }
+  },
+  {
+    "key": "insurance",
+    "section": "content",
+    "stage": "confirm",
+    "type": "radio",
+    "label": "賠償責任保険の加入状況",
+    "sheet": "保険加入状況",
+    "help": "食中毒・什器の転倒などに備えるものです。加入は出店の条件ではありません。当日の備えを主催が把握しておくために伺っています。",
+    "options": [
+      "加入している",
+      "加入予定",
+      "加入していない",
+      "わからない"
+    ],
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    },
+    "required": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
     }
   },
   {
@@ -722,7 +775,67 @@ var FIELDS = [
     "label": "当日のスタッフ人数",
     "sheet": "スタッフ人数",
     "min": 1,
-    "max": 50
+    "max": 50,
+    "aggregate": {
+      "label": "当日のスタッフ",
+      "unit": "名"
+    }
+  },
+  {
+    "key": "passCount",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "number",
+    "required": true,
+    "label": "関係者パスの必要枚数",
+    "sheet": "関係者パス枚数",
+    "min": 0,
+    "max": 20,
+    "help": "当日、出店エリアに入る方の人数ぶんをお渡しします。上の「当日のスタッフ人数」と同じで構いません。",
+    "aggregate": {
+      "label": "関係者パス",
+      "unit": "枚"
+    }
+  },
+  {
+    "key": "parkingPassCount",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "number",
+    "label": "駐車証の必要枚数",
+    "sheet": "駐車証枚数",
+    "min": 0,
+    "max": 10,
+    "help": "搬入車両を駐車場に置かれる場合の枚数です。台数を超える枚数はお渡しできません。",
+    "showIf": {
+      "field": "parkingRequest",
+      "op": "eq",
+      "value": "希望する"
+    },
+    "required": {
+      "field": "parkingRequest",
+      "op": "eq",
+      "value": "希望する"
+    },
+    "aggregate": {
+      "label": "駐車証",
+      "unit": "枚"
+    }
+  },
+  {
+    "key": "ticketCount",
+    "section": "operation",
+    "stage": "confirm",
+    "type": "number",
+    "label": "観戦チケットのご希望枚数",
+    "sheet": "観戦チケット枚数",
+    "min": 0,
+    "max": 20,
+    "help": "出店者特典です。枚数には限りがあるため、ご希望に添えない場合があります。不要な場合は 0 とご記入ください。",
+    "aggregate": {
+      "label": "観戦チケット",
+      "unit": "枚"
+    }
   },
   {
     "key": "rainPolicy",
@@ -761,6 +874,7 @@ var ADMIN_COLUMNS = [
   "担当メモ",
   "可否連絡日",
   "採択通知送信日時",
+  "不採択通知送信日時",
   "搬入予定時刻",
   "撤収予定時刻",
   "当日ステータス",
@@ -789,10 +903,64 @@ var DAY_STATUS = [
   "撤収完了"
 ];
 
+/** 募集要項PDFに刷ってある料金表。ビルド時に src/content.js から焼き込む。
+ *  シートを直したあと紙面を刷り直していないと、ここと食い違う。 */
+var PUBLISHED_RENTALS = [
+  {
+    "label": "レンタルテント 間口1.5間×奥行2間（約2.7m×3.6m）",
+    "unit": "張",
+    "price": 15000
+  },
+  {
+    "label": "レンタルテント 間口3間×奥行2間（約5.4m×3.6m）",
+    "unit": "張",
+    "price": 30000
+  },
+  {
+    "label": "長机（1800×450）",
+    "unit": "台",
+    "price": 1000
+  },
+  {
+    "label": "パイプ椅子",
+    "unit": "脚",
+    "price": 500
+  }
+];
+
+function applyFields()   { return FIELDS.filter(function (f) { return (f.stage || 'apply') === 'apply'; }); }
+
+function confirmFields() { return FIELDS.filter(function (f) { return f.stage === 'confirm'; }); }
+
+function aggregateFields() {
+  return FIELDS.filter(function (f) { return f.aggregate && f.type === 'number'; });
+}
+
+function columnsFor_(fields) {
+  var cols = [];
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    if (!f.sheet) continue;
+    cols.push(f.sheet);
+    if (f.unknownCheckbox) cols.push(f.unknownCheckbox.sheet);
+    // 1つの項目が複数の列になることがある（レンタルの明細と合計など）
+    if (f.extraColumns) {
+      for (var j = 0; j < f.extraColumns.length; j++) cols.push(f.extraColumns[j]);
+    }
+  }
+  return cols;
+}
+
 function ledgerHeaders() {
   return ['受付ID', '受付日時']
     .concat(columnsFor_(applyFields()))
     .concat(ADMIN_COLUMNS.filter(function (c) { return c !== '受付ID' && c !== '受付日時'; }));
+}
+
+function confirmHeaders() {
+  return ['受付ID', '企業名', '回答日時']
+    .concat(columnsFor_(confirmFields()))
+    .concat(['生データ(JSON)']);
 }
 
 function testCondition(cond, values) {
@@ -823,4 +991,64 @@ function isRequired(field, values) {
   if (field.required === true) return true;
   if (!field.required) return false;
   return testCondition(field.required, values);
+}
+
+var SPACE_SIZE = {
+  "S1": {
+    "w": 2.7,
+    "d": 3.6,
+    "label": "1区画（約2.7m×3.6m）"
+  },
+  "S2": {
+    "w": 5.4,
+    "d": 3.6,
+    "label": "2区画（約5.4m×3.6m）"
+  }
+};
+
+var TENT_SIZE = {
+  "T1": {
+    "w": 2.7,
+    "d": 3.6
+  },
+  "T2": {
+    "w": 5.4,
+    "d": 3.6
+  }
+};
+
+function crossChecks(values) {
+  var errors = [];
+  var space = SPACE_SIZE[values.boothSize];
+  if (!space) return errors;
+
+  if (values.tentChoice === 'レンタルする' && values.tentSize) {
+    var tent = TENT_SIZE[values.tentSize];
+    if (tent && (tent.w > space.w + 0.01 || tent.d > space.d + 0.01)) {
+      errors.push({
+        key: 'tentSize',
+        message: 'ご希望の' + space.label + 'には、このサイズのテントは収まりません。'
+               + '区画を「間口3間×奥行2間」に変更いただくか、小さいテントをお選びください。',
+      });
+    }
+  }
+
+  if (values.tentChoice === '持ち込む') {
+    var w = Number(values.tentOwnWidth), d = Number(values.tentOwnDepth);
+    if (isFinite(w) && w > 0 && w > space.w + 0.01) {
+      errors.push({
+        key: 'tentOwnWidth',
+        message: 'ご希望の' + space.label + 'の間口は約' + space.w + 'mです。'
+               + 'お持ち込みのテントがこれを超えています。区画のご希望を見直してください。',
+      });
+    }
+    if (isFinite(d) && d > 0 && d > space.d + 0.01) {
+      errors.push({
+        key: 'tentOwnDepth',
+        message: 'ご希望の' + space.label + 'の奥行は約' + space.d + 'mです。'
+               + 'お持ち込みのテントがこれを超えています。',
+      });
+    }
+  }
+  return errors;
 }

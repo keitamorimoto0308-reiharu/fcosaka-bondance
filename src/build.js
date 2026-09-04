@@ -15,6 +15,8 @@ const SCHEMA_PATH = path.join(ROOT, 'src', 'schema.js');
 const OUT_GAS = path.join(ROOT, 'gas', 'Schema.gs');
 
 const schema = require(SCHEMA_PATH);
+// 紙面に刷ってある料金表を GAS へ焼き込むため（下の PUBLISHED_RENTALS）
+const content = require(path.join(ROOT, 'src', 'content.js'));
 
 /** 生成物の先頭に必ず付ける警告。人が手で直して次のビルドで消える事故を防ぐ。 */
 const BANNER = [
@@ -42,13 +44,51 @@ function buildSchemaGs() {
     '',
     'var DAY_STATUS = ' + JSON.stringify(schema.DAY_STATUS, null, 2) + ';',
     '',
+    // 募集要項PDFに刷ってある料金表を、そのままGASへ焼き込む。
+    //
+    // ■ なぜ要るか
+    //   紙面は src/content.js から刷り、フォームは「レンタル品目」シートを読む。
+    //   けいたがシートの単価を直しても、**紙面は古いまま**になる。
+    //   ビルドが照合して止めるが、それは私がビルドしたときだけ。
+    //   けいたがシートを直した瞬間に気づける場所が、どこにも無かった。
+    //   ここに焼き込んでおけば、管理ページが「紙面とずれています」と出せる。
+    '/** 募集要項PDFに刷ってある料金表。ビルド時に src/content.js から焼き込む。',
+    ' *  シートを直したあと紙面を刷り直していないと、ここと食い違う。 */',
+    'var PUBLISHED_RENTALS = ' + JSON.stringify(
+      content.RENTALS.map(function (r) {
+        return { label: r.label, unit: r.unit,
+                 price: r.key ? content.PRICES[r.key] : r.price };
+      }), null, 2) + ';',
+    '',
+    // ledgerHeaders が呼ぶ関数も一緒に埋め込む。
+    // ここが漏れると、生成物は「文法としては正しいが実行すると落ちる」状態になる。
+    // 実際に columnsFor_ と applyFields が漏れていて、setup() が動かなくなっていた。
+    // 下の verifyGenerated() が、生成物を隔離して実行し、この種の漏れを検出する。
+    schema.applyFields.toString(),
+    '',
+    schema.confirmFields.toString(),
+    '',
+    // 数を集める項目（ダッシュボードの合計・打ち込み欄が使う）。
+    // 埋め忘れると、GASは実行するまで気づけない
+    schema.aggregateFields.toString(),
+    '',
+    schema.columnsFor_.toString(),
+    '',
     schema.ledgerHeaders.toString(),
+    '',
+    schema.confirmHeaders.toString(),
     '',
     schema.testCondition.toString(),
     '',
     schema.isVisible.toString(),
     '',
     schema.isRequired.toString(),
+    '',
+    'var SPACE_SIZE = ' + JSON.stringify(schema.SPACE_SIZE, null, 2) + ';',
+    '',
+    'var TENT_SIZE = ' + JSON.stringify(schema.TENT_SIZE, null, 2) + ';',
+    '',
+    schema.crossChecks.toString(),
     '',
   ].join('\n');
   return body;
@@ -103,6 +143,59 @@ function verifySchema() {
   return { errors, fieldCount: keys.size, columnCount: headers.length };
 }
 
+/**
+ * 生成した Schema.gs が、それ単体で動くかを確かめる。
+ *
+ * ■ なぜ要るか
+ *   verifySchema() は Node の中で schema.js の関数を呼んでいる。
+ *   Node では同じファイルに全部あるので、生成物に関数を入れ忘れていても通ってしまう。
+ *   実際 columnsFor_ と applyFields が漏れていて、**生成物は文法としては正しいのに
+ *   実行すると落ちる**状態だった。setup() が動かず、台帳の列を直せなかった。
+ *
+ *   ここでは生成した中身を、Nodeの変数が一切見えない箱の中で実行し、
+ *   ledgerHeaders() などを実際に呼んで、Nodeでの結果と一致するかを見る。
+ *   GASでしか動かないコードは Schema.gs に入れていないので、この方法で確かめられる。
+ */
+function verifyGenerated(code) {
+  const vm = require('vm');
+  const box = vm.createContext(Object.create(null));
+  const errors = [];
+
+  try {
+    vm.runInContext(code, box, { filename: 'gas/Schema.gs' });
+  } catch (e) {
+    return ['生成した Schema.gs を読み込めません: ' + e.message];
+  }
+
+  // 生成物の中だけで呼べるか。呼べなければ、依存する関数が埋め込まれていない
+  const checks = [
+    ['ledgerHeaders', () => schema.ledgerHeaders()],
+    ['confirmHeaders', () => schema.confirmHeaders()],
+    ['applyFields', () => schema.applyFields().map(f => f.key)],
+    ['confirmFields', () => schema.confirmFields().map(f => f.key)],
+    ['aggregateFields', () => schema.aggregateFields().map(f => f.key)],
+  ];
+  for (const [name, inNode] of checks) {
+    let got;
+    try {
+      got = vm.runInContext(
+        name === 'applyFields' || name === 'confirmFields' || name === 'aggregateFields'
+          ? name + '().map(function (f) { return f.key; })'
+          : name + '()',
+        box);
+    } catch (e) {
+      errors.push(name + '() が生成物の中で動きません（' + e.message
+        + '）。呼び出している関数が Schema.gs に埋め込まれていません');
+      continue;
+    }
+    const want = inNode();
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      errors.push(name + '() の結果が schema.js と違います');
+    }
+  }
+  return errors;
+}
+
 function main() {
   console.log('ビルドを開始します');
   const v = verifySchema();
@@ -112,9 +205,19 @@ function main() {
     process.exit(1);
   }
   console.log('  点検 OK  : 項目 ' + v.fieldCount + ' / 台帳 ' + v.columnCount + ' 列');
-  writeIfChanged(OUT_GAS, buildSchemaGs());
+
+  const code = buildSchemaGs();
+  const g = verifyGenerated(code);
+  if (g.length) {
+    console.error('\n✖ 生成した gas/Schema.gs が単体で動きません:');
+    g.forEach(e => console.error('   - ' + e));
+    process.exit(1);
+  }
+  console.log('  実行確認 : gas/Schema.gs は単体で動きます');
+
+  writeIfChanged(OUT_GAS, code);
   console.log('完了');
 }
 
 if (require.main === module) main();
-module.exports = { verifySchema, buildSchemaGs };
+module.exports = { verifySchema, buildSchemaGs, verifyGenerated };

@@ -5,13 +5,23 @@ docs/internal/
 node_modules/
 .clasp.json
 .clasprc.json
+build/
+__pycache__/
+.locks/          # tools/lock.js が使う作業中の印。実行時だけのもの
+.deploy/         # deploy.js の一時 worktree。失敗したときだけ残る
 test-results/
 playwright-report/
 .DS_Store
 Thumbs.db
 
 # 生成物。公開は gh-pages ブランチへ明示的に deploy する
+/assets/boshu-yoko.pdf
+/assets/kit/
 /index.html
+/admin.html
 /design-a.html
 /design-b.html
 /design-c.html
+/.contrast-probe-*.html
+/confirm.html
+/upload.html

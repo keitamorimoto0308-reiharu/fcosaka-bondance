@@ -8,7 +8,11 @@
  * 署名は「サステナ盆踊り実行委員会（FC大阪／UPDATER）」（共同主催の見え方・monitor U5）。
  */
 
-var EVENT_NAME = '夕照祭2026 FC大阪サステナ盆踊り';
+// ⚠ src/content.js の EVENT.name と同じ値にすること。
+//   GAS からは content.js を読めないため、ここだけ手で持っている。
+//   食い違うと**メールの件名だけ旧名のまま**になり、誰も気づかない。
+//   test/assets.test.js がこの2つの一致を検査する。
+var EVENT_NAME = '夕照祭2026 FC大阪 秋のサステナ盆踊り';
 
 /**
  * エイリアスが Gmail に登録されているか。未登録なら null を返す。
@@ -68,20 +72,29 @@ function eventFactsBlock_() {
     '───────────────────────',
     '開催日　：2026年10月24日（土）',
     '会　場　：東大阪市花園ラグビー場（場外エリア）',
-    '搬　入　：8:30〜10:30',
+    '搬　入　：9:30〜10:30',
     '営業時間：11:00〜17:30',
-    '撤　収　：17:30〜19:30',
+    '搬　出　：18:00〜19:00',
     '応募締切：' + deadline,
     '───────────────────────',
   ].join('\n');
 }
 
-/** 応募内容を人が読める形に整形する。受付確認・応募通知の両方で使う。 */
+/**
+ * 応募内容を人が読める形に整形する。受付確認・応募通知の両方で使う。
+ *
+ * ⚠ 見るのは**応募段階の項目だけ**（applyFields）。
+ *   FIELDS 全部を回すと、採択後に聞く項目（現場責任者・搬入車両・保険など）が
+ *   「（未記入）」で控えメールに並ぶ。必須の項目は「任意で未記入なら出さない」の
+ *   条件から外れるため、全応募者に出てしまう。
+ *   応募者からは「必須を書き落としたのに受け付けられた」と読める。
+ *   validate_ は二段階収集に直したのに、ここだけ取り残されていた。
+ */
 function renderAnswers_(values) {
   var lines = [];
   SECTIONS.forEach(function (sec) {
     var body = [];
-    FIELDS.forEach(function (f) {
+    applyFields().forEach(function (f) {
       if (f.section !== sec.id || f.type === 'honeypot' || !f.sheet) return;
       if (!isVisible(f, values)) return;
 
@@ -106,6 +119,16 @@ function renderAnswers_(values) {
 
 function displayValue_(field, values) {
   var v = values[field.key];
+
+  // レンタルは { 品目名: 個数 } のオブジェクト。そのまま String() すると
+  // 「[object Object]」になり、応募者の控えとして役に立たない。
+  // 金額のもめごとが起きたとき、応募者の手元にある唯一の記録がこれになる。
+  if (field.type === 'rental') {
+    var r = rentalSummary_(values);
+    if (!r.detail) return 'ご利用なし';
+    return r.detail + (r.total === '' ? '' : '（合計 ' + Number(r.total).toLocaleString('ja-JP') + '円）');
+  }
+
   if (v === undefined || v === null || v === '') return '（未記入）';
   if (Array.isArray(v)) return v.join('、');
   if (typeof v === 'boolean') return v ? 'はい' : 'いいえ';
@@ -156,7 +179,8 @@ function sendNotifyMail(values, receiptId, duplicateFlag, adminUrl) {
   if (!recipients.length) {
     logError_('sendNotifyMail', new Error('通知の宛先が0件です：' + receiptId
       + '／担当社員=' + (values.fcosakaStaff || '(未選択)')));
-    alertOperator_('応募通知の宛先が0件でした', receiptId);
+    alertOperator_('staffUnknown', receiptId,
+      '応募で選ばれた担当社員：' + (values.fcosakaStaff || '（未選択）'));
     return { sent: 0, failed: [] };
   }
 
@@ -206,23 +230,142 @@ function sendNotifyMail(values, receiptId, duplicateFlag, adminUrl) {
     try { GmailApp.sendEmail(to, subject, body, opt); sent++; }
     catch (e) { failed.push(to); logError_('sendNotifyMail:' + to, e); }
   });
-  if (failed.length) alertOperator_('応募通知の一部が送信できませんでした：' + failed.join(', '), receiptId);
+  if (failed.length) alertOperator_('noticePartlyFailed', receiptId, '届かなかった宛先：' + failed.join(', '));
   return { sent: sent, failed: failed };
 }
 
 /**
- * 運用者（設定シートの「障害通知先」、既定は問い合わせメール）に異常を知らせる。
- * 通知が飛ばない事故は、通知が飛ばないので誰も気づかない。その輪を断つための最後の一本。
+ * 運用者への警報。
+ *
+ * ■ 送るのは「人が動かないと直らないこと」だけ
+ *   2026-09-02 けいた指摘：
+ *   「応募システムの異常っていうメールが頻発してるけどこれは何。
+ *     …このメールの意味が分からない。ほんとのアラートだけでいい」
+ *
+ *   それまでは、深刻さの違う15種類が**すべて同じ件名**で飛んでいた。
+ *   「鍵の合わないアクセスがありました」のように、
+ *   **受け取っても何もできないもの**まで混ざっていた。
+ *   警報が多すぎると、本当の警報が埋もれる。それがいちばん危ない。
+ *
+ * ■ 文面は、受け取る人が読んで動ける形にする
+ *   受け取るのはけいただけではない。FC大阪の社員も一般権限で入る。
+ *   1件ごとに **何が起きたか／いま困ること／していただきたいこと** を持たせる。
+ *   test/alerts.test.js が、3つとも埋まっていることを見張っている。
+ *
+ * ■ 深刻さを件名に出す
+ *   【至急】　… 応募や連絡が失われている。すぐ手を打つ必要がある
+ *   【要確認】… 動いてはいるが、確かめないと後で困る
  */
-function alertOperator_(message, receiptId) {
+var ALERT_ = {
+  ledgerWriteFailed: {
+    level: '至急', title: '応募を台帳に記録できませんでした',
+    what: '応募フォームから届いた内容を、応募一覧に書き込めませんでした。',
+    impact: '応募者の画面には受付番号が出ていません。'
+          + 'このまま放置すると、この応募は誰にも気づかれないまま消えます。',
+    todo: 'スプレッドシートの「退避」シートを開いてください。'
+        + '届いた内容はそこに残してあります。'
+        + '応募者へのご連絡と、応募一覧への手入力をお願いします。',
+  },
+  receiptMailFailed: {
+    level: '要確認', title: '応募者への受付確認メールを送れませんでした',
+    what: '応募は台帳に記録できましたが、応募者あての受付確認メールが送れませんでした。',
+    impact: '応募者は「届いたのかどうか分からない」状態です。'
+          + '同じ内容で二重に応募される原因になります。',
+    todo: '応募一覧でこの受付IDの行を開き、メールアドレスをご確認のうえ、'
+        + '受け付けた旨をご連絡ください。',
+  },
+  historyWriteFailed: {
+    level: '至急', title: '変更履歴を残せませんでした',
+    what: '台帳の内容は書き換わりましたが、その記録を変更履歴に残せませんでした。',
+    impact: '誰がいつ何を変えたかが追えません。'
+          + '「言った・言わない」になったときに、こちらに根拠が残りません。',
+    todo: '変更履歴シートが壊れていないかご確認ください。'
+        + '直前に行った操作の内容を、念のためメモに控えてください。',
+  },
+  noticeMailFailed: {
+    level: '要確認', title: '担当者への通知メールを送れませんでした',
+    what: '内容は記録できましたが、担当者あてのお知らせメールが送れませんでした。',
+    impact: '担当の方が、この動きに気づけていません。',
+    todo: '管理ページで内容をご確認のうえ、担当の方へ口頭かチャットでお伝えください。',
+  },
+  staffUnknown: {
+    level: '要確認', title: '担当者が分からない応募・更新がありました',
+    what: 'お知らせすべき担当者のメールアドレスが、関係者に登録されていませんでした。',
+    impact: 'その担当の方には届いていません。'
+          + '（このメールを受け取っている方には届いています）',
+    todo: '管理ページの「関係者」タブで、その方のメールアドレスをご登録ください。'
+        + '登録すれば、次回から直接届きます。',
+  },
+  noticePartlyFailed: {
+    level: '要確認', title: '通知メールの一部が届きませんでした',
+    what: '担当者あてのお知らせのうち、一部の宛先で送信に失敗しました。',
+    impact: 'その方だけ、この動きに気づけていません。',
+    todo: '下の宛先が正しいか、「関係者」タブでご確認ください。',
+  },
+  acceptMailFailed: {
+    level: '至急', title: '採択通知を送れなかった先があります',
+    what: '出店決定のご案内メールで、送信に失敗した相手がいます。',
+    impact: 'その事業者は、採択されたことも、確定情報の提出期限も知りません。',
+    todo: '「メール送信」タブを開き、失敗した相手にもう一度お送りください。'
+        + '宛先が間違っている場合は、先に応募一覧で直してください。',
+  },
+  loginFailures: {
+    level: '要確認', title: '管理ページのログインが続けて失敗しています',
+    what: '1時間のあいだに、管理ページのログインが何度も失敗しました。',
+    impact: 'ご自身の打ち間違いなら問題ありません。'
+          + '心当たりが無い場合、パスワードを探られている可能性があります。',
+    todo: '心当たりが無ければ、「設定」タブでパスワードを変更してください。'
+        + '変更すると、いま入っている方も入り直しになります。',
+  },
+  probing: {
+    level: '要確認', title: '専用リンクへの不一致アクセスが続いています',
+    what: '出店確定情報フォーム・素材アップロードの専用リンクに、'
+        + '合わない鍵でのアクセスが短時間に多数ありました。',
+    impact: 'リンクの鍵は32桁なので、当たることはまず考えられません。'
+          + 'いますぐ困ることはありません。',
+    todo: '心当たりが無ければ、そのままで構いません。'
+        + '続くようであれば、ご相談ください。',
+  },
+};
+
+/**
+ * 運用者（設定シートの「障害通知先」、既定は問い合わせメール）に警報を送る。
+ * 通知が飛ばない事故は、通知が飛ばないので誰も気づかない。その輪を断つための最後の一本。
+ *
+ * key は ALERT_ の名前。**生の文字列は受け取らない**
+ * （文面を書く場所を1か所に閉じ、書き手に3つの項目を必ず埋めさせるため）。
+ */
+function alertOperator_(key, receiptId, extra) {
   try {
+    var a = ALERT_[key];
+    if (!a) {
+      console.error('[alertOperator_] 知らない警報です: ' + key);
+      return;
+    }
     var to = configText('障害通知先', configText('問い合わせメール', ''));
     if (!to) return;
-    GmailApp.sendEmail(to, '【要確認】サステナ盆踊り 応募システムの異常',
-      [message, '', '受付ID：' + (receiptId || '（なし）'),
-       '発生時刻：' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss'),
-       '', '台帳をご確認ください。'].join('\n'),
-      { name: 'サステナ盆踊り 応募システム' });
+
+    var body = [
+      a.what,
+      '',
+      '■ いま困ること',
+      '　' + a.impact,
+      '',
+      '■ していただきたいこと',
+      '　' + a.todo,
+    ];
+    if (extra) body = body.concat(['', '■ 詳細', '　' + extra]);
+    body = body.concat([
+      '',
+      '───────────────────────',
+      '受付ID　：' + (receiptId || '（なし）'),
+      '発生時刻：' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss'),
+      '',
+      'このメールは、応募システムが自動で送っています。',
+    ]);
+
+    GmailApp.sendEmail(to, '【' + a.level + '】サステナ盆踊り｜' + a.title,
+      body.join('\n'), { name: 'サステナ盆踊り 応募システム' });
   } catch (e) {
     console.error('[alertOperator_] 通知にも失敗: ' + e);
   }

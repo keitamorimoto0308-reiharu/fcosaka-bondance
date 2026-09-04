@@ -1,0 +1,4082 @@
+/**
+ * 出店者管理ページ（Phase 2）のHTMLを生成する。
+ *
+ *   src/theme.js   … デザイントークン（応募フォームと共通）
+ *   src/content.js … イベント名など
+ *        └──▶ admin.html（単一ファイル・依存ライブラリなし）
+ *
+ * ■ 置き場所と守り
+ *   このページは GitHub Pages（誰でも開けるURL）に置く。
+ *   画面を隠しても意味がないので、守りはすべて GAS 側（gas/Auth.gs）にある。
+ *   ここにあるのは「入れ物」だけで、データは token 付きでAPIから取る。
+ *
+ * ■ 入室が2段階なわけ
+ *   仕様書§6-1は「氏名を関係者シートから選択」としているが、
+ *   氏名の一覧を無条件に返すと、誰が管理ページを使えるのかが外から分かる。
+ *   そこで パスワード → （合っていれば）氏名一覧 → 選択 → トークン、の順にした。
+ *
+ * ■ 業務画面としての方針（仕様書§6-4）
+ *   応募フォームと同じ色・書体を使いつつ、情報密度を上げる。
+ *   フォームは「1問ずつ大きく」、管理画面は「一目で多く」。
+ */
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.resolve(__dirname, '..');
+const C = require('./content.js');
+const IMG = require('./imgsize.js');
+const { TOKENS: T, icon } = require('./theme.js');
+
+const endpointPath = path.join(ROOT, 'src', 'endpoint.json');
+const ENDPOINT = fs.existsSync(endpointPath)
+  ? JSON.parse(fs.readFileSync(endpointPath, 'utf8'))
+  : { gasUrl: '' };
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// ─────────────────────────────────────────── CSS
+function css() {
+  return `
+:root{
+  --brand:${T.brand}; --brand-deep:${T.brandDeep}; --brand-pale:${T.brandPale};
+  --ink:${T.ink}; --muted:${T.inkMuted}; --faint:${T.inkFaint}; --white:${T.white};
+  --accent:${T.accent}; --accent-pale:${T.accentPale};
+  --bg:${T.bg}; --subtle:${T.bgSubtle}; --border:${T.border}; --error:${T.error};
+  --s1:${T.s1}; --s2:${T.s2}; --s3:${T.s3}; --s4:${T.s4}; --s5:${T.s5}; --s6:${T.s6};
+  --r:8px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--subtle);color:var(--ink);
+  font-family:${T.fontJa};font-size:14px;line-height:1.7;overflow-wrap:anywhere;
+  font-feature-settings:"palt" 1}
+.num{font-family:${T.fontDisp};letter-spacing:.01em}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+.ic{flex:none;stroke:currentColor}
+
+/* ── 入室 */
+.gate{min-height:100dvh;display:grid;place-items:center;padding:24px;background:var(--ink)}
+.gate .box{width:100%;max-width:420px;background:#fff;padding:32px 28px}
+.gate .logo{margin-bottom:22px}
+.gate .logo img{width:200px;height:auto}
+.gate h1{margin:0 0 4px;font-size:19px;font-weight:900}
+.gate .sub{margin:0 0 22px;font-size:13px;color:var(--muted)}
+.gate label{display:block;font-size:12px;font-weight:700;color:var(--muted);
+  letter-spacing:.06em;margin-bottom:6px}
+.pwrow{position:relative}
+/* .gate button の width:100% に負けて中央に出てしまうので、幅を戻す */
+.pwrow #gShow{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:auto;
+  background:transparent;border:0;color:var(--muted);font-size:12.5px;font-family:inherit;
+  padding:8px 10px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.pwrow #gShow:hover{color:var(--ink)}
+.pwrow input{padding-right:64px!important}
+.gate input,.gate select{width:100%;padding:12px 14px;border:1px solid var(--border);
+  background:#fff;margin-bottom:16px;border-radius:var(--r)}
+.gate input:focus,.gate select:focus{outline:2px solid var(--brand-deep);outline-offset:1px}
+.gate button{width:100%;padding:13px;background:var(--ink);color:#fff;border:0;
+  font-weight:700;letter-spacing:.08em;border-radius:var(--r)}
+.gate button:disabled{opacity:.5;cursor:default}
+.gate .err{background:#FCEDEB;border-left:3px solid var(--error);color:var(--error);
+  padding:10px 12px;font-size:13px;margin-bottom:16px}
+.gate .back{background:none;color:var(--muted);border:0;font-size:12.5px;
+  padding:10px 0 0;width:auto;letter-spacing:0}
+
+/* ── 骨格 */
+.app{display:none}
+.app.on{display:block}
+header.bar{background:var(--ink);color:#fff;position:sticky;top:0;z-index:20}
+.bar .in{max-width:1280px;margin:0 auto;padding:10px 16px;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.bar .name{font-weight:900;font-size:15px;letter-spacing:.02em}
+.bar .name span{font-weight:400;color:rgba(255,255,255,.6);font-size:12px;margin-left:8px}
+.bar .who{margin-left:auto;font-size:12.5px;color:rgba(255,255,255,.75);
+  display:flex;align-items:center;gap:10px}
+.bar .role{background:var(--brand);color:var(--ink);font-size:10.5px;font-weight:700;
+  padding:2px 8px;letter-spacing:.08em}
+.bar .out{background:none;border:1px solid rgba(255,255,255,.3);color:#fff;
+  font-size:12px;padding:4px 10px;border-radius:4px}
+nav.tabs{background:#fff;border-bottom:1px solid var(--border);position:sticky;top:44px;z-index:19}
+.tabs .in{max-width:1280px;margin:0 auto;padding:0 16px;display:flex;gap:2px;overflow-x:auto}
+.tabs button{background:none;border:0;padding:13px 16px;font-size:13.5px;font-weight:700;
+  color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand-deep)}
+/* まだ素材を出していない事業者。営業が一目で拾えるようにする */
+.docs-vendor.yet summary{color:var(--ink-muted)}
+.docs-vendor.yet .cnt{color:var(--error);font-weight:700}
+main{max-width:1280px;margin:0 auto;padding:20px 16px 64px}
+.view{display:none}
+.view.on{display:block}
+h2.sec{font-size:15px;margin:26px 0 10px;font-weight:700;letter-spacing:.04em;
+  display:flex;align-items:center;gap:8px}
+h2.sec:first-child{margin-top:0}
+h2.sec .ic{color:var(--brand-deep);width:17px;height:17px}
+
+/* ── 要対応 */
+.asof{font-size:11.5px;color:var(--faint);text-align:right;margin-bottom:6px;
+  letter-spacing:.06em}
+.todo{background:#fff;border:1px solid var(--border);border-left:4px solid var(--accent);
+  padding:16px 18px}
+.todo.clear{border-left-color:var(--brand-deep)}
+.todo h3{margin:0 0 10px;font-size:14px;font-weight:900}
+.todo ul{margin:0;padding-left:0;list-style:none;display:grid;gap:8px}
+.todo li{display:flex;align-items:baseline;gap:10px;font-size:13.5px}
+.todo li b{font-family:${T.fontDisp};font-size:19px;color:var(--accent);min-width:28px}
+.todo li a{color:var(--brand-deep);font-weight:700;text-decoration:none;font-size:12.5px}
+.todo li a:hover{text-decoration:underline}
+.todo .none{color:var(--muted);font-size:13.5px}
+
+/* ── 数字カード */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.card{background:#fff;border:1px solid var(--border);padding:14px 16px}
+.card .k{font-size:10.5px;letter-spacing:.14em;color:var(--faint);margin-bottom:2px}
+.card .v{font-family:${T.fontDisp};font-size:28px;line-height:1.1}
+.card .v small{font-size:13px;color:var(--muted);margin-left:4px;font-family:${T.fontJa}}
+.card .s{font-size:11.5px;color:var(--muted);margin-top:2px}
+.card.dark{background:var(--ink);color:#fff}
+.card.dark .k{color:var(--brand)}
+.card.dark .v{color:var(--brand)}
+.card.dark .s{color:rgba(255,255,255,.7)}
+
+/* ── 内訳 */
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.panel{background:#fff;border:1px solid var(--border);padding:14px 16px}
+.pcount{font-size:13px;color:var(--muted)}
+.todohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.todohead h3{margin:0;font-size:14px}
+.todohead .ghost{background:transparent;border:1px solid var(--border);border-radius:6px;
+  padding:6px 12px;font-family:inherit;font-size:12.5px;cursor:pointer}
+.todoitem{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border)}
+.todoitem:first-child{border-top:0}
+.todoitem .st{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;
+  background:var(--subtle);color:var(--muted);white-space:nowrap;margin-top:2px}
+.todoitem .st.doing{background:#E8F4FB;color:#1f5f80}
+.todoitem .st.done{background:#EFF6EC;color:#3d6b30}
+.todoitem .body{flex:1;min-width:0}
+.todoitem .t{font-size:13.5px;line-height:1.7}
+.todoitem.is-done .t{text-decoration:line-through;color:var(--muted)}
+.todoitem .meta{font-size:11.5px;color:var(--muted);margin-top:2px}
+.todoitem .due.over{color:#B5714C;font-weight:700}
+.todoitem .edit{flex:none;background:none;border:0;color:var(--muted);font-size:12px;
+  text-decoration:underline;cursor:pointer;padding:2px 0;margin-top:2px}
+.todo-empty{font-size:13px;color:var(--muted);padding:6px 0}
+.mailrow{display:flex;gap:10px;align-items:flex-start;padding:10px 0;
+  border-top:1px solid var(--border)}
+.mailrow:first-child{border-top:0}
+.mailrow .st{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;
+  white-space:nowrap;margin-top:2px;background:#FDF0E4;color:#8a4f24}
+.mailrow .st.done{background:#EFF6EC;color:#3d6b30}
+.mailrow .body{flex:1;min-width:0}
+.mailrow .subj{font-size:13.5px;font-weight:700;line-height:1.6}
+.mailrow .meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.mailrow .snip{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.7;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mailrow a.open{flex:none;font-size:12px;margin-top:2px;white-space:nowrap}
+.memolog{margin:6px 0 0;padding:10px 12px;background:var(--subtle);border-radius:6px;
+  font-size:12.5px;line-height:1.9;white-space:pre-wrap;max-height:200px;overflow:auto}
+.memolog:empty{display:none}
+.applicant-lock{background:var(--subtle);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;margin-bottom:12px}
+.applicant-lock p{margin:0 0 10px;font-size:12.5px;line-height:1.9;color:var(--muted)}
+.applicant-lock .ghost{background:#fff}
+#apFields .editrow input,#apFields .editrow textarea{width:100%}
+/* メール文面の編集。ふだんは畳んでおく（送るのが主で、直すのはたまに） */
+.tplbox{margin:12px 0;border:1px solid #E6E2DC;border-radius:10px;background:#fff}
+.tplbox>summary{cursor:pointer;padding:10px 14px;font-weight:700;font-size:14px;
+  list-style:none;display:flex;align-items:center;gap:8px}
+.tplbox>summary::-webkit-details-marker{display:none}
+.tplbox>summary::before{content:'▸';color:#8A8178}
+.tplbox[open]>summary::before{content:'▾'}
+.tplstate{font-weight:400;font-size:12.5px;color:#8A8178}
+.tplin{padding:0 14px 14px}
+.tpll{display:block;margin:10px 0;font-size:13px;font-weight:700}
+.tpll input,.tpll textarea{display:block;width:100%;margin-top:4px;padding:8px 10px;
+  border:1px solid #D9D4CC;border-radius:8px;font-size:13.5px;font-weight:400;
+  background:#fff;box-sizing:border-box}
+.tpll textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  line-height:1.75;resize:vertical;min-height:16em}
+/* スマホでは行数が足りず、40行のメールを直せない（2026-09-04 の検証） */
+@media (max-width:600px){ .tpll textarea{min-height:22em} }
+.tplhelp{margin-top:8px}
+.tplhelp>summary{cursor:pointer;font-weight:700;color:var(--brand-deep);font-size:12.5px}
+.tplhelp dl{margin:8px 0 0;font-size:12.5px;line-height:1.7}
+.tplhelp dt{margin-top:8px}
+.tplhelp dt code{background:#F4F1EC;padding:1px 5px;border-radius:4px;
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+.tplhelp dd{margin:2px 0 0 12px;color:#6B6259}
+.tplsample{display:block;color:#8A8178;margin-top:2px}
+.tplcount{display:block;margin-top:3px;font-size:12px;font-weight:400;color:#8A8178}
+.tplcount.over{color:var(--error);font-weight:700}
+/* 未提出の社名。誰に催促するかが、その場で分かるように */
+.cardwho{margin-top:6px;font-size:11.5px;line-height:1.6;color:#8A5A3C}
+.cardwho a{color:var(--brand-deep);font-weight:700;white-space:nowrap}
+/* 欄が無い理由を出すときの見た目 */
+.dnote.off{background:#F4F1EC;padding:8px 10px;border-radius:8px}
+.tplvars{margin:8px 0;font-size:12.5px;color:#6B6259}
+.tplvars>div{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tplvar{padding:9px 12px;border:1px solid #D9D4CC;border-radius:999px;background:#FAF8F5;
+  font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;cursor:pointer;
+  min-height:40px}  /* 22pxだと隣を押す（2026-09-04 の実測） */
+.tplvar:hover{background:#F0EBE4}
+#tplErr ul,#tplWarn ul{margin:6px 0 0 18px;padding:0;line-height:1.7}
+/* 文中のボタン。押せることが分かる見た目にする（リンクのように見せる） */
+.linkish{background:none;border:0;padding:0;margin-left:6px;font:inherit;
+  color:var(--brand-deep);font-weight:700;text-decoration:underline;cursor:pointer}
+.apconfirm{margin-top:10px;padding:12px 14px;border:1px solid #E4C9A8;
+  border-radius:10px;background:#FFF8F0}
+.apconfirm p{margin:0 0 6px}
+.apconfirm ul{margin:0 0 10px 18px;padding:0;font-size:13px;line-height:1.7}
+#apEdit .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
+table.list td.wrapcell{white-space:normal;max-width:22em}
+.pform{margin-top:12px}
+.pform h3{margin:0 0 10px;font-size:14px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
+.pgrid label,.pchecks label{display:block;font-size:12.5px;color:var(--muted)}
+.pgrid input{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:6px;font-size:14px;font-family:inherit}
+.pgrid .req{margin-left:6px;font-size:10.5px;color:#B5714C;font-weight:700}
+/* 表示する列の選択 */
+.colbox{margin:0 0 10px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.colbox>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:700;
+  list-style:none}
+.colbox>summary::-webkit-details-marker{display:none}
+.colbox>summary::before{content:'▸';margin-right:7px;color:var(--muted)}
+.colbox[open]>summary::before{content:'▾'}
+.colbox .cnum{margin-left:8px;font-weight:400;color:var(--muted)}
+.colpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+  gap:4px 12px;padding:10px 14px;border-top:1px solid var(--border)}
+.colopt{display:flex;align-items:center;gap:6px;font-size:12.5px;
+  color:var(--ink);cursor:pointer;min-height:28px}
+.colbox #colReset{margin:0 14px 12px}
+/* 送る種類の切り替え。採択と不採択を取り違えないよう、はっきり分ける */
+.mailkind{display:flex;gap:18px;margin:0 0 12px}
+.mailkind label{display:flex;align-items:center;gap:7px;font-size:13.5px;
+  padding:8px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer}
+.mailkind label:has(input:checked){border-color:var(--ink);background:var(--subtle);
+  font-weight:700}
+/* レンタル品目 */
+.rental table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+.rental th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:400;
+  border-bottom:1px solid var(--border);padding:6px 8px;white-space:nowrap}
+.rental td{border-bottom:1px solid var(--border);padding:8px}
+.rental td.r{text-align:right;white-space:nowrap}
+.rental tr.off td{color:var(--muted)}
+.rental .tag{display:inline-block;font-size:10.5px;padding:2px 7px;border-radius:99px;
+  background:var(--subtle);color:var(--muted);margin-left:6px}
+.rental .tag.off{background:#FDF2F0;color:var(--error)}
+.rental .tag.tbd{background:#FBF6EC;color:#7A5A20}
+.rental .act{background:#fff;border:1px solid var(--border);border-radius:6px;
+  padding:5px 11px;font-family:inherit;font-size:11.5px;cursor:pointer;min-height:32px}
+/* 紙面とのずれ。**ここがこの画面の主役** */
+.paperdiff{background:#FBF6EC;border:1px solid #E4D6BC;border-radius:8px;
+  padding:12px 14px;margin:10px 0;font-size:13px;line-height:1.8}
+.paperdiff b{color:#7A5A20}
+.paperdiff ul{margin:6px 0 0;padding-left:1.2em}
+.paperdiff.ok{background:#F2FAF4;border-color:#9BD4A8}
+.paperdiff.ok b{color:#2F7D46}
+/* 数を集める項目の合計 */
+.totals h3{margin:0 0 10px;font-size:14px}
+.totals .card .sub{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.6}
+.totals .card.partial .sub{color:#B5714C}
+/* テストデータの一括削除。目立たせるが、押しやすくはしない */
+.purge{margin-top:16px;border:1px solid var(--error)}
+.purge h3{margin:0 0 8px;font-size:14px;color:var(--error)}
+.purge .pnote.warn{background:#FDF2F0;color:var(--error);margin-top:10px}
+.purge-run{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-top:12px}
+.purge-run label{font-size:12.5px;color:var(--muted)}
+.purge-run input{display:block;margin-top:4px;padding:9px 11px;width:120px;
+  border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit}
+.danger{background:var(--error);color:#fff;border:0;border-radius:6px;
+  padding:10px 18px;font-family:inherit;font-size:13px;cursor:pointer}
+.danger:disabled{opacity:.5;cursor:default}
+.purge-list{max-height:260px;overflow:auto;border:1px solid var(--border);
+  border-radius:6px;margin-top:10px}
+.purge-list table{width:100%;border-collapse:collapse;font-size:12.5px}
+.purge-list td{border-bottom:1px solid var(--border);padding:6px 10px}
+/* 詳細パネルの区切り。応募時と採択後を、見た目で分ける */
+.dsec{margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--ink);
+  font-size:13px;letter-spacing:.04em}
+.dsec .dcount{margin-left:8px;font-size:11px;font-weight:400;color:var(--muted)}
+.dnote{margin:0;padding:12px 14px;background:var(--subtle);border-radius:6px;
+  font-size:12.5px;line-height:1.8;color:var(--muted)}
+.dnote.warn{background:#FDF2F0;color:var(--error)}
+/* 確認事項。「誰から誰へ」と、期日・完了をその場で扱えるようにする */
+.todoitem .who{font-weight:700;color:var(--ink)}
+.todoitem .due.none{color:var(--muted)}
+.todo-done{background:#fff;border:1px solid var(--border);border-radius:6px;
+  padding:5px 12px;margin-right:6px;font-family:inherit;font-size:11.5px;
+  color:var(--ink);cursor:pointer;min-height:32px}
+.todo-done:hover{background:var(--subtle);border-color:var(--ink)}
+/* 項目の説明。作った本人にしか分からない画面にしないための行。
+   2026-09-02 けいた指摘「これをFC大阪さんに渡した後、初めて見る人たちが困りそう」。
+   畳まずに常に出す。畳むと初めて見る人は開かない */
+.pgrid .hint{display:block;margin-top:3px;font-size:11.5px;line-height:1.7;
+  color:var(--muted);font-weight:400}
+
+/* 画面の見かた。各タブの先頭に置く。
+   常に開いていると本文が遠のくので畳むが、**見出しで中身が想像できる**ようにする */
+.howto{margin:0 0 12px;border:1px solid var(--border);border-radius:8px;background:var(--subtle)}
+.howto>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:700;
+  color:var(--ink);list-style:none}
+.howto>summary::-webkit-details-marker{display:none}
+.howto>summary::before{content:'？';display:inline-block;width:16px;height:16px;
+  margin-right:7px;border-radius:50%;background:var(--ink);color:#fff;
+  font-size:10.5px;line-height:16px;text-align:center;vertical-align:1px}
+.howto[open]>summary{border-bottom:1px solid var(--border)}
+.howto dl{margin:0;padding:10px 14px 12px;display:grid;
+  grid-template-columns:max-content 1fr;gap:6px 14px;font-size:12.5px;line-height:1.8}
+.howto dt{font-weight:700;color:var(--ink);white-space:nowrap}
+.howto dd{margin:0;color:var(--muted)}
+@media (max-width:560px){
+  .howto dl{grid-template-columns:1fr;gap:2px}
+  .howto dd{margin:0 0 8px}
+}
+.pgrid select{width:100%;margin-top:4px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:6px;font-size:14px;font-family:inherit;background:#fff}
+.pwstate{margin-left:8px;font-size:11px;color:var(--muted);font-weight:400}
+.pwstate.warn{color:#B5714C;font-weight:700}
+.pchecks{margin-top:12px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+.pchecks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
+.pchecks select{padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-family:inherit}
+.pchecks input:disabled+*,.pchecks label:has(input:disabled){opacity:.5}
+.pbtns{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+/* 長いエラー文に押されて、ボタンが幅20pxの縦書きに潰れていた
+   （2026-09-04 の最終確認で発見）。縮まない・折り返さないようにする */
+.pbtns>button{flex:0 0 auto;white-space:nowrap}
+.pbtns .ghost{background:transparent;border:1px solid var(--border);border-radius:6px;
+  padding:8px 14px;font-family:inherit;font-size:13px;cursor:pointer}
+.perr{margin:10px 0 0;font-size:13px;color:var(--error);font-weight:700}
+.pnote{margin:12px 0 0;font-size:12.5px;line-height:1.8;color:var(--muted);
+  background:var(--subtle);padding:10px 12px;border-radius:6px}
+.pill-off{opacity:.45}
+/* ── 資料置き場 */
+.docs-add{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 16px}
+.docs-pick{display:inline-flex;align-items:center;background:var(--ink);color:#fff;
+  border-radius:6px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+.docs-pick:hover{background:#3A2B28}
+.docs-pick input{display:none}
+.docs-add select{border:1px solid var(--border);border-radius:6px;padding:8px 10px;
+  font-family:inherit;font-size:13px}
+.docs-group{margin-top:22px}
+.docs-group h4{margin:0 0 4px;font-size:13.5px;font-weight:700;display:flex;
+  align-items:baseline;gap:8px}
+.docs-group h4 .n{font-family:${T.fontDisp};font-size:15px;color:var(--muted)}
+.docs-group h4 a{font-size:12px;font-weight:400}
+.docs-group .note{margin:0 0 8px;font-size:12px;color:var(--muted)}
+.docs-files{list-style:none;margin:0;padding:0;border-top:1px solid var(--border)}
+.docs-files li{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;
+  border-bottom:1px solid var(--border);padding:9px 2px;font-size:13px}
+.docs-files .meta{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.docs-files a{overflow-wrap:anywhere}
+.docs-files .del{background:transparent;border:1px solid var(--border);border-radius:5px;
+  padding:4px 9px;font-family:inherit;font-size:11.5px;color:var(--error);cursor:pointer;
+  min-height:36px;min-width:48px}
+.docs-files .del:hover{background:#FDF2F0;border-color:var(--error)}
+/* 狭い画面では、日時の列がファイル名より広くなっていた。
+   名前を1行目に回し、日時は名前の下に小さく置く */
+@media (max-width:520px){
+  .docs-files li{grid-template-columns:1fr auto;row-gap:2px}
+  .docs-files .nm{grid-column:1/-1}
+  .docs-files .meta{white-space:normal}
+  .docs-files .del{min-height:40px}
+}
+.docs-empty{padding:14px 2px;font-size:13px;color:var(--muted)}
+.docs-vendor{margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.docs-vendor summary{cursor:pointer;padding:10px 14px;font-size:13.5px;background:var(--subtle);
+  display:flex;gap:10px;align-items:baseline}
+.docs-vendor summary .id{font-weight:700}
+.docs-vendor summary .cnt{font-size:11.5px;color:var(--muted);margin-left:auto}
+.docs-vendor .inner{padding:4px 14px 10px}
+
+/* ── メール送信（採択通知）。段ごとに区切って、順番を目でも分かるようにする */
+.mail-step{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.mail-step h4{margin:0 0 8px;font-size:13.5px;font-weight:700}
+.mail-count{margin:0 0 10px;font-size:14px}
+.mail-count b{font-size:20px;font-family:${T.fontDisp};margin-right:2px}
+.mail-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.mail-tbl th{background:var(--subtle);text-align:left;padding:6px 8px;
+  font-size:11.5px;color:var(--muted);white-space:nowrap;position:sticky;top:0}
+.mail-tbl td{padding:6px 8px;border-top:1px solid var(--border);white-space:nowrap}
+.tbl-wrap{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+/* 本文はそのまま出す。等幅にしないと、メールでの見え方と食い違う */
+.mail-prev{border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.mail-prev .mp-h{display:grid;grid-template-columns:64px 1fr;gap:8px;
+  padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px}
+.mail-prev .mp-h b{color:var(--muted);font-weight:700;font-size:11.5px}
+.mail-prev pre{margin:0;padding:14px;background:var(--subtle);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+  line-height:1.85;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto}
+/* 取り消せない操作なので、押す場所だけ色を変える */
+.pwarn{margin:10px 0 0;font-size:13px;line-height:1.8;color:var(--ink);
+  background:#FFF4E5;border-left:4px solid #E8A33D;padding:10px 12px;border-radius:0 6px 6px 0}
+#mailResult .ok{margin:0 0 8px;font-size:15px}
+.panel h3{margin:0 0 10px;font-size:12.5px;letter-spacing:.1em;color:var(--muted);font-weight:700}
+.rows2{display:grid;gap:6px}
+.rows2 .r{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;font-size:13.5px}
+.rows2 .bar{grid-column:1/-1;height:4px;background:var(--subtle);overflow:hidden}
+.rows2 .bar i{display:block;height:100%;background:var(--brand-deep)}
+.rows2 .n{font-family:${T.fontDisp};font-size:17px}
+
+/* ── 表 */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{padding:8px 10px;border:1px solid var(--border);
+  background:#fff;border-radius:6px;font-size:13px}
+.toolbar input[type=search]{min-width:200px;flex:1}
+.toolbar .count{margin-left:auto;font-size:12.5px;color:var(--muted)}
+.tablewrap{background:#fff;border:1px solid var(--border);overflow-x:auto}
+table.list{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+table.list th{background:var(--subtle);text-align:left;padding:9px 12px;font-size:11.5px;
+  letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);
+  position:sticky;top:0;cursor:pointer;user-select:none}
+table.list th[data-sort]::after{content:"";margin-left:5px;opacity:.35}
+table.list th.asc::after{content:"▲";opacity:.8}
+table.list th.desc::after{content:"▼";opacity:.8}
+table.list td{padding:9px 12px;border-bottom:1px solid var(--border)}
+table.list tbody tr{cursor:pointer}
+table.list tbody tr:hover{background:var(--brand-pale)}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;
+  border:1px solid var(--border);background:#fff}
+.pill.未確認{background:var(--accent-pale);border-color:var(--accent);color:var(--accent)}
+.pill.審査中{background:var(--brand-pale);border-color:var(--brand-deep);color:var(--brand-deep)}
+.pill.採択{background:var(--ink);border-color:var(--ink);color:var(--brand)}
+.pill.不採択,.pill.辞退,.pill.キャンセル{color:var(--muted)}
+.dupflag{background:#FCEDEB;border-color:var(--error);color:var(--error)}
+.empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13.5px}
+
+/* ── 詳細（引き出し） */
+.drawer{position:fixed;inset:0;background:rgba(35,24,22,.45);z-index:40;display:none}
+.drawer.on{display:block}
+.drawer .sheet{position:absolute;right:0;top:0;bottom:0;width:min(560px,100%);
+  background:#fff;overflow-y:auto;box-shadow:-6px 0 24px rgba(0,0,0,.15)}
+.drawer .head{position:sticky;top:0;background:var(--ink);color:#fff;
+  padding:14px 18px;display:flex;align-items:center;gap:12px;z-index:2}
+.drawer .head .id{font-family:${T.fontDisp};font-size:19px;color:var(--brand)}
+.drawer .head .t{font-weight:700;font-size:14px}
+.drawer .head .x{margin-left:auto;background:none;border:0;color:#fff;font-size:22px;
+  line-height:1;padding:0 4px}
+.drawer .body{padding:18px}
+.drawer .grp{margin-bottom:20px}
+.drawer .grp h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.1em;color:var(--muted);
+  border-bottom:1px solid var(--border);padding-bottom:6px}
+.dl{display:grid;grid-template-columns:110px 1fr;gap:5px 12px;font-size:13px}
+.dl dt{color:var(--muted);font-weight:700;font-size:12px}
+.dl dd{margin:0}
+.dl dd a{color:var(--brand-deep)}
+.editrow{display:grid;grid-template-columns:110px 1fr;gap:8px 12px;align-items:center;
+  margin-bottom:10px;font-size:13px}
+.editrow label{color:var(--muted);font-weight:700;font-size:12px}
+.editrow select,.editrow input,.editrow textarea{width:100%;padding:8px 10px;
+  border:1px solid var(--border);border-radius:6px;background:#fff}
+.editrow textarea{min-height:70px;resize:vertical}
+.savebar{display:flex;gap:8px;align-items:center;margin-top:6px}
+.savebar button{padding:10px 18px;background:var(--ink);color:#fff;border:0;
+  font-weight:700;border-radius:6px;font-size:13px}
+.savebar button.ghost{background:#fff;color:var(--ink);border:1px solid var(--border)}
+.savebar .msg{font-size:12.5px;color:var(--brand-deep);font-weight:700}
+.savebar .msg.err{color:var(--error)}
+/* 保存の合図。**「.msg」に見た目が付いておらず、
+   保存できたのか分からない**という指摘（2026-09-04）。
+   本文の色に埋もれない太さと色を与え、成功はチェック印を付ける */
+.msg{font-size:12.5px;font-weight:700;color:var(--brand-deep)}
+.msg.err{color:var(--error)}
+.msg.ok{color:#1F7A4D}
+.msg.ok::before{content:'✓ ';font-weight:900}
+
+/* ── マップ */
+.maplayout{display:grid;grid-template-columns:1fr 300px;gap:14px;align-items:start}
+@media (max-width:900px){ .maplayout{grid-template-columns:1fr} }
+.mapbox{background:#fff;border:1px solid var(--border);padding:10px}
+.mapbox svg{width:100%;max-width:560px;height:auto;display:block;margin:0 auto;
+  touch-action:manipulation}
+.sp{cursor:pointer}
+.sp .ring{fill:#fff;stroke:${T.border};stroke-width:1.4}
+.sp.taken .ring{stroke:${T.ink};stroke-width:1.6}
+.sp.pick .ring{stroke:${T.brandDeep};stroke-width:3}
+.sp .no{fill:${T.inkMuted};text-anchor:middle;dominant-baseline:middle;
+  pointer-events:none;font-family:${T.fontDisp}}
+.mapbox .lbl{font-size:9px;fill:${T.ink};dominant-baseline:middle;font-weight:700}
+.sp.taken .no{fill:${T.ink};font-weight:700}
+.maplegend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);
+  padding:8px 2px 0}
+.maplegend i{display:inline-block;width:11px;height:11px;margin-right:5px;
+  vertical-align:-1px;border:1px solid var(--border)}
+.assignbox{background:#fff;border:1px solid var(--border);padding:14px 16px;
+  position:sticky;top:104px}
+.assignbox h3{margin:0 0 10px;font-size:12.5px;letter-spacing:.1em;color:var(--muted)}
+.assignbox select{width:100%;padding:9px 10px;border:1px solid var(--border);
+  border-radius:6px;margin-bottom:10px;background:#fff}
+.assignbox .hint{font-size:12.5px;color:var(--muted);line-height:1.65}
+.assignbox .cur{background:var(--brand-pale);padding:10px 12px;margin-bottom:10px;font-size:13px}
+.assignbox button{width:100%;padding:10px;border:1px solid var(--border);background:#fff;
+  border-radius:6px;font-weight:700;font-size:13px;margin-top:6px}
+.assignbox button.danger{color:var(--error);border-color:var(--error)}
+
+/* ── 通信中 */
+.busy{position:fixed;left:0;right:0;top:0;height:3px;background:var(--brand);
+  transform:scaleX(0);transform-origin:left;transition:transform .25s;z-index:50}
+.busy.on{transform:scaleX(.85)}
+.toast{position:fixed;left:16px;right:16px;bottom:24px;margin:0 auto;width:fit-content;
+  max-width:calc(100vw - 32px);transform:translateY(160%);
+  background:var(--ink);color:#fff;padding:12px 20px;font-size:13.5px;z-index:60;
+  transition:transform .25s;line-height:1.8;border-radius:var(--r)}
+.toast.on{transform:translateY(0)}
+.toast.err{background:var(--error)}
+
+/* ── 当日運営 */
+.daycount{font-size:13px;font-weight:700}
+.daycount b{font-family:${T.fontDisp};font-size:19px;margin:0 3px}
+.daycount .warn{color:var(--accent)}
+button.print{margin-left:auto;background:var(--ink);color:#fff;border:0;
+  padding:8px 16px;border-radius:6px;font-size:13px;font-weight:700}
+.hint-print{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+table.day td,table.day th{white-space:normal}
+table.day .sp{font-family:${T.fontDisp};font-size:19px;font-weight:700;text-align:center}
+table.day .fire{background:#FCEDEB;color:var(--error);font-weight:700}
+table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
+.daybtn{display:inline-flex;gap:4px;flex-wrap:wrap}
+.daybtn button{border:1px solid var(--border);background:#fff;border-radius:6px;
+  padding:6px 10px;font-size:12px;min-height:36px}
+.daybtn button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.daybtn button:disabled{opacity:.5}
+
+/* ── 詳細の前後移動 */
+.drawer .nav{margin-left:auto;display:flex;gap:4px}
+.drawer .nav button{background:rgba(255,255,255,.12);border:0;color:#fff;
+  font-size:18px;line-height:1;padding:4px 12px;border-radius:4px}
+.drawer .nav button:disabled{opacity:.35}
+.drawer .head .x{margin-left:8px}
+
+@media (max-width:640px){
+  .bar .in{padding:8px 12px}
+  nav.tabs{top:40px}
+  main{padding:14px 12px 60px}
+  .dl,.editrow{grid-template-columns:1fr}
+  .dl dt{margin-top:6px}
+
+  /* 表のままだと企業名が右に切れて、目的の行にたどり着けない。
+     スマホでは1件＝1カードに組み替える。 */
+  .tablewrap{overflow-x:visible;border:0;background:none}
+  table.list,table.list tbody,table.list tr,table.list td{display:block;width:100%}
+  table.list thead{display:none}
+  table.list tr{background:#fff;border:1px solid var(--border);margin-bottom:8px;padding:10px 12px}
+  table.list td{border:0;padding:2px 0;white-space:normal}
+  table.list td::before{content:attr(data-l);display:inline-block;min-width:8.5em;
+    padding-right:8px;font-size:11px;color:var(--faint);letter-spacing:.04em;
+    vertical-align:top}
+  table.list td.head{font-weight:700;font-size:15px}
+  table.list td.head::before{display:none}
+  .toolbar{gap:6px}
+  .toolbar .count{margin-left:0;width:100%;order:99}
+  .toolbar input[type=search]{flex:1 1 100%;min-width:0;width:100%}
+  .toolbar select{flex:1 1 calc(50% - 3px);min-width:0}
+  .toolbar label{flex:1 1 calc(50% - 3px)}
+  .bar .who{gap:6px}
+}
+@media print{
+  header.bar,nav.tabs,.toolbar,.drawer,.busy,.toast{display:none!important}
+  body{background:#fff}
+  main{max-width:none;padding:0}
+  .tablewrap{border:0;overflow:visible}
+  table.list{white-space:normal;font-size:9pt}
+  @page{size:A4 landscape;margin:10mm}
+  /* 画面でしか意味の無いものは刷らない。
+     「見かた」の帯と押せないボタンが場所を取り、
+     肝心の見出しが無い紙になっていた（2026-09-04 の検証） */
+  .howto,.pwarn,.linkish,.hint-print{display:none!important}
+  /* 何の紙なのかを、いちばん上に出す */
+  .printhead{display:block!important}
+  .printhead h1{margin:0 0 2mm;font-size:13pt}
+  .printhead p{margin:0;font-size:9pt;color:#000}
+  /* 当日ステータスは、紙では手で書き込む（押せないボタンは要らない） */
+  .daybtn{display:none!important}
+  /* 紙では電話番号を黒字に。青い下線のまま刷られていた */
+  td.tel a{color:#000!important;text-decoration:none!important}
+  td[data-l="当日ステータス"]::after{
+    content:'□未着　□搬入済　□設営完了　□撤収完了';
+    font-size:8.5pt;letter-spacing:.02em}
+}
+.printhead{display:none}
+`;
+}
+
+// ─────────────────────────────────────────── クライアントJS
+function clientJs() {
+  return `
+'use strict';
+var GAS_URL = ${JSON.stringify(ENDPOINT.gasUrl || '')};
+var KEY = 'bondance.admin.session';
+// 紙の見出しに使う。src/content.js が正（ここに書き写さない）
+var EV_NAME  = ${JSON.stringify(C.EVENT.name)};
+var EV_DATE  = ${JSON.stringify(C.EVENT.date)};
+var EV_VENUE = ${JSON.stringify(C.EVENT.venue)};
+var S = { token:'', person:'', role:'', pw:'', names:[], list:null, spaces:null, pick:null, sort:{col:'受付ID',dir:1} };
+
+var $  = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+var esc = function (s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+};
+
+/**
+ * 説明文の ** ** だけ太字にする（ブラウザ側）。
+ * サーバーから来る設定の説明に強調が書けるようにするため。
+ * esc() だけだと「**空だと採択通知を送れません。**」とそのまま出る。
+ * 組み立ての順序に注意：**先に esc してから** 分けること。
+ * 先に分けると、< > が生のまま残って差し込みになる。
+ */
+function mdBold(s){
+  return esc(s).split('**').map(function(part, i){
+    return i % 2 ? '<b>' + part + '</b>' : part;
+  }).join('');
+}
+
+function busy(on){ $('.busy').classList.toggle('on', !!on); }
+/**
+ * 画面の下に出す知らせ。
+ *
+ * 失敗を含むものは長くなる（「1件を追加、3件が失敗（…）」）。
+ * **どのファイルがなぜ入らなかったかを知る唯一の場所**なので、
+ * 3.2秒で消すと目を離した隙に読めなくなる。長めに出す。
+ */
+function toast(msg, isErr){
+  var t = $('.toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('on');
+  clearTimeout(t._t);
+  t._t = setTimeout(function(){ t.classList.remove('on'); },
+                    isErr || msg.length > 40 ? 9000 : 3200);
+}
+
+/**
+ * APIの呼び出し。
+ * Content-Type を text/plain にしているのは、プリフライトを起こさないため
+ * （GASはOPTIONSに応答できない）。応募フォームと同じ作法。
+ */
+/** 入室が切れたときの合図。呼び出し側は、これなら何も言わない */
+var SESSION_ENDED = '__session_ended__';
+
+/**
+ * 通信に失敗したときの言い方。
+ * 入室切れは api() が入室画面で説明済みなので、ここでは黙る。
+ * それ以外は、何をしようとして失敗したのかを日本語で言う。
+ */
+function netFail(e, what){
+  if (e && e.message === SESSION_ENDED) return;
+  toast(what + '（通信に失敗しました）', true);
+}
+
+function api(action, body){
+  if (!GAS_URL) return Promise.reject(new Error('接続先が設定されていません（表示確認用のページです）'));
+  var payload = Object.assign({ action: action, token: S.token }, body || {});
+  busy(true);
+  return fetch(GAS_URL, {
+    method:'POST', redirect:'follow',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+  }).then(function(r){ return r.json(); }).then(function(j){
+    busy(false);
+    if (j && j.error === 'unauthorized') {
+      // なぜ切れたのかはサーバーしか知らない。そのまま伝える。
+      // 入室画面に文言を出したうえで、**呼び出し側には黙っていてもらう**印を投げる。
+      // 以前は 'unauthorized' をそのまま投げていたので、
+      // 入室画面の上に「割り当てできませんでした: unauthorized」という
+      // 読めない英語が重なっていた（2026-09-03 の検証で指摘）
+      signOut(j.message
+        || '入室の時間が切れました。いま入力した内容は保存されていません。'
+         + 'もう一度パスワードを入れてお入りください。');
+      throw new Error(SESSION_ENDED);
+    }
+    return j;
+  }, function(e){ busy(false); throw e; });
+}
+
+// ─────────────────────────── 入室
+function gateStep(n){
+  $('#step1').style.display = n === 1 ? '' : 'none';
+  $('#step2').style.display = n === 2 ? '' : 'none';
+  if (n === 2) $('#gPerson').focus(); else $('#gPw').focus();
+}
+function gateError(msg){
+  var el = $('#gErr');
+  if (!msg){ el.style.display='none'; return; }
+  el.textContent = msg; el.style.display='';
+}
+
+function submitPassword(){
+  var pw = $('#gPw').value;
+  if (!pw) return;
+  gateError('');
+  $('#gNext').disabled = true;
+  api('adminNames', { password: pw }).then(function(r){
+    $('#gNext').disabled = false;
+    if (!r || !r.ok){ gateError((r && r.message) || '入室できませんでした。'); return; }
+    S.pw = pw; S.names = r.names;
+    $('#gPerson').innerHTML = '<option value="">選択してください</option>' +
+      r.names.map(function(p){
+        return '<option value="'+esc(p.name)+'">'+esc(p.name) + (p.dept ? '（'+esc(p.dept)+'）' : '') + '</option>';
+      }).join('');
+    gateStep(2);
+  }, function(e){ $('#gNext').disabled=false; gateError('接続できませんでした。' + e.message); });
+}
+
+function submitPerson(){
+  var person = $('#gPerson').value;
+  if (!person){ gateError('お名前を選んでください。'); return; }
+  gateError('');
+  $('#gIn').disabled = true;
+  api('adminLogin', { password: S.pw, person: person }).then(function(r){
+    $('#gIn').disabled = false;
+    if (!r || !r.ok){ gateError((r && r.message) || '入室できませんでした。'); return; }
+    S.token = r.token; S.person = r.person; S.role = r.role;
+    rememberPassword(person, S.pw);   // 消す前に、保存するか聞いてもらう
+    S.pw = '';
+    try { localStorage.setItem(KEY, JSON.stringify({ token:r.token, person:r.person, role:r.role })); } catch(e){}
+    start();
+  }, function(e){ $('#gIn').disabled=false; gateError('接続できませんでした。' + e.message); });
+}
+
+/**
+ * ブラウザにパスワードを覚えてもらう。
+ *
+ * この画面はパスワードのあとに氏名を選ぶ2段階で、しかも画面が切り替わらない。
+ * ブラウザから見ると「ログインした」ように見えないので、
+ * 放っておくと保存を提案してこない（実際に効かなかった）。
+ * そこで、入室できた時点でこちらから頼む。
+ *
+ * 対応していないブラウザでは何も起きない。失敗しても入室の邪魔はしない。
+ */
+function rememberPassword(person, pw){
+  if (!pw) return;
+  try {
+    if (!window.PasswordCredential || !navigator.credentials) return;
+    navigator.credentials.store(new PasswordCredential({
+      id: person, name: person, password: pw,
+    })).catch(function(){});
+  } catch (e) { /* 保存できなくても入室には影響しない */ }
+}
+
+/** 覚えてもらっていれば、パスワード欄に入れておく（送信まではしない） */
+function recallPassword(){
+  try {
+    if (!navigator.credentials || !navigator.credentials.get) return;
+    navigator.credentials.get({ password: true, mediation: 'optional' })
+      .then(function(c){
+        if (c && c.password && !$('#gPw').value) $('#gPw').value = c.password;
+      })
+      .catch(function(){});
+  } catch (e) {}
+}
+
+function signOut(msg){
+  try { localStorage.removeItem(KEY); } catch(e){}
+  // **開いている引き出しを閉じてから**入室画面を出す。
+  // 閉じないと、入室画面の後ろに事業者さまの氏名・メール・電話が見えたまま残る
+  // （2026-09-03 の検証で指摘）
+  try {
+    var dw = document.querySelector('.drawer');
+    if (dw) dw.classList.remove('on');
+  } catch(e2){}
+  S.token=''; S.person=''; S.role='';
+  $('.app').classList.remove('on');
+  $('.gate').style.display='';
+  gateStep(1);
+  recallPassword();
+  $('#gPw').value='';
+  gateError(msg || '');
+}
+
+function start(){
+  $('.gate').style.display='none';
+  $('.app').classList.add('on');
+  $('#who').textContent = S.person;
+  $('#role').textContent = S.role;
+  applyRole();
+  loadSummary();
+  loadList();
+  loadTodos();
+  loadInbox();
+}
+
+// ─────────────────────────── ダッシュボード
+/**
+ * 数を集める項目の合計。
+ *
+ * **項目が増えても、ここは変えない。**
+ * schema.js の項目に aggregate を付けると、サーバーが拾って送ってくる。
+ * （2026-09-03 けいた「今後もダッシュボードに出したいものは
+ *   運用しながら増えていくかも」）
+ *
+ * ■ 「未提出」を必ず添える
+ *   合計だけ出すと、まだ聞けていないぶんが見えない。
+ *   枚数を手配する人がいちばん困るのは「この数字で発注してよいのか」なので、
+ *   **何件ぶんの数字なのか**を必ず一緒に出す。
+ */
+function renderTotals(totals){
+  var box = $('#totals');
+  if (!box) return;
+  if (!totals.length){ box.innerHTML = ''; box.hidden = true; return; }
+  box.hidden = false;
+  // **大きい数字だけを見て「これが当日の必要数だ」と読まれる**のがいちばん困る。
+  // 実際は「いま出ている分の合計」で、未提出があればまだ増える。
+  // 数字の下に、母数と「まだ増える」ことを必ず書く（2026-09-03 の検証で指摘）
+  var anyPartial = totals.some(function(t){ return t.missing; });
+  // 母数が0のときに「全社そろっています」と出ると嘘になる。
+  // 一括削除の直後に必ず見える（2026-09-04 の最終確認で指摘）
+  var anyRow = totals.some(function(t){ return (t.filled + t.missing) > 0; });
+  box.innerHTML = '<h3>当日お渡しするもの・人数</h3>'
+    + (!anyRow
+        ? '<p class="pnote">まだ採択した出店者がいないため、数はありません。</p>'
+        : anyPartial
+        ? '<p class="pnote warn">まだ全社そろっていません。'
+          + '下の数は<b>いま出ている分だけの合計</b>で、未提出の分が届くと増えます。</p>'
+        : '<p class="pnote">全社そろっています。下の数がそのまま当日の必要数です。</p>')
+    + '<div class="cards">' + totals.map(function(t){
+        var total = t.filled + t.missing;
+        var note = t.missing
+          ? total + '社中 ' + t.filled + '社ぶん（確定情報が未提出 ' + t.missing + '社）'
+          : (total ? total + '社ぶん（全社そろいました）' : '対象がまだありません');
+        // **誰が未提出なのか辿れない**、という指摘（2026-09-04）。
+        // 5手順かけて自力で調べることになっていた
+        var who = (t.missingNames || []).length
+          ? '<div class="cardwho">未提出：' + t.missingNames.map(esc).join('／')
+            + (t.missingMore ? ' ほか' + t.missingMore + '社' : '')
+            + ' <a href="#" data-jump="status:採択">一覧で見る →</a></div>'
+          : '';
+        return '<div class="card' + (t.missing ? ' partial' : '') + '">'
+          + '<div class="k">' + esc(t.label) + '</div>'
+          + '<div class="v">' + Number(t.sum).toLocaleString('ja-JP')
+          + (t.unit ? '<small>' + esc(t.unit) + '</small>' : '')
+          + '</div><div class="sub">' + esc(note) + '</div>' + who + '</div>';
+      }).join('') + '</div>';
+  bindJumps('#totals');
+}
+
+/**
+ * 「一覧で見る →」の結線。
+ *
+ * **要対応の中にしか結線していなかった**ので、
+ * ダッシュボードの「未提出：◯◯／◯◯ 一覧で見る →」は
+ * 押しても何も起きなかった（2026-09-04 の最終確認で発見）。
+ * リンクを足した人が結線を忘れる形だったので、関数にして呼ぶだけにする。
+ */
+function bindJumps(root){
+  $$(root + ' a[data-jump]').forEach(function(a){
+    if (a.getAttribute('data-bound')) return;
+    a.setAttribute('data-bound', '1');
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      var to = a.getAttribute('data-jump');
+      if (to.indexOf('scroll:') === 0){
+        var el = document.getElementById(to.slice(7));
+        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+        return;
+      }
+      jumpToList(to);
+    });
+  });
+}
+
+function bars(obj, order){
+  var keys = order || Object.keys(obj);
+  // 空のまま返すと、見出しだけの**白い箱**になる。
+  // 読み込み中なのか、壊れているのか、まだ無いのかが分からない
+  //（2026-09-03 の検証で指摘）
+  if (!keys.length) return '<p class="none">まだ該当する応募はありません。</p>';
+  var max = 0;
+  keys.forEach(function(k){ max = Math.max(max, obj[k] || 0); });
+  return '<div class="rows2">' + keys.map(function(k){
+    var v = obj[k] || 0;
+    return '<div class="r"><span>'+esc(k)+'</span><span class="n">'+v+'</span></div>'
+         + '<div class="bar"><i style="width:'+(max ? Math.round(v/max*100) : 0)+'%"></i></div>';
+  }).join('') + '</div>';
+}
+
+/**
+ * 要対応の一覧。応募の状態から出るものに加えて、
+ * 人が入れた確認事項と、外から届いた問い合わせも、ここで拾う。
+ * 見落としはここから起きるので、入口は1つにまとめている。
+ */
+function renderAlerts(){
+  var r = S.summary;
+  if (!r) return;
+  var c = r.counts;
+
+    var todo = [];
+    if (c.unconfirmed) todo.push(['未確認の応募', c.unconfirmed, 'status:未確認']);
+    if (r.todo.stale.length) todo.push(['審査中のまま日数が経過', r.todo.stale.length, 'status:審査中']);
+    if (r.todo.toNotify.length) todo.push(['採択済みで通知未送信', r.todo.toNotify.length, 'status:採択']);
+    // 開催が近づくとここが効く。採択したのに場所が決まっていない状態
+    if (r.todo.toAssign && r.todo.toAssign.length)
+      todo.push(['採択済みで区画が未割当', r.todo.toAssign.length, 'status:採択']);
+    // 発電機の持ち込みは、消防・騒音・配置の事前確認が要る
+    if (r.todo.toCheckPower && r.todo.toCheckPower.length)
+      todo.push(['発電機の持ち込みが未確認', r.todo.toCheckPower.length, 'power']);
+    if (c.dup) todo.push(['重複の可能性', c.dup, 'dup']);
+    // 応募の状態から出るものだけでなく、人が入れた確認事項と
+    // 外から届いた問い合わせも、ここで拾う。見落としはここから起きる
+    var over = (S.todos || []).filter(function(t){
+      return t.state !== '完了' && t.due && t.due < todayText();
+    }).length;
+    // 行き先が無いと、同じ見た目なのに押せない行になる（2026-09-03 の検証で指摘）。
+    // どちらも同じダッシュボードの下にあるので、そこまで送る
+    if (over) todo.push(['期日を過ぎた確認事項', over, 'scroll:todoList']);
+    var unreplied = ((S.inbox && S.inbox.rows) || []).filter(function(m){ return !m.replied; }).length;
+    if (unreplied) todo.push(['未返信の問い合わせ', unreplied, 'scroll:inboxPanel']);
+    $('#todo').innerHTML = todo.length
+      ? '<h3>要対応</h3><ul>' + todo.map(function(t){
+          var to = t[2];
+          var label = to.indexOf('scroll:') === 0 ? 'この下で見る →' : '一覧で見る →';
+          return '<li><b>'+t[1]+'</b><span>'+esc(t[0])+'</span>'
+               + (to ? '<a href="#" data-jump="'+esc(to)+'">'+label+'</a>' : '')
+               + '</li>';
+        }).join('') + '</ul>'
+      : '<h3>要対応</h3><p class="none">いま対応が必要なものはありません。</p>';
+    $('#todo').classList.toggle('clear', !todo.length);
+    bindJumps('#todo');
+}
+
+function loadSummary(){
+  api('adminSummary').then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '集計を取得できませんでした', true); return; }
+    S.role = r.role; $('#role').textContent = r.role; applyRole();
+    var c = r.counts;
+
+    S.summary = r;
+    $('#asOf').textContent = r.asOf ? r.asOf + ' 時点' : '';
+
+    renderAlerts();
+
+    // 数字
+    var yen = function(n){ return '¥' + Number(n||0).toLocaleString('ja-JP'); };
+    var arrived = c.day ? (c.total - (c.day['未着'] || 0)) : 0;
+    $('#cards').innerHTML = [
+      ['総応募数', c.total, c.goal ? '／ 目標 ' + c.goal : '', 'dark'],
+      ['締切まで', r.daysLeft == null ? '—' : r.daysLeft, r.daysLeft == null ? '' : '日', 'dark'],
+      ['区画の充足', r.spaces.rate + '%', r.spaces.assigned + ' / ' + r.spaces.total + ' 区画'],
+      // 「概算」だけでは、もらうお金か払うお金か分からなかった
+      ['備品レンタルの売上見込み', r.pricesKnown ? yen(r.revenue) : '調整中',
+       r.pricesKnown ? '応募内容から自動計算' : '単価未設定'],
+      ['消費電力の合計', Number(c.powerWatt||0).toLocaleString('ja-JP'), 'W' + (c.powerUnknown ? '（不明 '+c.powerUnknown+'件）' : '')],
+    ].map(function(x){
+      return '<div class="card '+(x[3]||'')+'"><div class="k">'+esc(x[0])+'</div>'
+           + '<div class="v">'+esc(x[1])+(x[2] ? '<small>'+esc(x[2])+'</small>' : '')+'</div></div>';
+    }).join('');
+
+    renderTotals(r.totals || []);
+
+    $('#breakdown').innerHTML = [
+      ['ステータス別', bars(c.byStatus, ['未確認','審査中','採択','不採択','辞退','キャンセル','重複（無効）'])],
+      ['出店形態別（延べ）', bars(c.byType)],
+      ['希望区画別', bars(c.bySize)],
+      ['電源', bars(c.byPower)],
+      ['担当社員別', bars(c.byStaff)],
+      ['レンタル備品', bars(Object.assign(
+        { 'テント（1区画）': r.rental.tentT1, 'テント（2区画）': r.rental.tentT2 },
+        r.rentalQty || {}))],
+      ['テント', bars(c.byTent || {})],
+      // 仕様書§6-2「食器・包材の持込予定の内訳（サステナ報告用）」
+      ['包材の用意（サステナ報告用）', bars(c.byPack || {})],
+    ].map(function(p){
+      return '<div class="panel"><h3>'+esc(p[0])+'</h3>'+p[1]+'</div>';
+    }).join('');
+
+    $('#recent').innerHTML = r.recent.length
+      ? r.recent.map(function(x){
+          return '<div class="r"><span>'+esc(x.at)+'　'+esc(x.name)+'</span>'
+               + '<span class="pill '+esc(x.status)+'">'+esc(x.status||'未確認')+'</span></div>';
+        }).join('')
+      : '<p class="none" style="color:var(--muted);font-size:13px;margin:0">まだ応募はありません。</p>';
+  }, function(e){ netFail(e, 'ダッシュボードを読み込めませんでした'); });
+}
+
+// ─────────────────────────── 一覧
+function loadList(){
+  api('adminList').then(function(r){
+    if (!r || !r.ok){ toast('一覧を取得できませんでした', true); return; }
+    S.list = r;
+    var sel = $('#fStatus');
+    sel.innerHTML = '<option value="">ステータス（すべて）</option>' +
+      r.statuses.map(function(s){ return '<option>'+esc(s)+'</option>'; }).join('');
+    // 自分が担当の応募がある人は、初期表示を自分の担当分に絞る（仕様書§6-2）
+    var mine = r.rows.filter(function(x){ return x['FC大阪担当社員'] === S.person; });
+    if (mine.length) $('#fMine').checked = true;
+    fillFilters();
+    loadShow();              // 覚えている列。無ければ既定の並び
+    renderColumnPicker();
+    if (S.role === '管理者') loadPurgeBox();
+    renderList();
+    renderDay();
+  }, function(e){ netFail(e, '出店者一覧を読み込めませんでした'); });
+}
+
+/** 絞り込みの選択肢を、いま来ている応募から作る */
+function fillFilters(){
+  var rows = S.list.rows;
+  var uniq = function(key, split){
+    var set = {};
+    rows.forEach(function(x){
+      var v = x[key] || '';
+      (split ? v.split(/[,、\/／]/) : [v]).forEach(function(t){
+        t = t.trim(); if (t) set[t] = 1;
+      });
+    });
+    return Object.keys(set).sort();
+  };
+  var opts = function(el, label, list){
+    var cur = $(el).value;
+    $(el).innerHTML = '<option value="">' + label + '</option>'
+      + list.map(function(v){ return '<option>' + esc(v) + '</option>'; }).join('');
+    if (list.indexOf(cur) >= 0) $(el).value = cur;
+  };
+  opts('#fType', '出店形態（すべて）', uniq('出店形態', true));
+  opts('#fSize', '希望区画（すべて）', uniq('希望区画'));
+  opts('#fDay',  '当日ステータス（すべて）', S.list.dayStatuses);
+}
+
+function filtered(){
+  if (!S.list) return [];
+  var q = $('#fQ').value.trim().toLowerCase();
+  var st = $('#fStatus').value, ty = $('#fType').value;
+  var sz = $('#fSize').value, dy = $('#fDay').value;
+  var mine = $('#fMine').checked, dup = $('#fDup').checked;
+  var rows = S.list.rows.filter(function(x){
+    if (st && x['ステータス'] !== st) return false;
+    if (ty && String(x['出店形態'] || '').indexOf(ty) < 0) return false;
+    if (sz && x['希望区画'] !== sz) return false;
+    if (dy && (x['当日ステータス'] || '未着') !== dy) return false;
+    if (mine && x['FC大阪担当社員'] !== S.person) return false;
+    if (dup && !String(x['重複フラグ']||'').trim()) return false;
+    if (q){
+      var hay = Object.keys(x).map(function(k){ return x[k]; }).join(' ').toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+  var c = S.sort.col, d = S.sort.dir;
+  rows.sort(function(a,b){
+    var x = String(a[c]||''), y = String(b[c]||'');
+    // 区画番号は数として並べる（10 が 2 より前に来ないように）
+    if (c === '割当開始区画'){ return ((Number(x)||9999) - (Number(y)||9999)) * d; }
+    return x === y ? 0 : (x < y ? -d : d);
+  });
+  return rows;
+}
+
+/**
+ * 表に出す列。**使う人が選ぶ**（2026-09-02 けいた指摘）。
+ *
+ * その日の仕事によって、見たい列は変わる。
+ * 区画を割るときは希望区画とテント、電気の計画をするときは電源と消費電力。
+ * こちらで決め打ちにすると、そのたびにスプレッドシートを開くことになる。
+ *
+ * 選んだ内容はこの端末に覚えておく（人によって見たい列が違う）。
+ */
+var SHOW_KEY = 'bondance.listColumns.v1';
+var SHOW = [];
+
+function loadShow(){
+  var def = (S.list && S.list.defaultColumns) || [];
+  try {
+    var saved = JSON.parse(localStorage.getItem(SHOW_KEY) || 'null');
+    if (Array.isArray(saved) && saved.length){
+      // 台帳から消えた列が残っていると、空の列が並ぶ
+      var live = saved.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
+      if (live.length){ SHOW = live; return; }
+    }
+  } catch (e) {}
+  SHOW = def.slice();
+}
+
+function saveShow(){
+  try { localStorage.setItem(SHOW_KEY, JSON.stringify(SHOW)); } catch (e) {}
+}
+
+/** 列を選ぶ画面。開いている間だけ出す */
+function renderColumnPicker(){
+  var box = $('#colPick');
+  if (!S.list) return;
+  box.innerHTML = S.list.columns.map(function(c){
+    var on = SHOW.indexOf(c) >= 0;
+    return '<label class="colopt"><input type="checkbox" value="' + esc(c) + '"'
+      + (on ? ' checked' : '') + '>' + esc(c) + '</label>';
+  }).join('');
+  $$('#colPick input').forEach(function(inp){
+    inp.addEventListener('change', function(){
+      var c = inp.value;
+      if (inp.checked){
+        // 台帳の並び順を保つ。押した順に並ぶと、開くたびに表の形が変わる
+        SHOW = S.list.columns.filter(function(x){
+          return x === c || SHOW.indexOf(x) >= 0;
+        });
+      } else {
+        SHOW = SHOW.filter(function(x){ return x !== c; });
+      }
+      if (!SHOW.length){
+        // 全部外すと、何の表か分からなくなる
+        SHOW = [S.list.columns[0]];
+        renderColumnPicker();
+      }
+      saveShow();
+      renderList();
+    });
+  });
+}
+
+/**
+ * テストデータの一括削除。
+ *
+ * 取り返しのつかない操作なので、3段階で押させる。
+ *   ① 消える対象を確かめる（この時点では何も書き換えない）
+ *   ② 件数を打ち込む（惰性で押せないように）
+ *   ③ 実行。**下見のときと対象が変わっていたらサーバーが断る**
+ */
+// 「確かめる」を押した瞬間の控え。**書き換えてよいのは purgeCheck だけ**。
+// 一覧の再読み込みで黙って差し替えると、人が見ている一覧は古いまま
+// 送る対象だけが新しくなる（2026-09-03 の検証で見つかった穴）。
+// ticket は、その集合に対してサーバーが出した引換券
+var PURGE = { ids: null, ticket: '' };
+
+function loadPurgeBox(){
+  // 設定でONのときだけ入口が開く。OFFなら箱ごと出さない。
+  // **ここでは PURGE を触らない**。入口の開け閉めだけが仕事
+  api('adminPurgePreview').then(function(r){
+    var on = !!(r && r.ok);
+    $('#purgeBox').hidden = !on || S.role !== '管理者';
+    if (!on) purgeForget('');
+  }, function(){ $('#purgeBox').hidden = true; });
+}
+
+/** 控えを捨てて、②の欄を閉じる。もう一度①からやり直しになる */
+function purgeForget(msg){
+  PURGE.ids = null;
+  PURGE.ticket = '';
+  var box = $('#purgeStep2');
+  if (box) box.hidden = true;
+  var m = $('#purgeMsg');
+  if (m && msg){ m.className = 'msg err'; m.textContent = msg; }
+}
+
+function purgeCheck(){
+  $('#purgeMsg').textContent = '';
+  api('adminPurgePreview').then(function(r){
+    if (!r || !r.ok){
+      $('#purgeStep2').hidden = true;
+      $('#purgeMsg').className = 'msg err';
+      $('#purgeMsg').textContent = (r && r.message) || '確かめられませんでした。';
+      return;
+    }
+    PURGE.ids = r.ids || [];
+    PURGE.ticket = r.ticket || '';
+    var items = r.items || [];
+    $('#purgeList').innerHTML = '<div class="purge-list"><table>' + items.map(function(x){
+      return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.company)
+           + '</td><td>' + esc(x.status) + '</td><td>' + esc(x.at) + '</td></tr>';
+    }).join('') + '</table></div>';
+    $('#purgeWarn').textContent = 'この ' + items.length + ' 件を完全に消します（元に戻せません）。'
+      + '出店確定情報・変更履歴・区画の割当・提出物のフォルダも一緒に消えます。'
+      + '消す直前に、台帳を丸ごと複製した控えをDriveに作ります。'
+      + (r.ticketMin ? '（確かめてから' + r.ticketMin + '分を過ぎると、やり直しになります）' : '')
+      + (r.tooMany ? '（一度に消せるのは ' + r.max + ' 件までです）' : '');
+    $('#purgeCount').value = '';
+    // ひな型は**実際の件数**にする。関係のない数を例に出すと、それを打ってしまう
+    $('#purgeCount').placeholder = String(items.length);
+    $('#purgeStep2').hidden = false;
+  }, function(){ toast('確かめられませんでした', true); });
+}
+
+function purgeRun(){
+  var n = Number($('#purgeCount').value);
+  if (!PURGE.ids || !PURGE.ids.length){
+    $('#purgeMsg').className = 'msg err';
+    $('#purgeMsg').textContent = '先に「消える対象を確かめる」を押してください。';
+    return;
+  }
+  if (n !== PURGE.ids.length){
+    $('#purgeMsg').className = 'msg err';
+    $('#purgeMsg').textContent = '件数が違います。' + PURGE.ids.length + ' とご入力ください。';
+    return;
+  }
+  if (!confirm(PURGE.ids.length + ' 件を完全に消します。変更履歴も残りません。'
+      + String.fromCharCode(10) + 'よろしいですか。')) return;
+
+  $('#purgeRun').disabled = true;
+  $('#purgeMsg').className = 'msg';
+  $('#purgeMsg').textContent = '消しています…';
+  api('adminPurgeRun', { ids: PURGE.ids, count: n, ticket: PURGE.ticket }).then(function(r){
+    $('#purgeRun').disabled = false;
+    if (!r || !r.ok){
+      // 対象が変わった／券が古い、はやり直してもらうしかない。
+      // 控えを持ったままだと、同じボタンをもう一度押せてしまう
+      var redo = { changed:1, stale_ticket:1, no_ticket:1, bad_ticket:1, expired_ticket:1 };
+      if (r && redo[r.error]){ purgeForget(r.message); return; }
+      $('#purgeMsg').className = 'msg err';
+      $('#purgeMsg').textContent = (r && r.message) || '消せませんでした。';
+      return;
+    }
+    var c = r.cleared || {};
+    var done = Object.keys(c).map(function(k){ return k + ' ' + c[k] + '行'; }).join('／');
+    $('#purgeMsg').className = 'msg';
+    $('#purgeMsg').innerHTML = '消しました（' + esc(done)
+      + '／区画の割当 ' + (r.spaces || 0) + '件／提出物フォルダ ' + (r.folders || 0) + '件）。'
+      + '設定のスイッチはOFFに戻しました。'
+      + (r.backupUrl
+         ? '<br>控え：<a href="' + esc(r.backupUrl) + '" target="_blank" rel="noopener">'
+           + 'Driveで開く</a>（ご確認のうえ、不要になったら捨ててください）'
+         : '');
+    purgeForget('');
+    loadList();
+    loadPurgeBox();
+  }, function(){
+    $('#purgeRun').disabled = false;
+    $('#purgeMsg').className = 'msg err';
+    $('#purgeMsg').textContent = '消せませんでした。';
+  });
+}
+
+function resetColumns(){
+  SHOW = ((S.list && S.list.defaultColumns) || []).slice();
+  saveShow();
+  renderColumnPicker();
+  renderList();
+}
+
+function renderList(){
+  if (!S.list) return;
+  if (!SHOW.length) loadShow();
+  var rows = filtered();
+  $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
+  var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
+  $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
+  var head = '<tr>' + cols.map(function(c){
+    var cls = S.sort.col === c ? (S.sort.dir > 0 ? 'asc' : 'desc') : '';
+    return '<th data-sort="'+esc(c)+'" class="'+cls+'">'+esc(c)+'</th>';
+  }).join('') + '</tr>';
+
+  var body = rows.map(function(x){
+    return '<tr data-id="'+esc(x['受付ID'])+'">' + cols.map(function(c){
+      var v = x[c] || '';
+      // スマホでは表を1件1カードに組み替えるので、見出しを各セルに持たせる
+      var lbl = ' data-l="'+esc(c)+'"';
+      if (c === 'ステータス') return '<td'+lbl+'><span class="pill '+esc(v)+'">'+esc(v||'未確認')+'</span></td>';
+      if (c === '企業名'){
+        var d = String(x['重複フラグ']||'').trim()
+          ? ' <span class="pill dupflag">重複の可能性</span>' : '';
+        return '<td class="head"'+lbl+'>'+esc(v)+d+'</td>';
+      }
+      return '<td'+lbl+'>'+esc(v)+'</td>';
+    }).join('') + '</tr>';
+  }).join('');
+
+  $('#listHead').innerHTML = head;
+  $('#listBody').innerHTML = body;
+  $('#listEmpty').style.display = rows.length ? 'none' : '';
+
+  $$('#listHead th[data-sort]').forEach(function(th){
+    th.addEventListener('click', function(){
+      var c = th.getAttribute('data-sort');
+      S.sort = { col:c, dir: (S.sort.col === c ? -S.sort.dir : 1) };
+      renderList();
+    });
+  });
+  // 指を置いてスクロールしただけで詳細が開くのを防ぐ。
+  // 少しでも動いたらタップとみなさない。
+  $$('#listBody tr').forEach(function(tr){
+    var sx = 0, sy = 0;
+    tr.addEventListener('pointerdown', function(e){ sx = e.clientX; sy = e.clientY; });
+    tr.addEventListener('click', function(e){
+      if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) return;
+      openDetail(tr.getAttribute('data-id'));
+    });
+  });
+}
+
+function jumpToList(spec){
+  showTab('list');
+  $('#fMine').checked = false; $('#fDup').checked = false; $('#fQ').value = '';
+  if (spec.indexOf('status:') === 0) $('#fStatus').value = spec.slice(7);
+  else if (spec === 'dup'){ $('#fStatus').value=''; $('#fDup').checked = true; }
+  else if (spec === 'power'){ $('#fStatus').value='未確認'; $('#fQ').value = '発電機'; }
+  renderList();
+}
+
+// ─────────────────────────── 詳細
+var HIDE_IN_DETAIL = ['生データ(JSON)','素材トークン'];
+
+function openDetail(id){
+  api('adminDetail', { id: id }).then(function(r){
+    if (!r || !r.ok){ toast('詳細を取得できませんでした', true); return; }
+    var d = r.detail;
+    $('#dId').textContent = d['受付ID'] || '';
+    $('#dName').textContent = d['企業・団体名'] || '';
+
+    var link = function(k, v){
+      if (k === 'メールアドレス' && v) return '<a href="mailto:'+esc(v)+'">'+esc(v)+'</a>';
+      if (k === '電話番号' && v) return '<a href="tel:'+esc(String(v).replace(/[^0-9+]/g,''))+'">'+esc(v)+'</a>';
+      return esc(v);
+    };
+
+    var body = Object.keys(d).filter(function(k){
+      return HIDE_IN_DETAIL.indexOf(k) < 0 && String(d[k]).trim() !== '';
+    }).map(function(k){
+      return '<dt>'+esc(k)+'</dt><dd>'+link(k, d[k])+'</dd>';
+    }).join('');
+    $('#dRead').innerHTML = '<h4 class="dsec">ご応募時にいただいた情報</h4>'
+      + '<dl class="dl">'+body+'</dl>';
+    renderConfirmBlock(r.confirm, d['ステータス']);
+    renderCountEntry(r.countFields || [], r.confirm, id);
+
+    $('#eStatus').innerHTML = S.list.statuses.map(function(s){
+      return '<option'+(d['ステータス']===s?' selected':'')+'>'+esc(s)+'</option>';
+    }).join('');
+    $('#eDay').innerHTML = '<option value="">（未設定）</option>' + S.list.dayStatuses.map(function(s){
+      return '<option'+(d['当日ステータス']===s?' selected':'')+'>'+esc(s)+'</option>';
+    }).join('');
+    // メモは追記式。いまの中身は下に読み取り専用で出す
+    $('#eMemo').value = '';
+    $('#dMemoLog').textContent = d['担当メモ'] || '';
+    S.detail = d; S.detailId = id;
+    applicantLock();
+    if (!S.applicantFields){
+      api('adminApplicantFields').then(function(r){
+        if (r && r.ok) S.applicantFields = r.fields || [];
+      }, function(){});
+    }
+    $('#eIn').value = d['搬入予定時刻'] || '';
+    $('#eOut').value = d['撤収予定時刻'] || '';
+    $('#dSave').setAttribute('data-id', id);
+    $('#dMsg').textContent = '';
+    $('.drawer').classList.add('on');
+  }, function(e){ netFail(e, 'この出店者の詳細を読み込めませんでした'); });
+}
+
+/**
+ * 採択後に集めた「出店確定情報」。
+ *
+ * 出ていないときも**枠ごと消さない**。
+ * 何も出ないと「この画面には無い」のか「まだ提出されていない」のかが分からず、
+ * 電話をかける前に確かめようがない。
+ */
+function renderConfirmBlock(cf, status){
+  var box = $('#dConfirm');
+  if (!cf || !cf.ok){
+    box.innerHTML = '<h4 class="dsec">採択後にいただいた情報</h4>'
+      + '<p class="dnote warn">読み込めませんでした。'
+      + 'スプレッドシートの「出店確定情報」シートをご確認ください。</p>';
+    return;
+  }
+  if (!cf.submitted){
+    var why = status === '採択'
+      ? '出店確定情報フォームからのご提出を、まだいただいていません。'
+      : 'このお申し込みは「' + esc(status || '審査中') + '」です。'
+        + '採択のご連絡後に、事業者がご提出できるようになります。';
+    box.innerHTML = '<h4 class="dsec">採択後にいただいた情報</h4>'
+      + '<p class="dnote">' + why + '</p>';
+    return;
+  }
+  var keys = Object.keys(cf.values);
+  box.innerHTML = '<h4 class="dsec">採択後にいただいた情報'
+    + '<span class="dcount">' + keys.length + '項目</span></h4>'
+    + '<dl class="dl">' + keys.map(function(k){
+        return '<dt>' + esc(k) + '</dt><dd>' + esc(cf.values[k]) + '</dd>';
+      }).join('') + '</dl>';
+}
+
+/**
+ * 枚数の打ち込み。
+ *
+ * 2026-09-03 けいた指示：
+ * 「応募フォームから吸い上げ、および、管理画面で打ち込み、
+ *   ダッシュボードで総数が分かれば便利」
+ *
+ * 枚数は電話で聞くことがある。フォームの提出を待つしかない作りだと、
+ * 分かっているのに数えられない。
+ *
+ * ■ 入力欄は**サーバーが送ってきた一覧から組み立てる**
+ *   ここに項目名を書くと、schema.js に項目を足したときに
+ *   画面だけ古いまま残る。
+ *
+ * ■ 入れられるのは数字だけ
+ *   事業者が書いた文章を主催側が書き換えられると、誰が書いたのか分からなくなる。
+ */
+function renderCountEntry(fields, cf, id){
+  var box = $('#dCounts');
+  if (!box) return;
+  if (!fields.length){ box.innerHTML = ''; return; }
+  // **黙って消さない。** 欄が無い理由をその場に出す。
+  // 一般で開くと欄ごと消えるので「自分の画面が壊れた」と思われた
+  //（2026-09-04 の検証で指摘）
+  if (S.role !== '管理者'){
+    box.innerHTML = '<h4 class="dsec">枚数・人数の打ち込み</h4>'
+      + '<p class="dnote off">この入力は<b>管理者のみ</b>です。'
+      + 'お電話で伺った数がある場合は、管理者にお伝えください。</p>';
+    return;
+  }
+
+  var vals = (cf && cf.values) || {};
+  box.innerHTML = '<h4 class="dsec">枚数・人数の打ち込み'
+    + '<span class="dcount">管理者のみ</span></h4>'
+    + '<p class="dnote">お電話などで伺った数を、ここに入れられます。'
+    + '<b>上の「採択後にいただいた情報」を、この数で置き換えます</b>'
+    + '（足し算ではありません）。空欄のままなら、事業者さまの申告どおりです。'
+    + 'いつ誰が変えたかは変更履歴に残ります。</p>'
+    + '<div class="pgrid">' + fields.map(function(f){
+        var v = vals[f.sheet] == null ? '' : vals[f.sheet];
+        return '<label>' + esc(f.label)
+          + (f.unit ? '（' + esc(f.unit) + '）' : '')
+          + '<input id="cnt-' + esc(f.key) + '" inputmode="numeric" maxlength="5"'
+          + ' value="' + esc(v) + '"></label>';
+      }).join('') + '</div>'
+    + '<div class="pbtns"><button class="print" id="cntSave">枚数を保存する</button>'
+    + '<span class="msg" id="cntMsg"></span></div>';
+
+  $('#cntSave').addEventListener('click', function(){
+    var values = {};
+    fields.forEach(function(f){ values[f.key] = $('#cnt-' + f.key).value.trim(); });
+    $('#cntSave').disabled = true;
+    $('#cntMsg').className = 'msg';
+    $('#cntMsg').textContent = '保存しています…';
+    api('adminConfirmSave', { id: id, values: values }).then(function(r){
+      $('#cntSave').disabled = false;
+      if (!r || !r.ok){
+        $('#cntMsg').className = 'msg err';
+        // どの項目がなぜ断られたかを、項目名で出す。
+        // 以前は黙って読み飛ばして「変更はありません」とだけ出していたので、
+        // **電話で聞いた数が消えた**（2026-09-03 の検証で指摘）
+        $('#cntMsg').textContent = (r && r.message) || '保存できませんでした。';
+        return;
+      }
+      var said = r.changed
+        ? r.changed + '件を保存しました（上の表示にも反映されます）'
+        : '打ち込んだ数は、いまの内容と同じでした（変更なし）';
+      loadSummary();     // ダッシュボードの合計にすぐ効かせる
+      openDetail(id);    // 上の「採択後にいただいた情報」を、いまの値にする
+      // **openDetail が引き出しを作り直すので、先に書いたメッセージは消える。**
+      // 作り直したあとに、もう一度出す（2026-09-04 の検証で指摘）。
+      // 画面の隅の小さな文字だけでは見落とすので、トーストも出す
+      setTimeout(function(){
+        var m = $('#cntMsg');
+        if (m){ m.className = 'msg ok'; m.textContent = said; }
+      }, 400);
+      toast(said);
+    }, function(){
+      $('#cntSave').disabled = false;
+      $('#cntMsg').className = 'msg err';
+      $('#cntMsg').textContent = '保存できませんでした。';
+    });
+  });
+}
+
+function closeDetail(){ $('.drawer').classList.remove('on'); }
+
+/** 後戻りしにくいステータス。サーバー側（Admin.gs の STATUS_NEEDS_REASON_）と同じ並び */
+var NEEDS_REASON = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+
+function saveDetail(){
+  var id = $('#dSave').getAttribute('data-id');
+  var patch = {
+    'ステータス': $('#eStatus').value,
+    '当日ステータス': $('#eDay').value,
+    '担当メモ': $('#eMemo').value,
+    '搬入予定時刻': $('#eIn').value,
+    '撤収予定時刻': $('#eOut').value,
+  };
+  // ステータスは後戻りしにくい操作なので、変えるときだけ確認する（仕様書§6-2 S6）
+  var before = S.list.rows.filter(function(x){ return x['受付ID'] === id; })[0];
+  var reason = '';
+  if (before && before['ステータス'] !== patch['ステータス']){
+    if (!confirm('ステータスを「' + (before['ステータス']||'未確認') + '」から「'
+                 + patch['ステータス'] + '」に変更します。よろしいですか。')) return;
+    // 後戻りしにくい先へ変えるときは、理由を残す。
+    // 申告内容の修正には理由が要るのに、採否の変更には要らないのは筋が通らない
+    if (NEEDS_REASON.indexOf(patch['ステータス']) >= 0){
+      reason = (prompt('「' + patch['ステータス'] + '」に変更する理由をご記入ください（5文字以上）。'
+        + String.fromCharCode(10) + '変更履歴に残ります。') || '').trim();
+      if (reason.length < 5){
+        $('#dMsg').className = 'msg err';
+        $('#dMsg').textContent = '理由が必要です（5文字以上）。変更は保存していません。';
+        return;
+      }
+    }
+  }
+  $('#dSave').disabled = true;
+  $('#dMsg').className = 'msg'; $('#dMsg').textContent = '保存しています…';
+  api('adminUpdate', { id: id, patch: patch, reason: reason }).then(function(r){
+    $('#dSave').disabled = false;
+    if (!r || !r.ok){
+      $('#dMsg').className = 'msg err';
+      $('#dMsg').textContent = (r && r.message) || '保存できませんでした。もう一度お試しください。';
+      return;
+    }
+    $('#dMsg').textContent = r.changed ? '保存しました（' + r.changed + '件）' : '変更はありません';
+    toast('保存しました');
+    // 担当メモは積み上げ式なので、保存しただけでは画面の履歴が古いままになる。
+    // 読み直して、いま積まれた内容をその場で見せる
+    openDetail(id);
+    loadList(); loadSummary();
+    if (S.history) loadHistory();
+  }, function(e){
+    $('#dSave').disabled = false;
+    $('#dMsg').className = 'msg err';
+    $('#dMsg').textContent = '通信に失敗しました。もう一度お試しください。';
+  });
+}
+
+// ─────────────────────────── 当日運営
+/**
+ * 当日の現場で使う画面。
+ *
+ * 現場責任者のモニターから「これが無いと当日引き受けられない」と挙がったもの：
+ *   ・区画番号順に並ぶこと（受付ID順では現場の動きと合わない）
+ *   ・1行で、連絡先・車両・火気・テント・電源まで見えること（詳細を開かせない）
+ *   ・当日ステータスが1タップで変わり、押した瞬間に保存されること
+ *   ・紙に印刷できること（屋外は電波が切れる）
+ */
+var DAY_STEPS = ['未着', '搬入済', '設営完了', '撤収完了'];
+
+var DAY_COLS = [
+  ['区画',   function(x){ return x['割当開始区画'] || ''; }, 'sp'],
+  ['出店名', function(x){ return x['出店名'] || x['企業名'] || ''; }, 'head'],
+  ['企業名', function(x){ return x['企業名'] || ''; }, ''],
+  // **当日その場にいる人**の番号を先に出す（けいた指示・2026-09-03）。
+  // 応募時のご担当者は会社にいることがあり、現場では通じない。
+  // 当日は電波が切れるので、印刷する表に載っている必要がある
+  ['現場責任者', function(x){
+      return x['確定：現場責任者'] || '（未提出）';
+    }, ''],
+  ['現場の携帯', function(x){
+      return x['確定：現場責任者携帯'] || x['担当者電話'] || '';
+    }, 'tel'],
+  ['応募時の連絡先', function(x){ return x['担当者電話'] || ''; }, 'tel'],
+  ['テント', function(x){
+      var t = x['テント'] || '';
+      if (t.indexOf('レンタル') >= 0) return 'レンタル ' + (String(x['テントサイズ']).indexOf('3間') >= 0 ? '大' : '小');
+      return t ? '持込' : '';
+    }, ''],
+  ['電源',   function(x){
+      var p = x['電源'] || '';
+      var w = x['合計消費電力(W)'];
+      if (p.indexOf('持ち込') >= 0 || p.indexOf('発電機') >= 0) return '発電機持込';
+      if (p.indexOf('レンタル') >= 0) return 'レンタル' + (w ? '（' + w + 'W）' : '');
+      return p;
+    }, ''],
+  // 主催が決めた時刻が先。決まっていなければ、事業者の希望を「希望」と付けて出す。
+  // 空欄のままだと、現場では「聞いていない」のか「未定」なのか分からない
+  ['搬入',   function(x){
+      if (x['搬入予定時刻']) return x['搬入予定時刻'];
+      var w = x['確定：搬入希望1'];
+      return w ? '希望 ' + w : '';
+    }, ''],
+  ['撤収',   function(x){
+      if (x['撤収予定時刻']) return x['撤収予定時刻'];
+      return x['確定：早期撤収希望'] ? '早期希望' : '';
+    }, ''],
+];
+
+/** 発電機の持ち込みは、消防・騒音・配置の確認対象として目立たせる */
+function isRisky(x){
+  var p = String(x['電源'] || '');
+  return p.indexOf('持ち込') >= 0 || p.indexOf('発電機') >= 0;
+}
+
+function dayRows(){
+  if (!S.list) return [];
+  var rows = S.list.rows.filter(function(x){
+    if ($('#dOnlyAssigned').checked && !String(x['割当開始区画']||'').trim()) return false;
+    if ($('#dFire').checked && !isRisky(x)) return false;
+    // 出店しない人は当日の名簿に出さない
+    return ['不採択','辞退','キャンセル','重複（無効）'].indexOf(x['ステータス']) < 0;
+  });
+  rows.sort(function(a,b){
+    return (Number(a['割当開始区画'])||9999) - (Number(b['割当開始区画'])||9999);
+  });
+  return rows;
+}
+
+function renderDay(){
+  if (!S.list) return;
+  var rows = dayRows();
+
+  // 8:30から動く人が一番知りたいのは「まだ来ていないのが何社か」
+  var n = { 未着:0, 搬入済:0, 設営完了:0, 撤収完了:0 };
+  rows.forEach(function(x){ n[x['当日ステータス'] || '未着'] = (n[x['当日ステータス'] || '未着'] || 0) + 1; });
+  // **絞り込んだあとの数だけ**を出していたので、
+  // 「全1社」と読めて、印刷して持って行くと1社ぶんしかなかった
+  //（2026-09-03 の検証で指摘）。絞る前の数も添える
+  var allDay = S.list.rows.filter(function(x){
+    return ['不採択','辞退','キャンセル','重複（無効）'].indexOf(x['ステータス']) < 0;
+  }).length;
+  $('#dayCount').innerHTML = '未着（まだ来場していない） <b class="warn">' + n['未着'] + '</b>／'
+    + '搬入済 <b>' + n['搬入済'] + '</b>／設営完了 <b>' + n['設営完了'] + '</b>'
+    + '／撤収完了 <b>' + n['撤収完了'] + '</b>　'
+    + (rows.length === allDay
+        ? '全 ' + allDay + ' 社'
+        : '<b class="warn">' + allDay + ' 社のうち ' + rows.length + ' 社を表示中</b>'
+          + '（絞り込みが効いています）');
+
+  $('#dayHead').innerHTML = '<tr>'
+    + DAY_COLS.map(function(c){ return '<th>' + esc(c[0]) + '</th>'; }).join('')
+    + '<th>当日ステータス</th></tr>';
+
+  $('#dayBody').innerHTML = rows.map(function(x){
+    var cur = x['当日ステータス'] || '未着';
+    var cells = DAY_COLS.map(function(c){
+      var v = c[1](x);
+      if (c[2] === 'tel' && v){
+        return '<td class="tel" data-l="'+esc(c[0])+'"><a href="tel:'
+             + esc(String(v).replace(/[^0-9+]/g,'')) + '">' + esc(v) + '</a></td>';
+      }
+      var cls = c[2] || '';
+      if (c[0] === '電源' && isRisky(x)) cls += ' fire';
+      return '<td class="'+cls+'" data-l="'+esc(c[0])+'">' + esc(v) + '</td>';
+    }).join('');
+    var btns = DAY_STEPS.map(function(st){
+      return '<button data-id="'+esc(x['受付ID'])+'" data-st="'+esc(st)+'"'
+           + (st === cur ? ' class="on"' : '') + '>' + esc(st) + '</button>';
+    }).join('');
+    return '<tr>' + cells + '<td data-l="当日ステータス"><span class="daybtn">'
+         + btns + '</span></td></tr>';
+  }).join('');
+
+  $('#dayEmpty').style.display = rows.length ? 'none' : '';
+
+  // 紙の見出し。何の紙なのかが書いていなかった（2026-09-04 の検証）。
+  // 現場のスタッフに配ると「これ何の紙？」と聞かれる
+  var ph = $('#dayPrintHead');
+  if (ph){
+    ph.innerHTML = '<h1>' + esc(EV_NAME) + '｜当日運営名簿'
+      + '（' + rows.length + '社'
+      + (rows.length === allDay ? '' : ' ／ 全 ' + allDay + '社') + '）</h1>'
+      + '<p>' + esc(EV_DATE) + '　' + esc(EV_VENUE) + '</p>'
+      + '<p>印刷日 ' + todayText() + '</p>';
+  }
+
+  // 「印刷する」の隣で、いま何社ぶんが刷られるのかを言う。
+  // 絞り込みに気づかず1社だけの名簿を現場に持って行きかけた、という指摘
+  var pw = $('#dayPrintWarn');
+  if (pw){
+    if (rows.length === allDay){
+      pw.hidden = true;
+    } else {
+      pw.hidden = false;
+      pw.innerHTML = '<b>印刷もこの ' + rows.length + ' 社だけ</b>になります'
+        + '（全 ' + allDay + ' 社）。'
+        + '<button type="button" class="linkish" id="dayShowAll">'
+        + '絞り込みを外して全 ' + allDay + ' 社にする</button>';
+      var sa = $('#dayShowAll');
+      if (sa) sa.addEventListener('click', function(){
+        $('#dOnlyAssigned').checked = false;
+        $('#dFire').checked = false;
+        renderDay();
+      });
+    }
+  }
+
+
+  // 押した瞬間に保存する。プルダウン＋保存ボタンでは50社は回らない
+  $$('#dayBody .daybtn button').forEach(function(b){
+    b.addEventListener('click', function(){
+      var id = b.getAttribute('data-id'), st = b.getAttribute('data-st');
+      var box = b.parentNode;
+      $$('button', box).forEach(function(x){ x.disabled = true; });
+      api('adminUpdate', { id: id, patch: { '当日ステータス': st } }).then(function(r){
+        if (!r || !r.ok){ toast('保存できませんでした', true);
+          $$('button', box).forEach(function(x){ x.disabled = false; }); return; }
+        var row = S.list.rows.filter(function(x){ return x['受付ID'] === id; })[0];
+        if (row) row['当日ステータス'] = st;
+        toast(id + ' を「' + st + '」にしました');
+        renderDay();
+      }, function(){
+        toast('通信に失敗しました。もう一度押してください。', true);
+        $$('button', box).forEach(function(x){ x.disabled = false; });
+      });
+    });
+  });
+}
+
+/** 詳細を開いたまま、前後の応募へ移る（連続して審査するため） */
+function stepDetail(d){
+  var id = $('#dSave').getAttribute('data-id');
+  var rows = filtered();
+  var i = -1;
+  rows.forEach(function(x, k){ if (x['受付ID'] === id) i = k; });
+  if (i < 0) return;
+  var next = rows[i + d];
+  if (!next) { toast(d > 0 ? 'これが最後の応募です' : 'これが最初の応募です'); return; }
+  openDetail(next['受付ID']);
+}
+
+// ─────────────────────────── マップ
+function loadSpaces(){
+  api('adminSpaces').then(function(r){
+    if (!r || !r.ok){ toast('区画を取得できませんでした', true); return; }
+    S.spaces = r;
+    var ids = Object.keys(r.owners);
+    $('#aWho').innerHTML = '<option value="">出店者を選んでください</option>' +
+      ids.map(function(id){
+        var o = r.owners[id];
+        var mark = o.start ? '（' + o.start + '〜）' : '';
+        return '<option value="'+esc(id)+'">'+esc(id)+'　'+esc(o.name)+mark+'</option>';
+      }).join('');
+    renderMap();
+  }, function(e){ netFail(e, '区画マップを読み込めませんでした'); });
+}
+
+/**
+ * 設定シートの色を、そのままCSSに入れないための検査。
+ * ここは画面内で唯一、値を属性の中へ差し込む場所だった。
+ * エスケープに加えて「色として妥当か」まで見て、外れたら既定色に落とす。
+ */
+function color(v){
+  return /^#[0-9A-Fa-f]{3,8}$/.test(String(v || '')) ? String(v) : '#B8B8B8';
+}
+
+function renderMap(){
+  var r = S.spaces;
+  if (!r) return;
+  var n = r.spaces.length || 1;
+  var R = 210, cx = 250, cy = 250;
+
+  // 区画の丸は、隣とぶつからない大きさに自動で縮める。
+  // 50区画のとき固定半径だと重なって番号が読めなくなる。
+  var gap = 2 * Math.PI * R / n;              // 隣の中心との距離
+  var rad = Math.max(6, Math.min(15, gap / 2 * 0.86));
+
+  var owned = {};
+  Object.keys(r.owners).forEach(function(id){ owned[id] = r.owners[id]; });
+
+  // 輪の外へ出店名を出すので、その分の余白を viewBox に足す。
+  // 500x500 のままだと、右端・上端の名前が切れる。
+  var PAD = 92;
+  var svg = ['<svg viewBox="' + (-PAD) + ' ' + (-PAD/2) + ' ' + (500 + PAD*2) + ' ' + (500 + PAD)
+    + '" role="img" aria-label="出店エリアマップ">'];
+  if (r.background) svg.push('<image href="'+esc(r.background)+'" x="60" y="60" width="380" height="380" opacity="0.5"/>');
+
+  // 割当のかたまりごとに、輪の外へ出店名を出す
+  var groups = {};
+  r.spaces.forEach(function(s){ if (s.id){ (groups[s.id] = groups[s.id] || []).push(s); } });
+  Object.keys(groups).forEach(function(id){
+    var g = groups[id], o = owned[id];
+    if (!o) return;
+    var mx = 0, my = 0;
+    g.forEach(function(s){ mx += s.x; my += s.y; });
+    mx /= g.length; my /= g.length;
+    var len = Math.sqrt(mx*mx + my*my) || 1;
+    var lx = cx + mx / len * (R + rad + 12), ly = cy + my / len * (R + rad + 12);
+    var anchor = mx > 0.15 ? 'start' : (mx < -0.15 ? 'end' : 'middle');
+    svg.push('<text class="lbl" x="'+lx.toFixed(1)+'" y="'+ly.toFixed(1)+'" '
+      + 'text-anchor="'+anchor+'">'+esc(String(o.name).slice(0, 10))+'</text>');
+  });
+
+  r.spaces.forEach(function(s){
+    var x = cx + s.x * R, y = cy + s.y * R;
+    var o = s.id ? owned[s.id] : null;
+    var fill = o ? color(r.colors[o.type] || r.colors['その他']) : '#fff';
+    var cls = 'sp' + (s.id ? ' taken' : '') + (S.pick === s.no ? ' pick' : '');
+    var tip = s.no + '番' + (o ? '：' + o.name : '（未割当）');
+    svg.push('<g class="'+cls+'" data-no="'+s.no+'" data-id="'+esc(s.id)+'">'
+      + '<title>'+esc(tip)+'</title>'
+      + '<circle class="ring" cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+rad.toFixed(1)+'" style="fill:'+esc(fill)+'"/>'
+      + '<text class="no" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" '
+      + 'style="font-size:'+Math.max(6, rad*0.72).toFixed(1)+'px">'+s.no+'</text></g>');
+  });
+  svg.push('</svg>');
+  $('#map').innerHTML = svg.join('');
+
+  // 区画番号順の割当一覧。当日はこれを見て回る
+  var list = r.spaces.filter(function(s){ return s.id; }).map(function(s){
+    var o = owned[s.id] || {};
+    return '<div class="r"><span><b class="num">'+s.no+'</b>　'+esc(o.name||'')+'</span>'
+         + '<span style="font-size:11.5px;color:var(--muted)">'+esc(s.id)+'</span></div>';
+  }).join('');
+  $('#assigned').innerHTML = list
+    || '<p style="margin:0;font-size:12.5px;color:var(--muted)">まだ割り当てはありません。</p>';
+
+  // まだ場所が決まっていない出店者。何社残っているかが分からないと配置しきれない
+  var rest = Object.keys(r.owners).filter(function(id){
+    return !r.owners[id].start && r.owners[id].status !== '不採択'
+        && r.owners[id].status !== '辞退' && r.owners[id].status !== 'キャンセル'
+        && r.owners[id].status !== '重複（無効）';
+  });
+  $('#unassignedN').textContent = rest.length ? '（' + rest.length + '社）' : '';
+  $('#unassigned').innerHTML = rest.length
+    ? rest.map(function(id){
+        var o = r.owners[id];
+        var units = String(o.size).indexOf('3間') >= 0 ? 2 : 1;
+        return '<div class="r"><span><a href="#" data-pick="'+esc(id)+'">'+esc(o.name)+'</a></span>'
+             + '<span style="font-size:11.5px;color:var(--muted)">'+units+'区画</span></div>';
+      }).join('')
+    : '<p style="margin:0;font-size:12.5px;color:var(--muted)">全員の区画が決まっています。</p>';
+  $$('#unassigned a[data-pick]').forEach(function(a){
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      $('#aWho').value = a.getAttribute('data-pick');
+      onWhoChange();
+    });
+  });
+
+  $('#legend').innerHTML = Object.keys(r.colors).map(function(t){
+    return '<span><i style="background:'+color(r.colors[t])+'"></i>'+esc(t)+'</span>';
+  }).join('') + '<span><i style="background:#fff"></i>未割当</span>';
+
+  $$('#map .sp').forEach(function(g){
+    g.addEventListener('click', function(){ onSpaceClick(Number(g.getAttribute('data-no')), g.getAttribute('data-id')); });
+  });
+}
+
+function onSpaceClick(no, id){
+  var who = $('#aWho').value;
+  if (!who){
+    if (id){
+      var o = S.spaces.owners[id];
+      toast(no + '番：' + id + '　' + (o ? o.name : ''));
+    } else {
+      toast(no + '番は未割当です。左で出店者を選んでから押してください。');
+    }
+    return;
+  }
+  if (id && id !== who){
+    toast(no + '番はすでに割り当てられています。', true);
+    return;
+  }
+  var o = S.spaces.owners[who];
+  var units = (String(o.size).indexOf('3間') >= 0 || String(o.size).indexOf('2区画') >= 0) ? 2 : 1;
+  if (!confirm(o.name + ' を ' + no + '番から ' + units + '区画で割り当てます。よろしいですか。')) return;
+  api('adminAssign', { id: who, start: no }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '割り当てできませんでした', true); return; }
+    toast('割り当てました（' + r.spaces.join('・') + '番）');
+    loadSpaces(); loadSummary(); loadList();
+    setTimeout(onWhoChange, 600);   // 「現在：未割当」の表示を残さない
+  }, function(e){ netFail(e, '区画の割り当てができませんでした'); });
+}
+
+function unassign(){
+  var who = $('#aWho').value;
+  if (!who) return;
+  var o = S.spaces.owners[who];
+  if (!confirm(o.name + ' の区画割当を解除します。よろしいですか。')) return;
+  api('adminUnassign', { id: who }).then(function(r){
+    if (!r || !r.ok){ toast('解除できませんでした', true); return; }
+    toast('解除しました');
+    loadSpaces(); loadSummary(); loadList();
+    setTimeout(onWhoChange, 600);
+  }, function(e){ netFail(e, '区画の割り当てを外せませんでした'); });
+}
+
+function onWhoChange(){
+  var who = $('#aWho').value;
+  var box = $('#aCur');
+  if (!who){ box.style.display='none'; return; }
+  var o = S.spaces.owners[who];
+  var units = (String(o.size).indexOf('3間') >= 0 || String(o.size).indexOf('2区画') >= 0) ? 2 : 1;
+  box.style.display = '';
+  box.innerHTML = '<b>' + esc(o.name) + '</b><br>希望：' + esc(o.size || '未回答')
+    + '（' + units + '区画）<br>'
+    + (o.start ? '現在：' + o.start + '番から ' + (o.units||units) + '区画' : '現在：未割当');
+  $('#aDel').style.display = o.start ? '' : 'none';
+}
+
+// ─────────────────────────── タブ
+/**
+ * タブの切り替え。URLの # にも書く。
+ * 「マップを見てください」を admin.html#map で伝えられるようにするため。
+ */
+/**
+ * 管理者だけのタブ。
+ *
+ * ボタンは admin-only の印で消しているが、**URLの #settings を直接開けば出せた**。
+ * （この行にバッククォートは書かないこと。ここはテンプレートリテラルの中で、
+ *   1つ書いた時点で文字列が切れる。同じ事故がこれで3回目）
+ * ブックマークやURL共有で普通に起きる。値は漏れない（サーバーが全部断る）が、
+ * ITに不慣れな人には「触ったら怒られた／壊した」と映る。
+ * 隠すのは見た目の話で、守りはサーバー側（Admin.gs の adminOnly）にある。
+ */
+var ADMIN_TABS = ['people', 'settings', 'mail'];
+
+/**
+ * 選んだタブを、帯の中の見える位置へ寄せる。
+ *
+ * ■ なぜ自前で書くか
+ *   scrollIntoView だけだと、**帯の左右の余白ぶん足りない**。
+ *   いちばん右のタブ（設定）を選んだとき、右端が帯の外に残っていた
+ *   （2026-09-03 の検証で、幅360〜768pxのすべてで再現）。
+ *
+ * ■ offsetLeft を使わない
+ *   ボタンの offsetParent は .tabs で、横に動くのは内側の .in。
+ *   基準が違うので、offsetLeft で計算すると**いつも少しずれる**。
+ *   画面上の実寸（getBoundingClientRect）どうしで比べれば、基準の話が消える。
+ *
+ * ■ 少し待ってからもう一度
+ *   タブを切り替えた直後は、まだ幅が確定していないことがある。
+ */
+function scrollTabIntoView(b){
+  var run = function(){
+    try {
+      var strip = b.parentNode;
+      if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+      var pad = 16;
+      var r = b.getBoundingClientRect();
+      var sr = strip.getBoundingClientRect();
+      if (r.right + pad > sr.right)      strip.scrollLeft += (r.right + pad - sr.right);
+      else if (r.left - pad < sr.left)   strip.scrollLeft -= (sr.left - r.left + pad);
+    } catch (e) {}
+  };
+  run();
+  setTimeout(run, 0);
+}
+
+function showTab(name, keepHash){
+  if (ADMIN_TABS.indexOf(name) >= 0 && S.role && S.role !== '管理者'){
+    toast('「' + tabLabel(name) + '」は管理者のみが開けます', true);
+    name = 'dash';
+    keepHash = false;
+  }
+  $$('.tabs button').forEach(function(b){
+    var on = (b.getAttribute('data-tab') === name);
+    b.setAttribute('aria-selected', String(on));
+    // スマホではタブ行が横にはみ出す。選んだものを見える位置へ寄せないと、
+    // 資料置き場・当日運営・変更履歴が**そこにあると気づけない**。
+    //
+    // scrollIntoView だけだと、**帯の左右の余白ぶん足りない**。
+    // いちばん右のタブ（設定）を選んだとき、右端が帯の外に残っていた
+    //（2026-09-03 の検証で、幅360〜768pxのすべてで再現）。
+    // 自分で位置を出して、余白を足す
+    if (on) scrollTabIntoView(b);
+  });
+  $$('.view').forEach(function(v){ v.classList.toggle('on', v.id === 'v-' + name); });
+  if (name === 'map' && !S.spaces) loadSpaces();
+  if (name === 'day') renderDay();
+  if (name === 'people' && !S.people) loadPeople();
+  if (name === 'history' && !S.history) loadHistory();
+  if (name === 'settings' && !S.settings) loadSettings();
+  if (name === 'settings' && !S.rental) loadRental();
+  // メール送信だけは毎回読み直す。他のタブは一度読んだら使い回すが、
+  // ここは「いま送る対象が何件か」を見せる画面なので、
+  // 古い件数を見せたまま送信させると、見せた覚えのない相手に届く。
+  if (name === 'mail'){ loadNotify(); loadTemplate(); }
+  // 資料置き場も毎回読み直す。誰かが足したものが見えないと意味がない
+  if (name === 'docs') loadDocs();
+  if (!keepHash && location.hash.slice(1).split('/')[0] !== name){
+    history.replaceState(null, '', '#' + name);
+  }
+}
+
+/** #list/SB-0003 のような入り口。受付IDまで指定されていれば詳細を開く */
+function applyHash(){
+  var parts = location.hash.replace(/^#/, '').split('/');
+  var tab = parts[0];
+  if (['dash','list','map','day','docs','mail','people','history','settings'].indexOf(tab) < 0) return;
+  showTab(tab, true);
+  if (tab === 'list' && parts[1]){
+    var wait = setInterval(function(){
+      if (!S.list) return;
+      clearInterval(wait);
+      openDetail(parts[1]);
+    }, 200);
+    setTimeout(function(){ clearInterval(wait); }, 8000);
+  }
+}
+
+// ─────────────────────────── 関係者（管理者のみ）
+/**
+ * 管理者だけに見せるものを、役割が分かった時点で出し入れする。
+ * 隠すのは見た目の話であって、守りではない。
+ * 実際の可否はサーバー側（adminOnly）で決まっている。
+ */
+/** タブの名前。案内の文に使うので、画面のボタンから読む（二重管理にしない） */
+/**
+ * 「ここから先は事務局にご相談ください」と案内する先。
+ *
+ * 以前は個人名（森本／けいた）が画面に直書きされていた。
+ * **新しく入った営業には誰か分からず、メールも電話も書いていない**ので、
+ * 連絡のしようがなかった（2026-09-03 の検証で指摘）。
+ * 設定「事務局の連絡先」に入れてもらい、そこを出す。
+ */
+function officeContact(){
+  var v = (S.summary && S.summary.office) || '';
+  return String(v).trim() || '実行委員会事務局';
+}
+
+function tabLabel(name){
+  var b = $$('.tabs button').filter(function(x){
+    return x.getAttribute('data-tab') === name;
+  })[0];
+  return (b && b.textContent.trim()) || name;
+}
+
+function applyRole(){
+  var isAdmin = (S.role === '管理者');
+  $$('.admin-only').forEach(function(el){
+    // 一括削除の入口だけは、**設定のスイッチで開け閉めする**（loadPurgeBox の仕事）。
+    // ここで一律に開けていたので、ステータスを保存するなど
+    // ダッシュボードを取り直す操作をするたび、OFF のはずの赤い削除ボックスが
+    // 勝手に現れていた（2026-09-04 の最終確認で発見）。
+    // 設定の説明文（「ONにすると現れます」）とも食い違っていた
+    if (el.id === 'purgeBox') return;
+    el.hidden = !isAdmin;
+  });
+  // 役割が分かるのは入室したあと。**それまでに開いていたタブ**を閉じ直す。
+  // people だけを見ていたので、#settings や #mail は開いたままだった
+  if (!isAdmin){
+    var now = location.hash.slice(1).split('/')[0];
+    if (ADMIN_TABS.indexOf(now) >= 0) showTab('dash');
+    ADMIN_TABS.forEach(function(t){
+      var v = document.getElementById('v-' + t);
+      if (v) v.classList.remove('on');
+    });
+  }
+}
+
+function loadPeople(){
+  api('adminPeople').then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '関係者を取得できませんでした', true); return; }
+    S.people = r.people || [];
+    S.me = r.me || S.person;
+    renderPeople();
+  }, function(){ toast('関係者を取得できませんでした', true); });
+}
+
+function yesNo(on, yes, no){
+  return '<span class="' + (on ? '' : 'pill-off') + '">' + (on ? yes : no) + '</span>';
+}
+
+function renderPeople(){
+  var body = $('#peopleBody');
+  var list = S.people || [];
+  $('#peopleCount').textContent = list.length
+    ? list.length + '人が登録されています'
+    : 'まだ登録がありません。「新しく登録する」から追加してください。';
+
+  body.innerHTML = list.map(function(p){
+    return '<tr data-row="' + p.row + '">'
+      + '<td><b>' + esc(p.name) + '</b>' + (p.name === S.me ? '（ご自身）' : '') + '</td>'
+      + '<td>' + esc(p.dept || p.org || '') + '</td>'
+      + '<td>' + esc(p.email || '') + '</td>'
+      + '<td>' + yesNo(p.formVisible, '出す', '出さない') + '</td>'
+      + '<td>' + yesNo(p.canLogin, '使う', '使わない') + '</td>'
+      + '<td>' + esc(p.role) + '</td>'
+      + '<td>' + yesNo(p.notify, 'ON', 'OFF') + '</td>'
+      + '<td><button class="ghost" data-edit="' + p.row + '">変更</button></td>'
+      + '</tr>';
+  }).join('');
+
+  $$('#peopleBody [data-edit]').forEach(function(b){
+    b.addEventListener('click', function(){ editPerson(Number(b.getAttribute('data-edit'))); });
+  });
+}
+
+/** row が 0 なら新規。ご自身の場合は締め出しにつながる項目を触れなくする */
+function editPerson(row){
+  var p = (S.people || []).filter(function(x){ return x.row === row; })[0]
+       || { name:'', org:'', dept:'', email:'', formVisible:true, canLogin:false, role:'一般', notify:false };
+  S.editRow = row || 0;
+
+  $('#pFormTitle').textContent = row ? esc(p.name) + ' さんの登録内容' : '関係者の登録';
+  $('#pName').value = p.name || '';
+  $('#pOrg').value = p.org || '';
+  $('#pDept').value = p.dept || '';
+  $('#pEmail').value = p.email || '';
+  $('#pFormVisible').checked = !!p.formVisible;
+  $('#pCanLogin').checked = !!p.canLogin;
+  $('#pRole').value = p.role || '一般';
+  $('#pNotify').checked = !!p.notify;
+
+  // ご自身の場合、役割と利用可否は変えられない。
+  // サーバーでも弾いているが、押せてしまうと理由が伝わらないので画面でも止める
+  var isSelf = !!row && p.name === S.me;
+  $('#pSelfNote').hidden = !isSelf;
+  $('#pRole').disabled = isSelf;
+  $('#pCanLogin').disabled = isSelf;
+
+  $('#pErr').hidden = true;
+  $('#pForm').hidden = false;
+  $('#pForm').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function savePerson(){
+  var person = {
+    name: $('#pName').value.trim(),
+    org: $('#pOrg').value.trim(),
+    dept: $('#pDept').value.trim(),
+    email: $('#pEmail').value.trim(),
+    formVisible: $('#pFormVisible').checked,
+    canLogin: $('#pCanLogin').checked,
+    role: $('#pRole').value,
+    notify: $('#pNotify').checked,
+  };
+  api('adminPeopleSave', { row: S.editRow || 0, person: person }).then(function(r){
+    if (!r || !r.ok){
+      $('#pErr').textContent = (r && r.message) || '保存できませんでした。';
+      $('#pErr').hidden = false;
+      return;
+    }
+    $('#pForm').hidden = true;
+    toast(r.added ? person.name + ' さんを登録しました' : person.name + ' さんの登録を更新しました');
+    loadPeople();
+  }, function(){
+    $('#pErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#pErr').hidden = false;
+  });
+}
+
+// ─────────────────────────── 変更履歴
+function loadHistory(){
+  api('adminHistory', { limit: 300 }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '変更履歴を取得できませんでした', true); return; }
+    S.history = r.rows || [];
+    S.historyTotal = r.total || 0;
+    renderHistory();
+  }, function(){ toast('変更履歴を取得できませんでした', true); });
+}
+
+function renderHistory(){
+  var q = ($('#hQ').value || '').trim().toLowerCase();
+  var rows = (S.history || []).filter(function(h){
+    if (!q) return true;
+    return [h.id, h.item, h.operator, h.reason].join(' ').toLowerCase().indexOf(q) >= 0;
+  });
+  $('#hCount').textContent = rows.length + '件'
+    + (S.historyTotal > (S.history || []).length ? '（直近' + (S.history || []).length + '件を表示）' : '');
+  $('#hBody').innerHTML = rows.map(function(h){
+    return '<tr>'
+      + '<td>' + esc(h.at) + '</td>'
+      + '<td>' + esc(h.operator) + '</td>'
+      + '<td>' + esc(h.id) + '</td>'
+      + '<td>' + esc(h.item) + '</td>'
+      + '<td class="wrapcell">' + esc(h.before) + '</td>'
+      + '<td class="wrapcell">' + esc(h.after) + '</td>'
+      + '<td class="wrapcell">' + esc(h.reason) + '</td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="7">まだ変更はありません。</td></tr>';
+}
+
+// ─────────────────────────── 応募内容の修正（3段階）
+/**
+ * 段階を分けているのは、これが**事業者さまの申告内容**を書き換える操作だから。
+ *   1) 触る前に、それが何かを伝える（既定では触れない）
+ *   2) なぜ変えたのかを必ず書かせる
+ *   3) 記録したことを伝え、もう一度伏せる
+ */
+function applicantLock(){
+  $('#apLock').hidden = false;
+  $('#apEdit').hidden = true;
+  $('#apConfirm').hidden = true;
+  $('#apUnlock').textContent = '応募内容を修正する';
+  $('#apUnlock').disabled = false;
+  $('#apReason').value = '';
+  $('#apMsg').textContent = '';
+}
+
+/**
+ * 1回目の押下で注意書きを開き、2回目で編集に入る。
+ *
+ * ■ なぜ confirm() をやめたか
+ *   ブラウザは、同じページが何度もダイアログを出すと
+ *   「このページでのダイアログを無効化」という選択肢を出す。
+ *   一度そうされると、**このボタンは押しても永久に何も起きない**。
+ *   壊れているのか押せていないのか、使う人には区別がつかない
+ *   （2026-09-03 の検証で、実際に「押しても何も出ません」と報告された）。
+ *
+ *   2段階にする意図（触る前に、それが何かを伝える）は変えていない。
+ *   画面の中でやれば、ダイアログの設定に左右されない。
+ */
+function unlockApplicant(){
+  var box = $('#apConfirm');
+  if (box.hidden){
+    box.hidden = false;
+    $('#apUnlock').textContent = '注意書きをご確認ください';
+    $('#apUnlock').disabled = true;
+    $('#apYes').focus();
+    return;
+  }
+  applicantEditOn();
+}
+
+function applicantEditOn(){
+  $('#apLock').hidden = true;
+  $('#apEdit').hidden = false;
+  renderApplicantFields();
+  $('#apReason').focus();
+}
+
+function renderApplicantFields(){
+  var d = S.detail || {};
+  var box = $('#apFields');
+  box.innerHTML = (S.applicantFields || []).map(function(f){
+    var v = d[f.sheet] == null ? '' : String(d[f.sheet]);
+    var input = (f.type === 'textarea')
+      ? '<textarea id="ap-' + esc(f.key) + '" rows="3">' + esc(v) + '</textarea>'
+      : '<input id="ap-' + esc(f.key) + '" value="' + esc(v) + '"'
+        + (f.maxLength ? ' maxlength="' + Number(f.maxLength) + '"' : '') + '>';
+    return '<div class="editrow"><label for="ap-' + esc(f.key) + '">' + esc(f.label) + '</label>'
+         + input + '</div>';
+  }).join('');
+}
+
+function saveApplicant(){
+  var d = S.detail || {};
+  var reason = $('#apReason').value.trim();
+  if (reason.length < 5){
+    $('#apMsg').className = 'msg err';
+    $('#apMsg').textContent = 'なぜ変更したのかを、5文字以上でご記入ください。';
+    $('#apReason').focus();
+    return;
+  }
+
+  var patch = {};
+  (S.applicantFields || []).forEach(function(f){
+    var el = document.getElementById('ap-' + f.key);
+    if (!el) return;
+    var before = d[f.sheet] == null ? '' : String(d[f.sheet]);
+    if (el.value === before) return;
+    patch[f.key] = el.value;
+  });
+  var keys = Object.keys(patch);
+  if (!keys.length){
+    $('#apMsg').className = 'msg';
+    $('#apMsg').textContent = '変更された項目がありません。';
+    return;
+  }
+
+  $('#apSave').disabled = true;
+  $('#apMsg').className = 'msg';
+  $('#apMsg').textContent = '保存しています…';
+
+  api('adminApplicantUpdate', { id: S.detailId, patch: patch, reason: reason }).then(function(r){
+    $('#apSave').disabled = false;
+    if (!r || !r.ok){
+      $('#apMsg').className = 'msg err';
+      $('#apMsg').textContent = (r && r.message)
+        || ((r && r.error === 'validation')
+            ? '入力内容に不備があります：' + (r.fields || []).map(function(f){ return f.message; }).join(' ')
+            : '保存できませんでした。');
+      return;
+    }
+    // 3段階目：何をしたかを伝え、もう一度伏せる
+    toast('変更履歴に記録しました（' + (r.items || []).join('、') + '）');
+    applicantLock();
+    openDetail(S.detailId);
+    loadList();
+    if (S.history) loadHistory();
+  }, function(){
+    $('#apSave').disabled = false;
+    $('#apMsg').className = 'msg err';
+    $('#apMsg').textContent = '通信に失敗しました。もう一度お試しください。';
+  });
+}
+
+// ─────────────────────────── 設定（管理者のみ）
+// ─────────────────────────── メール送信（採択通知）
+/**
+ * 対象と本文を取り直して、3段を組み直す。
+ *
+ * ■ 毎回取り直す
+ *   「いま何件に送るか」を見せる画面なので、古い件数を見せたまま
+ *   送信させると、見せた覚えのない相手に届く。
+ *   サーバー側も件数の食い違いを見て弾くが、画面でも古いものを残さない。
+ *
+ * ■ 押した瞬間に押せなくする
+ *   二重クリックで2回送ると、事業者に同じメールが2通届く。
+ *   サーバー側は「送信済みは対象外」なので実害は小さいが、
+ *   応答が返る前の2回目は素通りしうるので、画面でも止める。
+ */
+function loadNotify(){
+  S.notify = null;
+  $('#mailIntro').textContent = '読み込んでいます…';
+  $('#mailStep2').hidden = true;
+  $('#mailStep3').hidden = true;
+  $('#mailResult').hidden = true;
+  $('#mailWarn').hidden = true;
+  $('#mailTargets').innerHTML = '';
+
+  api('adminNotifyPreview', { kind: S.notifyKind || 'accept' }).then(function(r){
+    if (!r || !r.ok){
+      $('#mailIntro').textContent = (r && r.message) || '対象を取得できませんでした。';
+      return;
+    }
+    S.notify = r;
+    renderNotify();
+  }, function(){ $('#mailIntro').textContent = '対象を取得できませんでした。'; });
+}
+
+function renderNotify(){
+  var r = S.notify || {};
+  var rows = r.rows || [];
+  var bad = r.invalid || [];
+
+  var isReject = (r.kind === 'reject');
+  $('#mailIntro').innerHTML =
+    'ステータスが<b>「' + (isReject ? '不採択' : '採択') + '」</b>で、'
+    + 'まだ通知を送っていない出店者さまが対象です。'
+    + (isReject
+        ? '<br>不採択のご連絡には、<b>理由もリンクも書きません</b>'
+          + '（問い合わせの行き先が無くなるため）。'
+        : '<br>提出期限の表記：<b>' + esc(r.deadlineText || '') + '</b>');
+
+  // 送る前に気づけるようにする。差出人が壊れていると、
+  // 事業者には見覚えのないアドレスから届く
+  var warn = [];
+  if (r.mail && !r.mail.aliasRegistered){
+    warn.push('差出人のエイリアスが未登録です。このまま送ると、'
+      + '差出人が <b>' + esc(r.mail.from || '') + '</b> になります。');
+  }
+  // URLの警告は**採択のときだけ**。不採択の本文にはリンクを載せないので、
+  // URLが空でも送れる（本番 gas/Notify.gs も isReject を見て素通りさせている）。
+  // ここで「送信できません」と出していたため、URLを入れる前に
+  // 不採択だけ先に送る、という普通の順番で担当者が止まっていた
+  if (!isReject && (!r.urls || !r.urls.confirm)){
+    warn.push('設定シートの<b>確定情報フォームURL</b>が空です。このままでは送信できません。');
+  }
+  if (!isReject && (!r.urls || !r.urls.upload)){
+    warn.push('素材アップロードURLが未設定のため、その案内は本文に入りません（送信は可能です）。');
+  }
+  var flip = r.flipped || [];
+  if (flip.length){
+    // **反対の通知を送ってしまっている行**。機械で追い打ちをかけない。
+    // 「出店が決定いたしました」のあとに「見送らせていただきました」が
+    // 自動で届くのが、いちばんまずい形
+    warn.push('すでに<b>' + esc(flip[0].sentLabel) + '</b>を送信済みの行が'
+      + flip.length + '件あります。この行は<b>一斉送信の対象から外しています</b>：'
+      + flip.map(function(f){
+          return esc(f.id) + ' ' + esc(f.company) + '（' + esc(f.sentAt) + ' 送信）';
+        }).join(' / ')
+      + '<br>行き違いになるため、<b>お電話などで事情をお伝えください。</b>');
+  }
+  if (bad.length){
+    warn.push('メールアドレスの形が正しくない行が' + bad.length + '件あります。'
+      + 'この行は<b>送信されません</b>：'
+      + bad.map(function(b){ return esc(b.id) + ' ' + esc(b.company); }).join(' / '));
+  }
+  if (r.mail && r.mail.remainingQuota != null && r.mail.remainingQuota < rows.length){
+    warn.push('本日の送信可能数が足りません（残り ' + r.mail.remainingQuota
+      + ' 通／対象 ' + rows.length + ' 件）。');
+  }
+  $('#mailWarn').hidden = !warn.length;
+  $('#mailWarn').innerHTML = warn.map(function(w){
+    return '<p class="pwarn">' + w + '</p>';
+  }).join('');
+
+  if (!rows.length){
+    // 不採択の画面で「『採択』にすると出ます」と案内すると、逆の操作をさせる
+    $('#mailTargets').innerHTML = '<p class="empty">送信する相手はいません。'
+      + '出店者一覧でステータスを「' + (isReject ? '不採択' : '採択')
+      + '」にすると、ここに出ます。</p>';
+    return;
+  }
+
+  var over = rows.length > (r.batchMax || 40);
+  $('#mailTargets').innerHTML =
+    '<p class="mail-count"><b>' + rows.length + '件</b>に送信します'
+    + (over ? '（1回に送れるのは ' + r.batchMax + ' 件までです。'
+            + '残りは、もう一度この画面から送ってください）' : '') + '</p>'
+    + '<div class="tbl-wrap"><table class="mail-tbl"><thead><tr>'
+    + '<th>受付ID</th><th>企業名</th><th>ご担当者</th><th>宛先</th><th>担当社員</th>'
+    + '</tr></thead><tbody>'
+    + rows.map(function(x){
+        return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.company) + '</td>'
+          + '<td>' + esc(x.person) + '</td><td>' + esc(x.email) + '</td>'
+          + '<td>' + esc(x.staff) + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<div class="pbtns"><button class="print" id="mailToPreview">本文を確認する</button></div>';
+
+  $('#mailToPreview').addEventListener('click', function(){
+    var s = r.sample;
+    if (!s){ toast('本文を組み立てられませんでした', true); return; }
+    $('#mailFrom').textContent = (r.mail && r.mail.from) || '';
+    // 「ほか2件」だと、**3社が並んだ1通**（＝他社にアドレスが見える）と読める。
+    // 実際は1社ずつ別々に送っている。そこを書く（2026-09-03 の検証で指摘）
+    $('#mailTo').textContent = rows.length === 1
+      ? s.to + '（' + s.company + '）'
+      : s.to + '（' + s.company + '）ほか ' + (rows.length - 1)
+        + '件 ／ 1社ずつ別々にお送りします（この見本は1件目の宛先です）';
+    $('#mailPrevNote').innerHTML = '1件目の宛先に送られる、<b>実際の文面</b>です。'
+      + (isReject
+          ? '不採択のご連絡にリンクは入りません。'
+          : '<b>この見本のリンクは、送信のときに1社ずつ発行されます。</b>'
+            + 'ここに出ているものをそのまま開いても、つながりません。');
+    $('#mailSubject').textContent = s.subject;
+    $('#mailBody').textContent = s.body;
+    $('#mailStep2').hidden = false;
+    $('#mailStep3').hidden = false;
+    $('#mailSendLabel').textContent = rows.length + '件に送信する';
+    $('#mailStep2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+// ─────────────────────────── メール文面の編集
+/**
+ * 採択・不採択の文面を、この画面で直せるようにする（けいた指示・2026-09-03）。
+ *
+ * ■ 守っているものは、画面ではなくサーバーにある
+ *   ・不採択の文面に採択専用のリンクを入れさせない
+ *     （入れると、その方が出店確定情報フォームを開けてしまう）
+ *   ・採択の文面からリンクを落とさせない
+ *   ・知らない差し込み（{{名前}} など）のまま送らせない
+ *   画面は、断られた理由をそのまま見せるだけにする。
+ *   ここに検査を写すと、片方が古くなる。
+ */
+function loadTemplate(keepMsg){
+  var kind = S.notifyKind || 'accept';
+  if (S.role !== '管理者'){ $('#tplBox').hidden = true; return; }
+  $('#tplBox').hidden = false;
+  // 保存の直後は消さない。**ここで消していたせいで、
+  // 「保存しました」も「このままでは送れません」も一度も出ていなかった**
+  //（2026-09-04 の検証で指摘。私が足した警告を、私が消していた）
+  if (!keepMsg){
+    $('#tplMsg').textContent = '';
+    $('#tplErr').hidden = true;
+    $('#tplWarn').hidden = true;
+  }
+  api('adminMailTemplate', { kind: kind }).then(function(r){
+    if (!r || !r.ok){ $('#tplBox').hidden = true; return; }
+    S.tpl = r;
+    $('#tplSubject').value = r.subject || '';
+    $('#tplBody').value = r.body || '';
+    // maxLength だけだと、長い件名を貼ったときに**何も言わずに切れる**。
+    // サーバーの「長すぎます」には手入力では到達しない（2026-09-04 の検証）
+    $('#tplSubject').maxLength = r.subjectMax || 200;
+    $('#tplSubject').oninput = function(){
+      var max = r.subjectMax || 200;
+      var n = $('#tplSubject').value.length;
+      var note = $('#tplSubjLen');
+      if (!note) return;
+      note.hidden = n < max * 0.9;
+      note.textContent = n >= max
+        ? '件名は ' + max + '文字までです。ここで切れています。'
+        : 'あと ' + (max - n) + '文字です';
+      note.className = n >= max ? 'tplcount over' : 'tplcount';
+    };
+    $('#tplSubject').oninput();
+    // シートの見出しが壊れているときは、**それを先に言う**。
+    // 「はじめの文面のまま」と出すと、保存した文面が消えたように見えるうえ、
+    // 実際には既定の文面が送られる（2026-09-04 の点検で指摘）
+    if (r.headBroken){
+      $('#tplState').textContent = '（台帳のシートが壊れています）';
+      $('#tplErr').hidden = false;
+      $('#tplErr').innerHTML = '<b>台帳の「メール文面」シートを直してください。</b><ul><li>'
+        + mdBold(r.headBrokenMessage || '') + '</li></ul>';
+    } else {
+      $('#tplState').textContent = r.isDefault
+        ? '（はじめの文面のまま）'
+        : '（' + (r.by || '') + ' が ' + (r.at || '') + ' に編集）';
+    }
+    $('#tplVars').innerHTML = (r.vars || []).map(function(v){
+      return '<button type="button" class="tplvar" data-v="' + esc(v.name) + '" title="'
+        + esc(String(v.about).split('**').join('')) + '">{{' + esc(v.name) + '}}</button>';
+    }).join('');
+    // **スマホでは指を乗せられないので、title は一生読めない。**
+    // 11個の似た名前（確定情報フォームURL／素材アップロードURL／
+    // 素材アップロードのご案内）を、名前だけで選べる人はいない（2026-09-04 の検証）
+    $('#tplVarHelp').innerHTML = (r.vars || []).map(function(v){
+      return '<dt><code>{{' + esc(v.name) + '}}</code></dt>'
+        + '<dd>' + mdBold(v.about)
+        + (v.sample ? '<span class="tplsample">例：' + esc(v.sample) + '</span>' : '')
+        + '</dd>';
+    }).join('');
+    $$('#tplVars .tplvar').forEach(function(b){
+      b.addEventListener('click', function(){ insertVar(b.getAttribute('data-v')); });
+    });
+  }, function(e){ netFail(e, '文面を読み込めませんでした'); });
+}
+
+/** 差し込みを、いまカーソルがある場所に入れる */
+function insertVar(name){
+  var t = $('#tplBody');
+  var tag = '{{' + name + '}}';
+  var s = t.selectionStart, e = t.selectionEnd;
+  if (s == null){ t.value += tag; return; }
+  t.value = t.value.slice(0, s) + tag + t.value.slice(e);
+  t.selectionStart = t.selectionEnd = s + tag.length;
+  t.focus();
+}
+
+function saveTemplate(reset){
+  var kind = S.notifyKind || 'accept';
+  if (reset && !confirm('この種類の文面を、はじめの文面に戻します。'
+      + String.fromCharCode(10) + 'いまの編集内容は失われます。よろしいですか。')) return;
+
+  $('#tplSave').disabled = true;
+  $('#tplErr').hidden = true;
+  $('#tplWarn').hidden = true;
+  $('#tplMsg').className = 'msg';
+  $('#tplMsg').textContent = '保存しています…';
+
+  api(reset ? 'adminMailTemplateReset' : 'adminMailTemplateSave', {
+    kind: kind,
+    subject: $('#tplSubject').value,
+    body: $('#tplBody').value,
+  }).then(function(r){
+    $('#tplSave').disabled = false;
+    if (!r || !r.ok){
+      $('#tplMsg').textContent = '';
+      $('#tplErr').hidden = false;
+      // 断られた理由は1つずつ出す。まとめて1行にすると読まれない
+      $('#tplErr').innerHTML = '<b>保存していません。</b><ul>'
+        + ((r && r.errors) || [(r && r.message) || '保存できませんでした。'])
+            .map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('')
+        + '</ul>';
+      return;
+    }
+    // 見本を作り直す。**古い文面のまま送信に進ませない**。
+    // 読み直しでメッセージを消させない（keepMsg）
+    loadTemplate(true);
+    loadNotify();
+
+    $('#tplMsg').className = 'msg ok';
+    $('#tplMsg').textContent = reset ? 'はじめの文面に戻しました' : '保存しました';
+    $('#tplErr').hidden = true;
+    if ((r.warnings || []).length){
+      // **この警告は自動で消さない。**「このままでは送れません」が入りうる
+      $('#tplWarn').hidden = false;
+      $('#tplWarn').innerHTML = '<b>保存しましたが、お伝えしたいことがあります。</b><ul>'
+        + r.warnings.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('')
+        + '</ul>';
+    } else {
+      $('#tplWarn').hidden = true;
+    }
+  }, function(e){
+    $('#tplSave').disabled = false;
+    $('#tplMsg').textContent = '';
+    netFail(e, '文面を保存できませんでした');
+  });
+}
+
+function sendNotify(){
+  var r = S.notify || {};
+  var rows = r.rows || [];
+  if (!rows.length) return;
+
+  // 改行を入れたい場合、この位置ではバックスラッシュを2つ重ねること。
+  // build-admin.js は「JavaScriptを書き出すJavaScript」で、この行は
+  // テンプレートリテラルの中にある。1つだけ書くと書き出し時に本物の改行になり、
+  // 生成された admin.html の中で文字列リテラルが途中で切れる。
+  // コメント行でも同じことが起きるので、説明文にも書かない。
+  if (!confirm(rows.length + '件に' + (r.kindLabel || '通知') + 'を送信します。\\n\\n'
+      + '送信したメールは取り消せません。よろしいですか？')) return;
+
+  var btn = $('#mailSend');
+  btn.disabled = true;
+  $('#mailMsg').textContent = '送信しています…';
+
+  // **受付IDの集合そのものを送り返す。**
+  // 件数だけを送っていたため、サーバー（IDで照合）と噛み合わず、
+  // 本番では必ず changed で弾かれていた（2026-09-03 発見）。
+  // 模擬は件数を見ていたので、模擬では通っていた。
+  api('adminNotifySend', {
+    confirm: true,
+    kind: r.kind || 'accept',
+    ids: rows.map(function(x){ return x.id; }),
+  }).then(function(res){
+    $('#mailMsg').textContent = '';
+    if (!res || !res.ok){
+      btn.disabled = false;
+      toast((res && res.message) || '送信できませんでした', true);
+      // 件数が変わっていた場合は、取り直してから見せ直す
+      if (res && res.error === 'changed') loadNotify();
+      return;
+    }
+    $('#mailResult').hidden = false;
+    $('#mailResult').innerHTML =
+      '<p class="ok"><b>' + esc(r.kindLabel || '通知') + ' を '
+      + (res.sent || []).length + '件 送信しました。</b></p>'
+      + ((res.failed || []).length
+          ? '<p class="pwarn"><b>' + res.failed.length + '件が失敗しています。</b>'
+            + res.failed.map(function(f){
+                return esc(f.id) + ' ' + esc(f.company || '') + '（' + esc(f.reason || '') + '）';
+              }).join(' / ')
+            + '<br>失敗した行は「未送信」のままなので、もう一度この画面から送れます。</p>'
+          : '')
+      + (res.remaining ? '<p class="pnote">残り' + res.remaining
+          + '件は、もう一度この画面から送信してください。</p>' : '');
+    $('#mailStep1').hidden = true;
+    $('#mailStep2').hidden = true;
+    $('#mailStep3').hidden = true;
+    $('#mailResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, function(){
+    btn.disabled = false;
+    $('#mailMsg').textContent = '';
+    toast('送信できませんでした（通信）', true);
+  });
+}
+
+// ─────────────────────────── 資料置き場
+/**
+ * 一覧を取り直して組み直す。
+ *
+ * 置き先に「出店者提出物」は出さない。あそこは事業者本人の提出物の場所で、
+ * こちらが混ぜると「誰が出したのか」が分からなくなる（サーバー側でも弾く）。
+ */
+function loadDocs(){
+  S.docs = null;
+  $('#docsIntro').textContent = '読み込んでいます…';
+  $('#docsAdd').hidden = true;
+  $('#docsBody').innerHTML = '';
+
+  api('adminDocs').then(function(r){
+    if (!r || !r.ok){
+      $('#docsIntro').textContent = (r && r.message) || '資料フォルダを開けませんでした。';
+      return;
+    }
+    S.docs = r;
+    renderDocs();
+  }, function(){ $('#docsIntro').textContent = '資料フォルダを開けませんでした。'; });
+}
+
+function renderDocs(){
+  var r = S.docs || {};
+
+  $('#docsIntro').innerHTML =
+    'Drive の共有フォルダを、この画面から扱えます'
+    + '（<a href="' + esc(r.rootUrl || '') + '" target="_blank" rel="noopener">Driveで開く</a>）。'
+    + '<br>1つあたり <b>' + esc(r.maxSizeText || '') + '</b> まで。'
+    + 'それより大きいものは Drive に直接お置きください。';
+
+  var keep = $('#docsFolder').value;      // 作り直す前に、選んでいたものを控える
+  $('#docsFolder').innerHTML = (r.subfolders || []).map(function(n){
+    return '<option value="' + esc(n) + '">' + esc(n) + ' に置く</option>';
+  }).join('');
+  if (keep && (r.subfolders || []).indexOf(keep) >= 0) $('#docsFolder').value = keep;
+  $('#docsAdd').hidden = false;
+
+  var html = (r.folders || []).map(function(g){
+    return '<div class="docs-group">'
+      + '<h4>' + esc(g.name) + '<span class="n">' + g.files.length + '</span>'
+      + '<a href="' + esc(g.url) + '" target="_blank" rel="noopener">Driveで開く</a></h4>'
+      + (g.note ? '<p class="note">' + esc(g.note) + '</p>' : '')
+      + fileListHtml(g.files)
+      + '</div>';
+  }).join('');
+
+  // 出店者の提出物は、会社ごとに畳んでおく。50社ぶんが一度に開くと読めない
+  var vend = r.vendor || [];
+  var yet = vend.filter(function(v){ return !v.files.length; }).length;
+  html += '<div class="docs-group"><h4>出店者提出物<span class="n">'
+       + vend.length + '</span>'
+       + (r.submissionsUrl
+          ? '<a href="' + esc(r.submissionsUrl) + '" target="_blank" rel="noopener">Driveで開く</a>'
+          : '')
+       + '</h4>'
+       // ここだけ共有していない。押しても開けない人がいる理由を先に書く
+       + '<p class="note">応募企業からお預かりしたものです。'
+       + '<b>このフォルダは共有していません。</b>'
+       + 'Driveで中身を開く必要がある方は、'
+       + esc(officeContact()) + ' へ個別の共有をご依頼ください。</p>';
+  // 営業がいちばん知りたいのは「誰がまだ出していないか」
+  // 「未提出」がダッシュボードにもあり、数が違って見えた（2026-09-04 の検証）。
+  // こちらは**素材**、あちらは**確定情報**。何の未提出かを毎回書く
+  if (yet) html += '<p class="note">素材が未提出 ' + yet + '社（下のグレーの行）</p>';
+  if (!vend.length){
+    html += '<p class="docs-empty">まだご提出はありません。</p>';
+  } else {
+    html += vend.map(function(v){
+      var none = !v.files.length;
+      return '<details class="docs-vendor' + (none ? ' yet' : '') + '"><summary>'
+        + '<span class="id">' + esc(v.id) + '</span>'
+        + '<span>' + esc(v.company || '') + '</span>'
+        + '<span class="cnt">' + (none ? '未提出' : v.files.length + '件') + '</span></summary>'
+        + '<div class="inner">' + fileListHtml(v.files) + '</div></details>';
+    }).join('');
+  }
+  html += '</div>';
+
+  $('#docsBody').innerHTML = html;
+  wireDocsDelete();
+}
+
+function fileListHtml(files){
+  if (!files || !files.length) return '<p class="docs-empty">まだありません。</p>';
+  var canDelete = (S.role === '管理者');
+  return '<ul class="docs-files">' + files.map(function(f){
+    return '<li><a class="nm" href="' + esc(f.url) + '" target="_blank" rel="noopener">'
+      + esc(f.name) + '</a>'
+      + '<span class="meta">' + esc(f.sizeText) + '　' + esc(f.updated) + '</span>'
+      + (canDelete
+          ? '<button class="del" data-del="' + esc(f.id) + '" data-name="'
+            + esc(f.name + '（' + f.sizeText + '　' + f.updated + '）') + '">削除</button>'
+          : '<span></span>')
+      + '</li>';
+  }).join('') + '</ul>';
+}
+
+/** 削除は管理者だけ。押し間違いを防ぐため、ファイル名を出して確認する */
+function wireDocsDelete(){
+  $$('[data-del]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var name = b.getAttribute('data-name');
+      if (!confirm(name + '\\nを削除します。よろしいですか？')) return;
+      b.disabled = true;
+      api('adminDocsDelete', { fileId: b.getAttribute('data-del') }).then(function(r){
+        if (!r || !r.ok){
+          b.disabled = false;
+          toast((r && r.message) || '削除できませんでした', true);
+          return;
+        }
+        toast(r.name + ' を削除しました');
+        loadDocs();
+      }, function(){ b.disabled = false; toast('削除できませんでした（通信）', true); });
+    });
+  });
+}
+
+/** 1件ずつ送る。まとめて送ると、1つ大きいものが混ざっただけで全部落ちる */
+function uploadDocs(files){
+  var list = Array.prototype.slice.call(files);
+  if (!list.length) return;
+  var folder = $('#docsFolder').value;
+  var max = (S.docs && S.docs.maxBytes) || 0;
+
+  var i = 0, okCount = 0, ngList = [];
+  $('#docsMsg').textContent = '送信中… (0/' + list.length + ')';
+
+  function next(){
+    if (i >= list.length){
+      $('#docsMsg').textContent = '';
+      if (ngList.length) toast(okCount + '件を追加、' + ngList.length + '件が失敗（'
+        + ngList.join('、') + '）', true);
+      else toast(okCount + '件を追加しました');
+      loadDocs();
+      return;
+    }
+    var f = list[i];
+    $('#docsMsg').textContent = '送信中… (' + (i + 1) + '/' + list.length + ')';
+
+    // 送る前に断る。超えると「押しても無反応」になる
+    if (max && f.size > max){
+      ngList.push(f.name + '：大きすぎます');
+      i++; next(); return;
+    }
+    var reader = new FileReader();
+    reader.onerror = function(){ ngList.push(f.name + '：読めません'); i++; next(); };
+    reader.onload = function(){
+      var data = String(reader.result || '');
+      var comma = data.indexOf(',');
+      api('adminDocsUpload', { folder: folder, name: f.name, mime: f.type,
+                               data: comma >= 0 ? data.slice(comma + 1) : '' })
+        .then(function(r){
+          if (r && r.ok) okCount++; else ngList.push(f.name + '：' + ((r && r.message) || '失敗'));
+          i++; next();
+        }, function(){ ngList.push(f.name + '：通信に失敗'); i++; next(); });
+    };
+    reader.readAsDataURL(f);
+  }
+  next();
+}
+
+function loadSettings(){
+  api('adminSettings').then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '設定を取得できませんでした', true); return; }
+    S.settings = r;
+    renderSettings();
+  }, function(){ toast('設定を取得できませんでした', true); });
+}
+
+/**
+ * レンタル品目。
+ *
+ * ■ この画面の主役は、一覧ではなく**紙面とのずれ**
+ *   募集要項PDFは src/content.js から刷り、フォームはシートを読む。
+ *   シートだけ直すと、**紙とフォームで金額が違う**状態になる。
+ *   PDFはGASからは刷れないので、この制約は消せない。
+ *   だから「ずれています」と必ず画面に出す。出さなければ誰も気づけない。
+ */
+function loadRental(){
+  api('adminRental').then(function(r){
+    if (!r || !r.ok){
+      $('#rentalList').innerHTML = '<p class="pnote warn">'
+        + esc((r && r.message) || '読み込めませんでした。') + '</p>';
+      return;
+    }
+    S.rental = r;
+    renderRental();
+  }, function(){ $('#rentalList').textContent = '読み込めませんでした。'; });
+}
+
+function renderRental(){
+  var r = S.rental;
+  var items = (r.items || []).slice().sort(function(a,b){ return a.order - b.order; });
+
+  $('#rentalList').innerHTML = '<table><thead><tr>'
+    + '<th>品目</th><th>種別</th><th class="r">単価</th><th class="r">上限</th><th></th>'
+    + '</tr></thead><tbody>' + items.map(function(it){
+        var price = (typeof it.price === 'number' && it.price > 0)
+          ? Number(it.price).toLocaleString('ja-JP') + ' 円'
+          : '<span class="tag tbd">調整中</span>';
+        return '<tr class="' + (it.active ? '' : 'off') + '">'
+          + '<td>' + esc(it.name)
+          + (it.active ? '' : '<span class="tag off">フォームに出ません</span>') + '</td>'
+          + '<td>' + esc(it.kind) + '</td>'
+          + '<td class="r">' + price + '</td>'
+          + '<td class="r">' + (it.max || '—') + '</td>'
+          + '<td class="r"><button class="act" data-redit="' + it.row + '">直す</button></td>'
+          + '</tr>';
+      }).join('') + '</tbody></table>';
+
+  $$('#rentalList [data-redit]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      editRental(Number(btn.getAttribute('data-redit')));
+    });
+  });
+
+  // 紙面とのずれ
+  var diff = r.paperDiff || [];
+  $('#rentalPaper').innerHTML = diff.length
+    ? '<div class="paperdiff"><b>募集要項PDFの料金表と食い違っています</b>'
+      + '<ul>' + diff.map(function(d){ return '<li>' + esc(d.message) + '</li>'; }).join('')
+      + '</ul>'
+      + '<p style="margin:8px 0 0"><b>いま応募フォームは、この画面の金額で受け付けています。</b>'
+      + '配布済みの募集要項PDFは古い金額のままです。</p>'
+      + '<p style="margin:6px 0 0">PDFの刷り直しは、この画面からはできません。'
+      + esc(officeContact()) + ' へご連絡ください'
+      + '（募集要項PDFと配布キットを刷り直します）。'
+      + '元に戻す場合は、上の表で単価を紙面の金額に戻してください。</p></div>'
+    : '<div class="paperdiff ok"><b>募集要項PDFの料金表と一致しています。</b></div>';
+}
+
+function editRental(row){
+  var it = (S.rental.items || []).filter(function(x){ return x.row === row; })[0]
+        || { row: 0, kind: '', name: '', price: '', unit: '個', max: '', note: '', active: true };
+  S.rentalRow = row || 0;
+  $('#rentalFormTitle').textContent = row ? esc(it.name) + ' を直す' : '品目の登録';
+  // 新規は**選ばせる**。既定が「テント（1区画）」だったため、
+  // 数量の品目を足したつもりが応募フォームに一切出ない、が起きていた
+  //（テント種別は区画に紐づくもので、数量欄としてはフォームに出ない）。
+  // しかも管理画面の一覧には並ぶので「入っているつもり」になる
+  $('#rKind').innerHTML =
+    (row ? '' : '<option value="" selected>お選びください</option>')
+    + (S.rental.kinds || []).map(function(k){
+        return '<option' + (it.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
+      }).join('');
+  // 種別の意味を、選んだときに出す。名前だけでは違いが分からない
+  $('#rKind').onchange = function(){
+    var v = $('#rKind').value;
+    var note = $('#rKindNote');
+    if (!note) return;
+    note.hidden = !v;
+    note.textContent = v === '数量'
+      ? '応募フォームに「いくつ要るか」の欄として出ます（単価と最大数の両方が必要です）。'
+      : v ? 'テントは区画に紐づく料金です。応募フォームに数量の欄としては出ません。'
+          : '';
+  };
+  $('#rKind').onchange();
+  $('#rName').value = it.name || '';
+  $('#rPrice').value = (typeof it.price === 'number' && it.price > 0) ? it.price : '';
+  $('#rUnit').value = it.unit || '個';
+  $('#rMax').value = it.max || '';
+  $('#rNote').value = it.note || '';
+  $('#rActive').checked = !!it.active;
+  $('#rErr').hidden = true;
+  $('#rentalForm').hidden = false;
+  $('#rName').focus();
+}
+
+function saveRental(){
+  var item = {
+    kind: $('#rKind').value,
+    name: $('#rName').value.trim(),
+    price: $('#rPrice').value.trim(),
+    unit: $('#rUnit').value.trim(),
+    max: $('#rMax').value.trim(),
+    note: $('#rNote').value.trim(),
+    active: $('#rActive').checked,
+  };
+  // 単価を空にすると「調整中」になる。押す前に伝える
+  if (!item.price && item.active
+      && !confirm('単価が空欄です。' + String.fromCharCode(10)
+        + '「' + item.name + '」は応募フォームに出ず、「調整中」と表示されます。'
+        + String.fromCharCode(10) + 'よろしいですか。')) return;
+
+  $('#rSave').disabled = true;
+  $('#rentalMsg').className = 'msg';
+  $('#rentalMsg').textContent = '保存しています…';
+  api('adminRentalSave', { row: S.rentalRow || 0, item: item }).then(function(r){
+    $('#rSave').disabled = false;
+    if (!r || !r.ok){
+      $('#rErr').hidden = false;
+      $('#rErr').textContent = (r && r.message) || '保存できませんでした。';
+      $('#rentalMsg').textContent = '';
+      return;
+    }
+    $('#rentalForm').hidden = true;
+    $('#rentalMsg').textContent = '保存しました';
+    loadRental();
+  }, function(){
+    $('#rSave').disabled = false;
+    $('#rErr').hidden = false;
+    $('#rErr').textContent = '保存できませんでした。';
+  });
+}
+
+function renderSettings(){
+  var r = S.settings || {};
+  var v = r.values || {};
+
+  $('#setFields').innerHTML = (r.fields || []).map(function(f){
+    var val = v[f.key] == null ? '' : String(v[f.key]);
+    var input;
+    if (f.type === 'onoff'){
+      input = '<select id="set-' + esc(f.key) + '">'
+        + ['ON','OFF'].map(function(o){
+            return '<option' + (val === o ? ' selected' : '') + '>' + o + '</option>';
+          }).join('') + '</select>';
+    } else {
+      input = '<input id="set-' + esc(f.key) + '" value="' + esc(val) + '"'
+        + (f.type === 'deadline' ? ' placeholder="2026-09-30 18:00"' : '')
+        + (f.type === 'url' ? ' placeholder="https://bondance.kreha-c.com/…" inputmode="url"' : '')
+        + (f.type === 'date' ? ' placeholder="2026-10-10"' : '')
+        + (f.type === 'int' ? ' inputmode="numeric"' : '') + '>';
+    }
+    // 説明はサーバー（gas/Admin.gs の SETTING_KEYS_）から来る。
+    // 画面側に書くと、項目を足したときに説明だけ抜ける
+    return '<label>' + esc(f.label)
+      // ** ** は太字にする。esc() だけだと、説明文に書いた強調が
+      // そのまま「**空だと採択通知を送れません。**」と表示される
+      + (f.help ? '<span class="hint">' + mdBold(f.help) + '</span>' : '')
+      + input + '</label>';
+  }).join('');
+
+  $('#setPasswords').innerHTML = (r.passwords || []).map(function(pw){
+    var state = !pw.set ? '未設定'
+      : (pw.weak ? '短すぎます（' + r.minPasswordLength + '文字以上に）' : '設定済み');
+    return '<label>' + esc(pw.label)
+      + '<span class="pwstate' + (pw.weak || !pw.set ? ' warn' : '') + '">' + esc(state) + '</span>'
+      + '<input type="password" id="pw-' + esc(pw.key) + '" autocomplete="new-password"'
+      + ' placeholder="変えるときだけ入力（' + r.minPasswordLength + '文字以上）"></label>';
+  }).join('');
+}
+
+function saveSettings(){
+  var r = S.settings || {};
+  var values = {};
+  (r.fields || []).forEach(function(f){
+    var el = document.getElementById('set-' + f.key);
+    if (el) values[f.key] = el.value;
+  });
+
+  $('#setErr').hidden = true;
+  $('#setSave').disabled = true;
+  $('#setMsg').className = 'msg';
+  $('#setMsg').textContent = '保存しています…';
+
+  api('adminSettingsSave', { values: values }).then(function(res){
+    $('#setSave').disabled = false;
+    if (!res || !res.ok){
+      $('#setMsg').textContent = '';
+      $('#setErr').textContent = (res && res.message) || '保存できませんでした。';
+      $('#setErr').hidden = false;
+      return;
+    }
+    $('#setMsg').textContent = res.changed ? '保存しました（' + res.changed + '件）' : '変更はありません';
+    toast('設定を保存しました');
+    loadSettings(); loadSummary();
+    if (S.history) loadHistory();
+  }, function(){
+    $('#setSave').disabled = false;
+    $('#setMsg').textContent = '';
+    $('#setErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#setErr').hidden = false;
+  });
+}
+
+function savePasswords(){
+  var r = S.settings || {};
+  var passwords = {};
+  var any = false;
+  (r.passwords || []).forEach(function(pw){
+    var el = document.getElementById('pw-' + pw.key);
+    if (el && el.value){ passwords[pw.key] = el.value; any = true; }
+  });
+  if (!any){
+    $('#setPwErr').textContent = '変えたいパスワードをご入力ください。';
+    $('#setPwErr').hidden = false;
+    return;
+  }
+  if (!confirm('パスワードを変更します。' + String.fromCharCode(10) + String.fromCharCode(10)
+    + 'いま入っている方は全員（ご自身を含めて）入り直しになります。' + String.fromCharCode(10)
+    + '新しいパスワードは配り終えていますか。')) return;
+
+  $('#setPwErr').hidden = true;
+  $('#setPwSave').disabled = true;
+  $('#setPwMsg').className = 'msg';
+  $('#setPwMsg').textContent = '変更しています…';
+
+  api('adminSettingsSave', { values: {}, passwords: passwords }).then(function(res){
+    $('#setPwSave').disabled = false;
+    if (!res || !res.ok){
+      $('#setPwMsg').textContent = '';
+      $('#setPwErr').textContent = (res && res.message) || '変更できませんでした。';
+      $('#setPwErr').hidden = false;
+      return;
+    }
+    // 変えた瞬間に自分のトークンも失効している。入り直してもらう
+    alert('パスワードを変更しました。' + String.fromCharCode(10)
+      + '新しいパスワードで入り直してください。');
+    signOut('パスワードが変更されました。新しいパスワードでお入りください。');
+  }, function(){
+    $('#setPwSave').disabled = false;
+    $('#setPwMsg').textContent = '';
+    $('#setPwErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#setPwErr').hidden = false;
+  });
+}
+
+// ─────────────────────────── 確認事項（ToDo）
+/**
+ * 打ち合わせで出た「これは確認します」を残す場所。
+ * 誰が挙げたか・誰が持つか・いつまでか の3つが無いと、結局は誰も動かない。
+ * 期日を過ぎたものは色を変えて、目に入るようにする。
+ */
+function loadTodos(){
+  api('adminTodos').then(function(r){
+    if (!r || !r.ok) return;
+    S.todos = r.rows || [];
+    renderTodos();
+    renderAlerts();
+  }, function(){});
+}
+
+function todayText(){
+  var d = new Date();
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+function renderTodos(){
+  var box = $('#todoList');
+  var all = S.todos || [];
+  // 未完了を上に、そのなかは期日の早い順。期日なしは最後
+  var open = all.filter(function(t){ return t.state !== '完了'; });
+  var done = all.filter(function(t){ return t.state === '完了'; });
+  open.sort(function(a,b){
+    if (!a.due && !b.due) return 0;
+    if (!a.due) return 1;
+    if (!b.due) return -1;
+    return a.due < b.due ? -1 : 1;
+  });
+  var rows = open.concat(done.slice(0, 5));   // 済んだものは直近5件だけ添える
+
+  if (!rows.length){
+    box.innerHTML = '<p class="todo-empty">確認事項はありません。'
+      + '打ち合わせで持ち帰ったことを、ここに残しておけます。</p>';
+    return;
+  }
+
+  var today = todayText();
+  box.innerHTML = rows.map(function(t){
+    var over = t.due && t.state !== '完了' && t.due < today;
+    var cls = t.state === '完了' ? 'done' : (t.state === '確認中' ? 'doing' : '');
+    return '<div class="todoitem' + (t.state === '完了' ? ' is-done' : '') + '">'
+      + '<span class="st ' + cls + '">' + esc(t.state) + '</span>'
+      + '<span class="body"><span class="t">' + esc(t.text) + '</span><br>'
+      + '<span class="meta">'
+      // 「誰から誰へ」の形にする（2026-09-02 けいた指摘）。
+      // 担当だけだと、誰が投げた宿題なのかが分からず、聞き返す先が無い
+      + '<span class="who">' + esc(t.author || '—') + ' → ' + esc(t.owner || '（担当未定）')
+      + '</span>　'
+      + (t.due ? '<span class="due' + (over ? ' over' : '') + '">期日 ' + esc(t.due)
+                 + (over ? '（過ぎています）' : '') + '</span>　'
+               : '<span class="due none">期日なし</span>　')
+      + (t.state === '完了' && t.doneAt ? '完了 ' + esc(t.doneAt) + '　' : '')
+      + (t.memo ? esc(t.memo) : '')
+      + '</span></span>'
+      // 1件ずつ開かずに済ませたい。完了と未完了はその場で切り替える
+      + '<button class="todo-done" data-done="' + t.row + '">'
+      + (t.state === '完了' ? '戻す' : '完了') + '</button>'
+      + '<button class="edit" data-todo="' + t.row + '">直す</button>'
+      + '</div>';
+  }).join('');
+
+  $$('#todoList [data-todo]').forEach(function(b){
+    b.addEventListener('click', function(){ editTodo(Number(b.getAttribute('data-todo'))); });
+  });
+  $$('#todoList [data-done]').forEach(function(b){
+    b.addEventListener('click', function(){ toggleTodoDone(Number(b.getAttribute('data-done'))); });
+  });
+}
+
+/**
+ * 完了・未完了をその場で切り替える。
+ * 打ち合わせ中に「それ終わりました」と言われて、
+ * わざわざ編集画面を開くのは煩わしい（2026-09-02 けいた指摘）。
+ */
+function toggleTodoDone(row){
+  var t = (S.todos || []).filter(function(x){ return x.row === row; })[0];
+  if (!t) return;
+  var next = t.state === '完了' ? '未着手' : '完了';
+  api('adminTodoSave', { row: row, todo: {
+    state: next, text: t.text, owner: t.owner, due: t.due, memo: t.memo,
+  }}).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '変えられませんでした', true); return; }
+    toast(next === '完了' ? '完了にしました' : '未着手に戻しました');
+    loadTodos();
+  }, function(){ toast('変えられませんでした', true); });
+}
+
+function editTodo(row){
+  var t = (S.todos || []).filter(function(x){ return x.row === row; })[0]
+       || { state:'未着手', text:'', owner:'', due:'', memo:'' };
+  S.todoRow = row || 0;
+  $('#todoText').value = t.text || '';
+  $('#todoOwner').value = t.owner || '';
+  $('#todoDue').value = t.due || '';
+  $('#todoState').value = t.state || '未着手';
+  $('#todoMemo').value = t.memo || '';
+  $('#todoErr').hidden = true;
+  $('#todoForm').hidden = false;
+  $('#todoText').focus();
+}
+
+function saveTodo(){
+  var todo = {
+    text: $('#todoText').value.trim(),
+    owner: $('#todoOwner').value.trim(),
+    due: $('#todoDue').value.trim(),
+    state: $('#todoState').value,
+    memo: $('#todoMemo').value.trim(),
+  };
+  if (!todo.text){
+    $('#todoErr').textContent = '内容をご記入ください。';
+    $('#todoErr').hidden = false;
+    return;
+  }
+  $('#todoSave').disabled = true;
+  api('adminTodoSave', { row: S.todoRow || 0, todo: todo }).then(function(r){
+    $('#todoSave').disabled = false;
+    if (!r || !r.ok){
+      $('#todoErr').textContent = (r && r.message) || '保存できませんでした。';
+      $('#todoErr').hidden = false;
+      return;
+    }
+    $('#todoForm').hidden = true;
+    toast(r.added ? '確認事項を追加しました' : '確認事項を更新しました');
+    loadTodos();
+    if (S.history) loadHistory();
+  }, function(){
+    $('#todoSave').disabled = false;
+    $('#todoErr').textContent = '通信に失敗しました。もう一度お試しください。';
+    $('#todoErr').hidden = false;
+  });
+}
+
+// ─────────────────────────── 問い合わせメール（管理者のみ）
+/**
+ * 実行委員会アドレス宛のメールを、この画面で一覧する。
+ * 本文の全文は持ってこない（冒頭の抜粋とGmailへのリンクだけ）。
+ * 公開URLの画面に全文を流し込む必要はないし、流すと戻せない。
+ */
+function loadInbox(){
+  if (S.role !== '管理者') return;
+  api('adminInbox').then(function(r){
+    if (!r || !r.ok){
+      $('#inboxNote').textContent = (r && r.message) || 'メールを読み取れませんでした。';
+      $('#inboxList').innerHTML = '';
+      return;
+    }
+    S.inbox = r;
+    renderInbox();
+    renderAlerts();
+  }, function(){
+    $('#inboxNote').textContent = 'メールを読み取れませんでした。';
+  });
+}
+
+function renderInbox(){
+  var r = S.inbox || {};
+  var rows = r.rows || [];
+  var box = $('#inboxList');
+
+  if (!rows.length){
+    box.innerHTML = '<p class="todo-empty">直近' + (r.days || 60) + '日間に届いた問い合わせはありません。</p>';
+    $('#inboxNote').textContent = r.message || ('宛先：' + (r.address || ''));
+    return;
+  }
+
+  // 未返信を上に。返信済みは後ろへ
+  var open = rows.filter(function(m){ return !m.replied; });
+  var done = rows.filter(function(m){ return m.replied; });
+
+  box.innerHTML = open.concat(done).map(function(m){
+    return '<div class="mailrow">'
+      + '<span class="st' + (m.replied ? ' done' : '') + '">'
+      + (m.replied ? '返信済' : '未返信') + '</span>'
+      + '<span class="body">'
+      + '<span class="subj">' + esc(m.subject) + '</span>'
+      + '<span class="meta">' + esc(m.from) + '　' + esc(m.at)
+      + (m.count > 1 ? '　' + m.count + '通' : '') + '</span>'
+      + '<span class="snip">' + esc(m.snippet) + '</span>'
+      + '</span>'
+      + '<a class="open" href="' + esc(m.url) + '" target="_blank" rel="noopener">Gmailで開く</a>'
+      + '</div>';
+  }).join('');
+
+  $('#inboxNote').textContent = '宛先：' + (r.address || '')
+    + '　直近' + (r.days || 60) + '日間の' + rows.length + '件を表示しています。'
+    + '返信はGmailで行ってください。';
+}
+
+// ─────────────────────────── 起動
+document.addEventListener('DOMContentLoaded', function(){
+  // 2つの段階が同じ form の中にあるので、いま出ている方で振り分ける
+  $('#gForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    if ($('#step1').style.display === 'none') submitPerson(); else submitPassword();
+  });
+  $('#gShow').addEventListener('click', function(){
+    var i = $('#gPw');
+    var show = (i.type === 'password');
+    i.type = show ? 'text' : 'password';
+    this.textContent = show ? '隠す' : '表示';
+    this.setAttribute('aria-label', show ? 'パスワードを隠す' : 'パスワードを表示');
+    i.focus();
+  });
+  $('#gBack').addEventListener('click', function(){ gateStep(1); gateError(''); });
+  $('#out').addEventListener('click', function(){ if (confirm('管理ページから出ます。よろしいですか。')) signOut(); });
+
+  $$('.tabs button').forEach(function(b){
+    b.addEventListener('click', function(){ showTab(b.getAttribute('data-tab')); });
+  });
+  $('#inboxReload').addEventListener('click', loadInbox);
+  $('#todoNew').addEventListener('click', function(){ editTodo(0); });
+  $('#colReset').addEventListener('click', resetColumns);
+  $$('input[name="mailKind"]').forEach(function(radio){
+    radio.addEventListener('change', function(){
+      S.notifyKind = radio.value;
+      // 前の送信結果を消してから切り替える。
+      // 残したままだと「不採択を1件送信しました」が採択の画面に居座り、
+      // **どちらを送ったのか取り違える**（2026-09-03 の検証で指摘）
+      $('#mailResult').hidden = true;
+      $('#mailResult').innerHTML = '';
+      $('#mailMsg').textContent = '';
+      loadNotify();
+      loadTemplate();     // 種類ごとに別の文面。切り替えたら読み直す
+    });
+  });
+  $('#tplSave').addEventListener('click', function(){ saveTemplate(false); });
+  $('#tplReset').addEventListener('click', function(){ saveTemplate(true); });
+  $('#tplReload').addEventListener('click', function(){
+    // 「この文面で保存する」の隣にあり、スマホでは密集している。
+    // 確認なしだと、押し間違いで書きかけが消える（2026-09-04 の検証で指摘）
+    if (!confirm('編集した内容を捨てて、保存されている文面に戻します。'
+        + String.fromCharCode(10) + 'いまの編集内容は失われます。よろしいですか。')) return;
+    loadTemplate();
+  });
+  $('#rentalNew').addEventListener('click', function(){ editRental(0); });
+  $('#rSave').addEventListener('click', saveRental);
+  $('#rCancel').addEventListener('click', function(){ $('#rentalForm').hidden = true; });
+  $('#purgeCheck').addEventListener('click', purgeCheck);
+  $('#purgeRun').addEventListener('click', purgeRun);
+  $('#todoSave').addEventListener('click', saveTodo);
+  $('#todoCancel').addEventListener('click', function(){ $('#todoForm').hidden = true; });
+  $('#setSave').addEventListener('click', saveSettings);
+  $('#mailSend').addEventListener('click', sendNotify);
+  $('#docsInput').addEventListener('change', function(){
+    uploadDocs(this.files);
+    this.value = '';   // 同じファイルをもう一度選べるようにする
+  });
+  $('#setPwSave').addEventListener('click', savePasswords);
+  $('#hQ').addEventListener('input', renderHistory);
+  $('#hReload').addEventListener('click', loadHistory);
+  $('#apUnlock').addEventListener('click', unlockApplicant);
+  $('#apYes').addEventListener('click', applicantEditOn);
+  $('#apNo').addEventListener('click', applicantLock);
+  $('#apSave').addEventListener('click', saveApplicant);
+  $('#apCancel').addEventListener('click', applicantLock);
+  $('#pNew').addEventListener('click', function(){ editPerson(0); });
+  $('#pSave').addEventListener('click', savePerson);
+  $('#pCancel').addEventListener('click', function(){ $('#pForm').hidden = true; });
+  window.addEventListener('hashchange', applyHash);
+  $('#dPrev').addEventListener('click', function(){ stepDetail(-1); });
+  $('#dNext').addEventListener('click', function(){ stepDetail(1); });
+  $('#dPrint').addEventListener('click', function(){ window.print(); });
+  ['dOnlyAssigned','dFire'].forEach(function(id){
+    $('#'+id).addEventListener('change', renderDay);
+  });
+  ['fQ','fStatus','fType','fSize','fDay','fMine','fDup'].forEach(function(id){
+    $('#'+id).addEventListener('input', renderList);
+    $('#'+id).addEventListener('change', renderList);
+  });
+  $('#dClose').addEventListener('click', closeDetail);
+  $('.drawer').addEventListener('click', function(e){ if (e.target === $('.drawer')) closeDetail(); });
+  $('#dSave').addEventListener('click', saveDetail);
+  $('#aWho').addEventListener('change', onWhoChange);
+  $('#aDel').addEventListener('click', unassign);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDetail(); });
+
+  // 前回の入室を引き継ぐ（30日。サーバー側でも失効を確認する）
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){}
+  if (saved && saved.token){
+    S.token = saved.token; S.person = saved.person; S.role = saved.role;
+    api('adminWhoami').then(function(r){
+      if (r && r.ok){ S.person = r.person; S.role = r.role; start(); applyHash(); }
+      else signOut();
+    }, function(){ signOut('接続できませんでした。もう一度お試しください。'); });
+  } else {
+    gateStep(1);
+    recallPassword();
+  }
+});
+`;
+}
+
+/**
+ * 画面の見かた。各タブの先頭に置く。
+ *
+ * ■ なぜ画面に出すか
+ *   2026-09-02 けいた指摘：
+ *   「通知 ON/OFF ってなんだっけ？　私はわかるけど、これをFC大阪さんに
+ *     渡した後、初めて見る人たちが困りそう」
+ *   作った本人にしか分からない画面は、渡した先で止まる。
+ *   説明はソースのコメントではなく、**使う人の目に入る場所**に置く。
+ *
+ * ■ 畳むが、見出しで中身が想像できるようにする
+ *   常に開いていると本文が遠のく。畳むなら「？ この画面の見かた」と、
+ *   押せば答えがあると分かる形にする。
+ *
+ * ■ ここが唯一の正
+ *   画面のあちこちに書くと、項目を足したときに説明だけ抜ける。
+ *   test/admin-help.test.js が、タブと説明の対応を見張っている。
+ */
+const HOWTO = {
+  dash: ['ダッシュボードの見かた', [
+    ['要対応', '手が止まっている応募です。「審査中」のまま設定した日数を過ぎたもの、'
+             + '連絡が返っていないものが出ます。'],
+    ['確認事項', 'チームで持ち回る宿題です。ここに書いたものは全員に見えます。'],
+    // 画面に「進捗バー」という言葉は無い。あるのは「区画の充足」
+    //（2026-09-03 の検証で指摘）
+    ['いちばん上の帯', '当日お渡しするもの（スタッフ人数・関係者パス・駐車証・'
+                   + 'チケット）の合計です。**まだ全社そろっていないあいだは、'
+                   + 'いま出ている分だけの合計**で、母数も添えて出します。'],
+    ['区画の充足', '割り当て済みの区画数 ÷ 設定の「区画の総数」です。'],
+    ['総応募数の「／ 目標」', '設定の「目標の出店社数」です。空欄なら出ません。'],
+  ]],
+  list: ['出店者一覧の見かた', [
+    // 「メール送信タブから」と書いてあるのに、一般権限にはそのタブが無かった。
+    // 探して見つからず「自分の画面が壊れている」と思わせていた
+    //（2026-09-03 の検証で指摘）
+    ['ステータス', '審査中 → 採択／不採択。**ここを変えても、メールは自動では飛びません。**'
+                 + '採択・不採択のご連絡は「メール送信」タブから行います。'
+                 + '**このタブは管理者だけに出ます。**一般でお使いの方は、'
+                 + 'ステータスを変えたあと、管理者にお伝えください。'],
+    ['受付ID', '応募を受け付けた順の通し番号です。事業者へのご連絡でも使います。'],
+    ['行を押す', '応募内容の全項目が開きます。'
+              + '変更の記録は「変更履歴」タブにまとまっています。'],
+    ['表示する列', '標準では主な列だけを出しています。'
+                 + '「表示する列を選ぶ」で、応募フォームと出店確定情報の'
+                 + '全項目を出せます。**横にスクロールします。**'],
+    ['自分が担当', '担当社員として登録されている方は、'
+                 + '**最初からご自身の担当分だけ**が出ています。'
+                 + '全社を見るときはチェックを外してください。'],
+  ]],
+  map: ['出店エリアマップの見かた', [
+    ['マス目', '1つが1区画（約2.7m×3.6m）です。'
+            + '数は設定の「区画の総数」で決まります。'],
+    ['割り当て', '**右の「区画の割り当て」で**出店者を選んでから、マスを押すと決まります。'
+              + '2区画の事業者は、続いた2マスを使います。'],
+    // 「解除できない」と思われていた（2026-09-03 の検証で指摘）。
+    // ボタンは割当済みの出店者を選んだときだけ出るので、見つからない
+    ['やめるとき', '**右でその出店者を選ぶ**と、下に「この出店者の割当を解除」が出ます。'
+                 + '割り当てていない出店者を選んでいるあいだは出ません。'],
+    ['引っ越すとき', 'いったん解除してから、新しいマスを押してください。'
+                   + '埋まっているマスには重ねて置けません。'],
+    // 会場のどちらが上か分からない、という指摘。図面が届くまでは本当に分からない。
+    // **分からないことを書く**のが正しい
+    // 「設定の『マップ背景画像』に入れて」と案内していたが、
+    // その項目は設定タブに出ていない（台帳を直接触る必要がある）。
+    // 会場図はFC大阪の一番の関心事なので、必ず聞かれる
+    //（2026-09-04 の最終確認で指摘）
+    ['会場のどちら向きか', 'いまは**ただの並び**で、ステージ・入口・本部などは入っていません。'
+                       + '会場図（区画図）が届いたら、**事務局でマップの下敷きに設定します**。'
+                       + 'それまでは番号の管理にお使いください。'],
+  ]],
+  day: ['当日運営の見かた', [
+    // 説明が実物と違っていた（2026-09-03 の検証で指摘）。
+    // 「搬入時間＝確定情報フォームの希望」と書いてあったが、
+    // この列は主催が決めた時刻で、事業者の希望は別（行を開けば見られる）。
+    // 「現場責任者」と書いてあったが、列は「連絡先」で応募時の番号
+    ['この画面', '当日、現場で開くための一覧です。印刷にも耐える形にしてあります。'],
+    ['当日は電波が切れます', '**前日までに印刷して持ってください。**'],
+    ['搬入・撤収', '**主催が決めた時刻**です（出店者一覧で行を開くと直せます）。'
+                 + 'まだ決めていないときは、事業者からの希望を「希望 9:30〜10:00」の形で出します。'],
+    ['現場責任者・現場の携帯', '**当日その場にいる方**です。'
+                          + '出店確定情報フォームでご記入いただいた内容で、'
+                          + '未提出のときは「（未提出）」と出ます。'
+                          + '携帯が未提出のときは、応募時のお電話番号を出します。'],
+    ['応募時の連絡先', '応募フォームでご記入いただいたご担当者の番号です。'
+                    + '会社にいらっしゃることがあるので、当日は現場の携帯を先にお使いください。'],
+    ['はじめの絞り込み', '「区画が決まっている分だけ」に**最初からチェックが入っています**。'
+                     + '全社を見るときは外してください。'],
+  ]],
+  history: ['変更履歴の見かた', [
+    ['記録されるもの', '誰が・いつ・どの項目を・何から何に変えたか。'
+                    + '事業者ご本人による修正も残ります。'],
+    ['消せません', 'あとから書き換えられない台帳です。'
+                 + '「言った・言わない」を防ぐためのものなので、編集機能は用意していません。'],
+  ]],
+  docs: ['資料置き場の見かた', [
+    ['図面・議事録・その他', '主催側の資料です。Driveの共有フォルダとつながっています。'],
+    ['出店者提出物', '事業者から届いたロゴや写真です。'
+                  + '**このフォルダは共有していません**（他社の素材が混ざるため）。'
+                  + 'Driveで開く必要がある方は、事務局に個別の共有をご依頼ください'
+                  + '（連絡先は「設定」タブの「事務局の連絡先」に出ています）。'],
+    ['未提出', 'まだ1件も出していない採択先です。催促の目安に使えます。'],
+    ['削除', '管理者のみです。ゴミ箱に入るだけなので、Driveから戻せます。'],
+  ]],
+  mail: ['メール送信の見かた', [
+    // 採択だけを前提に書いてあった（2026-09-03 の検証で指摘）。
+    // 不採択にも切り替えられることが、どこにも書かれていなかった
+    ['この画面ですること', '**採択のご連絡**と**不採択のご連絡**を、一斉にお送りします。'
+                       + '画面の上で種類をお選びください。'],
+    ['3つの段階', '①送る相手を確かめる → ②本文を読む → ③送る。'
+                + '②まではメールは飛びません。'],
+    ['1通ずつ送ります', '1社ずつ別々にお送りするので、'
+                     + '他社のメールアドレスが相手に見えることはありません。'],
+    ['文面を直す', '「文面を編集する」を開くと、件名と本文をここで直せます（管理者のみ）。'
+                + '**{{お名前}} のような差し込み**は、送るときに1社ずつの値に置き換わります。'
+                + '直したら必ず「本文を確認する」で、実際に届く形をご覧ください。'
+                + '「はじめの文面に戻す」でいつでも元に戻せます。'],
+    ['文面で断られたら', '**うっかり事故を防ぐために、断っている場合があります。**'
+                     + '**不採択にリンクは入れられません**'
+                     + '（その方が出店確定情報フォームを開けてしまうため）。'
+                     + '**採択からリンクは外せません**（次に何をすればよいか伝わらないため）。'
+                     + '差し込みの綴りが違うときも断ります（そのまま送ると'
+                     + 'メールに {{名前}} と出てしまうため）。'],
+    ['不採択のご連絡', '件名に「不採択」とは書きません（受信箱の一覧に出ないように）。'
+                    + '**理由は書かず、リンクも載せません。**'
+                    + '確定情報フォームのURLが未設定でも送れます。'],
+    ['送ったあと', '取り消せません。同じ方に二度送らないよう、'
+                 + '送信済みの方は次から対象に出ません。'],
+    ['行き違いを防ぐしくみ', '採択のご連絡を送ったあとにステータスを不採択へ直しても、'
+                        + 'その方は**一斉送信の対象から自動で外れます**。'
+                        + '画面に理由が出るので、お電話などで事情をお伝えください。'],
+    ['届かなかったら', '結果に失敗として出ます。原因（宛先違いなど）を直して、'
+                     + 'その方だけもう一度送れます。'
+                     + '宛先は「出店者一覧」で行を開き、'
+                     + '「応募内容を修正する」から直せます。'],
+  ]],
+  people: ['FC大阪の担当者の見かた', [
+    ['応募フォーム', '応募フォームの「FC大阪の担当社員」プルダウンに、その方を出すか。'
+                  + '外しても行は消えないので、いつでも戻せます。'],
+    ['管理ページ', 'この管理ページに入れるかどうか。メールアドレスの登録が要ります。'],
+    // 「自分の担当分の更新まで」と書いてあったが、実際は一般でも
+    // 他社担当分のステータス変更・区画の割当・応募内容の修正ができる。
+    // **説明が実態より厳しかった**（2026-09-04 の最終確認で指摘）。
+    // 制限をかけないのはけいた判断（W2）なので、説明を実態に合わせる
+    ['役割', '管理者は**メール送信・設定・この一覧**を触れます。'
+           + '一般はそれ以外（ステータスの変更・区画の割当・応募内容の修正）を'
+           + 'お使いいただけます。**担当が誰であっても操作できます**が、'
+           + 'どなたが直したかは変更履歴に残ります。'],
+    ['通知', '**ON … 新しい応募がすべて届きます。**'
+           + '**OFF … 自分が担当社員として選ばれた応募だけ届きます。**'
+           + 'どちらでも、担当に選ばれた応募は必ず届きます。'
+           + 'メールアドレスが未登録の方には届きません。'],
+    ['辞めた方', '**消さずに**「応募フォーム」と「管理ページ」の両方を外してください。'
+               + '消すと、過去の応募に残っている担当社員名の行き先が分からなくなります。'],
+  ]],
+  settings: ['設定の見かた', [
+    // 「PDFにもすぐ反映されます」と書いてあったが、**PDFは自動では変わらない**。
+    // 同じ画面の別の場所には「シートで管理しています」とも書いてあり、
+    // 3か所が違うことを言っていた（2026-09-03 の検証で指摘）
+    ['変更したら', '保存した内容は、**募集ページ・応募フォーム・メール本文**にすぐ反映されます。'],
+    ['募集要項PDF（紙）', '**自動では変わりません。**'
+                       + '金額を変えると、紙を刷り直すまでフォームと紙で違う金額が出ます。'
+                       + '食い違っているあいだは、レンタル備品の表の上に警告が出ます。'],
+    ['レンタル備品', 'この画面の一番上の表で、品目・単価・上限をそのまま直せます。'
+                   + 'スプレッドシートを開く必要はありません。'
+                   + '単価を空欄にすると「調整中」になり、その品目は応募フォームに出ません。'],
+    ['テストデータの一括削除', 'ONにすると、「出店者一覧」タブの下に削除の入口が出ます。'
+                          + '**応募・確定情報・変更履歴を完全に消します（元に戻せません）。**'
+                          + '公開前の掃除にだけお使いください。実行すると自動でOFFに戻ります。'],
+    ['パスワード', '空欄のままにすると変更しません。'
+                 + '変えると、いま入っている方も次回から新しいパスワードが要ります。'],
+    ['各項目', '入力欄の下に、それぞれ何に使う値かを書いています。'],
+  ]],
+};
+
+/** 説明文の ** ** だけ太字にする。書く側が強調をあきらめないように */
+function mdBold(s) {
+  return esc(s).split('**').map(function (part, i) {
+    return i % 2 ? '<b>' + part + '</b>' : part;
+  }).join('');
+}
+
+function howto(tab) {
+  const h = HOWTO[tab];
+  if (!h) return '';
+  return '<details class="howto"><summary>' + esc(h[0]) + '</summary><dl>'
+    + h[1].map(function (kv) {
+        return '<dt>' + esc(kv[0]) + '</dt><dd>' + mdBold(kv[1]) + '</dd>';
+      }).join('')
+    + '</dl></details>';
+}
+
+// ─────────────────────────────────────────── HTML
+function html() {
+  // 入室画面の箱は白地なので、本ロゴ（ロゴタイプが墨色）をそのまま置ける。
+  // CSP は img-src 'self' なので、assets/ 配下の画像は読める。
+  return `<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<!-- 万一DOMに文字列が入り込んでも、外部への通信と読み込みを止める。
+     GitHub Pages ではHTTPヘッダを付けられないため meta で指定する。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com http://localhost:4174; script-src 'unsafe-inline'; form-action 'none'; base-uri 'none'">
+<title>出店者管理 ｜ ${esc(C.EVENT.name)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;500;700;900&display=swap">
+<style>${css()}</style>
+</head><body>
+
+<div class="busy"></div>
+<div class="toast"></div>
+
+<!-- ── 入室 ───────────────────────────────── -->
+<div class="gate">
+  <div class="box">
+    <div class="logo"><img src="${esc(C.BRAND.logoWide)}" alt="${esc(C.EVENT.name)}" ${IMG.sizeAttrs(C.BRAND.logoWide)}></div>
+    <h1>出店者管理</h1>
+    <p class="sub">${esc(C.EVENT.name)}</p>
+    <div class="err" id="gErr" style="display:none"></div>
+
+    <!-- form にしておくと、ブラウザのパスワード保存が働きやすくなる。
+         CSPで form-action 'none' にしてあるので、万一 JS が動かなくても送信は起きない。 -->
+    <form id="gForm" autocomplete="on" novalidate>
+      <div id="step1">
+        <label for="gPw">パスワード</label>
+        <div class="pwrow">
+          <input type="password" id="gPw" name="password" autocomplete="current-password">
+          <button type="button" id="gShow" aria-label="パスワードを表示">表示</button>
+        </div>
+        <button type="submit" id="gNext">次へ</button>
+      </div>
+
+      <div id="step2" style="display:none">
+        <label for="gPerson">お名前</label>
+        <select id="gPerson" name="username" autocomplete="username"></select>
+        <button type="submit" id="gIn">入室する</button>
+        <button type="button" class="back" id="gBack">← パスワードを入れ直す</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── 本体 ───────────────────────────────── -->
+<div class="app">
+  <header class="bar"><div class="in">
+    <span class="name">出店者管理<span>${esc(C.EVENT.titleSub)}</span></span>
+    <span class="who"><span id="who"></span><span class="role" id="role"></span>
+      <button class="out" id="out">退出</button></span>
+  </div></header>
+
+  <nav class="tabs"><div class="in">
+    <button data-tab="dash" aria-selected="true">ダッシュボード</button>
+    <button data-tab="list" aria-selected="false">出店者一覧</button>
+    <button data-tab="map"  aria-selected="false">出店エリアマップ</button>
+    <button data-tab="day"  aria-selected="false">当日運営</button>
+    <button data-tab="history" aria-selected="false">変更履歴</button>
+    <button data-tab="docs" aria-selected="false">資料置き場</button>
+    <button data-tab="mail" aria-selected="false" class="admin-only" hidden>メール送信</button>
+    <button data-tab="people" aria-selected="false" class="admin-only" hidden>FC大阪の担当者</button>
+    <button data-tab="settings" aria-selected="false" class="admin-only" hidden>設定</button>
+  </div></nav>
+
+  <main>
+    <!-- ダッシュボード -->
+    <section class="view on" id="v-dash">
+      <!-- 数を集める項目の合計。schema.js の aggregate から自動で並ぶ -->
+      <div class="panel totals" id="totals" hidden></div>
+      ${howto('dash')}
+      <div class="asof" id="asOf"></div>
+      <div class="todo" id="todo"></div>
+      <div class="panel todos">
+        <div class="todohead">
+          <h3>確認事項</h3>
+          <button class="ghost" id="todoNew">＋ 追加</button>
+        </div>
+        <div id="todoForm" hidden>
+          <div class="pgrid">
+            <label style="grid-column:1/-1">内容<span class="req">必須</span>
+              <input id="todoText" maxlength="500" placeholder="例：観戦チケットの枚数をFC大阪に確認する"></label>
+            <label>担当<input id="todoOwner" maxlength="60" placeholder="例：けいた"></label>
+            <label>期日<input id="todoDue" placeholder="2026-09-08"></label>
+            <label>状態<select id="todoState">
+              <option>未着手</option><option>確認中</option><option>完了</option></select></label>
+            <label style="grid-column:1/-1">メモ<input id="todoMemo" maxlength="500"></label>
+          </div>
+          <p class="perr" id="todoErr" hidden></p>
+          <div class="pbtns">
+            <button class="print" id="todoSave">保存する</button>
+            <button class="ghost" id="todoCancel">やめる</button>
+          </div>
+        </div>
+        <div id="todoList"></div>
+      </div>
+
+      <h2 class="sec">${icon('grid', 17)}数字</h2>
+      <div class="cards" id="cards"></div>
+      <h2 class="sec">${icon('info', 17)}内訳</h2>
+      <div class="split" id="breakdown"></div>
+      <h2 class="sec">${icon('clock', 17)}直近の応募</h2>
+      <div class="panel admin-only" id="inboxPanel" hidden>
+        <div class="todohead">
+          <h3>問い合わせメール</h3>
+          <button class="ghost" id="inboxReload">読み込み直す</button>
+        </div>
+        <div id="inboxList"></div>
+        <p class="pnote" id="inboxNote"></p>
+      </div>
+      <div class="panel"><div class="rows2" id="recent"></div></div>
+    </section>
+
+    <!-- 一覧 -->
+    <section class="view" id="v-list">
+      ${howto('list')}
+      <div class="toolbar">
+        <input type="search" id="fQ" placeholder="企業名・受付ID・担当者などで検索">
+        <select id="fStatus"></select>
+        <select id="fType"></select>
+        <select id="fSize"></select>
+        <select id="fDay"></select>
+        <label style="font-size:13px"><input type="checkbox" id="fMine"> 自分が担当</label>
+        <label style="font-size:13px"><input type="checkbox" id="fDup"> 重複の可能性</label>
+        <span class="count" id="count"></span>
+      </div>
+      <!-- 表に出す列。仕事によって見たい列が変わるので、使う人が選ぶ -->
+      <details class="colbox">
+        <summary>表示する列を選ぶ<span class="cnum" id="colCount"></span></summary>
+        <div class="colpick" id="colPick"></div>
+        <button class="ghost" id="colReset">最初の並びに戻す</button>
+      </details>
+      <div class="tablewrap">
+        <table class="list"><thead id="listHead"></thead><tbody id="listBody"></tbody></table>
+        <div class="empty" id="listEmpty">該当する応募はありません。</div>
+      </div>
+
+      <!-- テストデータの一括削除。設定でONにしたときだけ出る（管理者のみ）。
+           取り返しのつかない操作なので、3段階で押させる -->
+      <div class="panel purge admin-only" id="purgeBox" hidden>
+        <h3>テストデータの一括削除</h3>
+        <p class="pnote">
+          応募・出店確定情報・変更履歴・区画の割当・提出物を、まとめて
+          <b>完全に消します</b>。<b>元に戻せません。</b>
+          受付IDも SB-0001 から採り直しになります。
+          公開前の掃除にだけお使いください。<br>
+          消す直前に、台帳を丸ごと複製した控えをDriveに作ります
+          （控えを作れなかったときは、削除を行いません）。
+        </p>
+        <button class="ghost" id="purgeCheck">消える対象を確かめる</button>
+        <div id="purgeStep2" hidden>
+          <div id="purgeList"></div>
+          <p class="pnote warn" id="purgeWarn"></p>
+          <div class="purge-run">
+            <label>上の一覧の件数を、そのままご入力ください
+              <input id="purgeCount" inputmode="numeric" maxlength="4"></label>
+            <button class="danger" id="purgeRun">控えを取って、すべて消す</button>
+          </div>
+        </div>
+        <p class="msg" id="purgeMsg"></p>
+      </div>
+    </section>
+
+    <!-- 当日運営：区画番号順・1行1社・印刷して持ち歩ける -->
+    <section class="view" id="v-day">
+      ${howto('day')}
+      <div class="toolbar">
+        <span class="daycount" id="dayCount"></span>
+        <label style="font-size:13px"><input type="checkbox" id="dOnlyAssigned" checked> 区画が決まっている分だけ</label>
+        <label style="font-size:13px"><input type="checkbox" id="dFire"> 火気・発電機のみ</label>
+        <button class="print" id="dPrint">印刷する（A4横）</button>
+        <p class="pwarn" id="dayPrintWarn" hidden></p>
+      </div>
+      <p class="hint-print">当日は電波が切れることがあります。前日までに印刷して持ってください。</p>
+      <!-- 紙にだけ出る見出し。画面では隠れている -->
+      <div class="printhead" id="dayPrintHead"></div>
+      <div class="tablewrap">
+        <table class="list day"><thead id="dayHead"></thead><tbody id="dayBody"></tbody></table>
+        <div class="empty" id="dayEmpty">区画が決まっている出店者がまだいません。</div>
+      </div>
+    </section>
+
+    <!-- マップ -->
+    <section class="view" id="v-map">
+      ${howto('map')}
+      <div class="maplayout">
+        <div>
+          <div class="mapbox" id="map"></div>
+          <div class="maplegend" id="legend"></div>
+        </div>
+        <div class="assignbox">
+          <h3>区画の割り当て</h3>
+          <select id="aWho"></select>
+          <div class="cur" id="aCur" style="display:none"></div>
+          <p class="hint">出店者を選び、マップの区画を押すと、希望の区画数ぶんを連続で押さえます。
+          最後の番号と1番はつながっています。すでに割り当てられている区画は選べません。</p>
+          <button class="danger" id="aDel" style="display:none">この出店者の割当を解除</button>
+          <h3 style="margin-top:18px">まだ割り当てていない出店者 <span id="unassignedN"></span></h3>
+          <div class="rows2" id="unassigned"></div>
+          <h3 style="margin-top:18px">区画順の割当</h3>
+          <div class="rows2" id="assigned"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 変更履歴 ─────────────────────────── -->
+    <section class="view" id="v-history">
+      ${howto('history')}
+      <div class="toolbar">
+        <input id="hQ" placeholder="受付ID・項目・操作者で絞り込み" style="min-width:240px">
+        <span class="pcount" id="hCount"></span>
+        <button class="ghost" id="hReload">読み込み直す</button>
+      </div>
+      <div class="panel" style="padding:0;overflow-x:auto">
+        <table class="list" id="hTable">
+          <thead><tr>
+            <th>日時</th><th>操作者</th><th>受付ID</th><th>項目</th>
+            <th>変更前</th><th>変更後</th><th>理由</th>
+          </tr></thead>
+          <tbody id="hBody"></tbody>
+        </table>
+      </div>
+      <p class="pnote">
+        応募内容の修正・ステータスの変更・担当メモの追記は、すべてここに残ります。
+        事業者さまご本人による修正は、操作者が「出店者（本人）」になります。
+      </p>
+    </section>
+
+    <!-- ── 関係者（管理者のみ） ─────────────── -->
+    <section class="view" id="v-people">
+      ${howto('people')}
+      <div class="toolbar">
+        <span class="pcount" id="peopleCount"></span>
+        <button class="print" id="pNew">新しく登録する</button>
+      </div>
+
+      <div class="panel" style="padding:0;overflow-x:auto">
+        <table class="list" id="peopleTable">
+          <thead><tr>
+            <th>氏名</th><th>部署</th><th>メール</th>
+            <th>応募フォーム</th><th>管理ページ</th><th>役割</th><th>通知</th><th></th>
+          </tr></thead>
+          <tbody id="peopleBody"></tbody>
+        </table>
+      </div>
+
+      <div class="panel pform" id="pForm" hidden>
+        <h3 id="pFormTitle">関係者の登録</h3>
+        <p class="pnote" id="pSelfNote" hidden>
+          ご自身の登録です。<b>役割と管理ページの利用は変更できません。</b>
+          最後の管理者が自分の権限を外すと、誰も設定を触れなくなるためです。
+          交代する場合は、先に別の方を管理者にしてください。
+        </p>
+        <div class="pgrid">
+          <label>氏名<span class="req">必須</span><input id="pName" maxlength="40" placeholder="山田 太郎"></label>
+          <label>所属<input id="pOrg" maxlength="40" placeholder="FC大阪"></label>
+          <label>部署<input id="pDept" maxlength="40" placeholder="事業推進部"></label>
+          <label>メール<input id="pEmail" maxlength="120" placeholder="yamada@example.com" inputmode="email"></label>
+        </div>
+        <div class="pchecks">
+          <label><input type="checkbox" id="pFormVisible"> 応募フォームの「担当社員」に出す</label>
+          <label><input type="checkbox" id="pCanLogin"> この管理ページを使う（メールが必要です）</label>
+          <label>役割
+            <select id="pRole"><option>一般</option><option>管理者</option></select>
+          </label>
+          <label><input type="checkbox" id="pNotify"> 応募があったらメールで知らせる</label>
+        </div>
+        <p class="perr" id="pErr" hidden></p>
+        <div class="pbtns">
+          <button class="print" id="pSave">保存する</button>
+          <button class="ghost" id="pCancel">やめる</button>
+        </div>
+        <p class="pnote">
+          退職・異動の方は<b>消さずに、両方のチェックを外して</b>ください。
+          過去の応募に残っている担当社員名の行き先が分からなくなるためです。
+        </p>
+      </div>
+    </section>
+    <!-- ── 設定（管理者のみ） ───────────────── -->
+    <!-- ── 資料置き場（§6-2）
+         Driveを直接共有すると相手にGoogleアカウントが要る。
+         管理ページのパスワードだけで置けるようにする。 -->
+    <section class="view" id="v-docs">
+      ${howto('docs')}
+      <div class="panel">
+        <h3>資料置き場</h3>
+        <p class="pnote" id="docsIntro">読み込んでいます…</p>
+
+        <div class="docs-add" id="docsAdd" hidden>
+          <label class="docs-pick">
+            <span id="docsPickLabel">ファイルを選ぶ</span>
+            <input type="file" id="docsInput" multiple>
+          </label>
+          <select id="docsFolder" aria-label="置き先"></select>
+          <span class="msg" id="docsMsg"></span>
+        </div>
+
+        <div id="docsBody"></div>
+      </div>
+    </section>
+
+    <!-- ── メール送信（採択通知の一括送信・§6-5）
+         取り消せない操作なので、対象一覧 → プレビュー → 送信 の3段にする。
+         段を飛ばせないよう、次の段は前の段を通らないと出さない。 -->
+    <section class="view" id="v-mail">
+      ${howto('mail')}
+      <div class="panel">
+        <h3>選考結果の一括送信</h3>
+        <div class="mailkind">
+          <label><input type="radio" name="mailKind" value="accept" checked>
+            採択のご連絡</label>
+          <label><input type="radio" name="mailKind" value="reject">
+            不採択のご連絡</label>
+        </div>
+        <p class="pnote" id="mailIntro">読み込んでいます…</p>
+
+        <!-- 文面の編集（けいた指示・2026-09-03）。
+             「文面もその送信機能の範疇でそこで作って送信できるように」。
+             ただしメーラーにはしない。守るものは保存の時点でサーバーが断る
+             （不採択にリンクを入れない／採択からリンクを落とさない／
+               知らない差し込みを送らない）。 -->
+        <details class="tplbox" id="tplBox">
+          <summary>文面を編集する<span class="tplstate" id="tplState"></span></summary>
+          <div class="tplin">
+            <p class="pnote">
+              ここで直した文面が、そのまま送られます。
+              <b>差し込み</b>（{{お名前}} など）は、送るときに1社ずつの値に置き換わります。
+              下の「本文を確認する」で、実際に届く形を必ずご確認ください。
+            </p>
+            <label class="tpll">件名
+              <input id="tplSubject" maxlength="200">
+              <span class="tplcount" id="tplSubjLen" hidden></span></label>
+            <label class="tpll">本文
+              <textarea id="tplBody" rows="18" spellcheck="false"></textarea></label>
+            <div class="tplvars">
+              <b>差し込み</b>（押すと本文に入ります）
+              <div id="tplVars"></div>
+              <details class="tplhelp">
+                <summary>それぞれの意味と例を見る</summary>
+                <dl id="tplVarHelp"></dl>
+              </details>
+            </div>
+            <p class="perr" id="tplErr" hidden></p>
+            <p class="pwarn" id="tplWarn" hidden></p>
+            <div class="pbtns">
+              <button class="print" id="tplSave">この文面で保存する</button>
+              <button class="ghost" id="tplReload">編集をやめて戻す</button>
+              <button class="ghost" id="tplReset">はじめの文面に戻す</button>
+              <span class="msg" id="tplMsg"></span>
+            </div>
+          </div>
+        </details>
+
+        <div id="mailWarn" hidden></div>
+
+        <div class="mail-step" id="mailStep1">
+          <h4>1. 送信する相手を確認する</h4>
+          <div id="mailTargets"></div>
+        </div>
+
+        <div class="mail-step" id="mailStep2" hidden>
+          <h4>2. 本文を確認する</h4>
+          <p class="pnote" id="mailPrevNote"></p>
+          <div class="mail-prev">
+            <div class="mp-h"><b>差出人</b><span id="mailFrom"></span></div>
+            <div class="mp-h"><b>宛先</b><span id="mailTo"></span></div>
+            <div class="mp-h"><b>件名</b><span id="mailSubject"></span></div>
+            <pre id="mailBody"></pre>
+          </div>
+        </div>
+
+        <div class="mail-step" id="mailStep3" hidden>
+          <h4>3. 送信する</h4>
+          <p class="pwarn"><b>送信したメールは取り消せません。</b>
+            上の一覧と本文をご確認のうえ、進めてください。</p>
+          <div class="pbtns">
+            <button class="danger" id="mailSend">
+              <span id="mailSendLabel">送信する</span>
+            </button>
+            <span class="msg" id="mailMsg"></span>
+          </div>
+        </div>
+
+        <div id="mailResult" hidden></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-settings">
+      ${howto('settings')}
+
+      <!-- レンタル品目。単価はお金の話なので管理者のみ。
+           **紙面（募集要項PDF）とのずれを、必ずここに出す** -->
+      <div class="panel rental">
+        <h3>レンタル備品の品目と単価</h3>
+        <p class="pnote">
+          ここを直すと、<b>応募フォームの選択肢と金額がその場で変わります</b>。
+          単価を空欄にすると「調整中」と表示され、その品目は選べなくなります。<br>
+          ただし<b>募集要項PDF（印刷物）は自動では変わりません</b>。
+          金額を変えると、PDFを刷り直すまでフォームと紙で違う金額を出すことになるので、
+          下に警告を出します。
+        </p>
+        <div id="rentalPaper"></div>
+        <div id="rentalList">読み込んでいます…</div>
+        <div class="pbtns">
+          <button class="ghost" id="rentalNew">＋ 品目を追加する</button>
+          <span class="msg" id="rentalMsg"></span>
+        </div>
+
+        <div class="panel pform" id="rentalForm" hidden>
+          <h3 id="rentalFormTitle">品目の登録</h3>
+          <div class="pgrid">
+            <label>品目名<span class="req">必須</span>
+              <input id="rName" maxlength="60" placeholder="例：長机（1800×450）"></label>
+            <label>種別<span class="req">必須</span><select id="rKind"></select>
+              <span class="hint" id="rKindNote" hidden></span></label>
+            <label>単価（円・税込）
+              <input id="rPrice" inputmode="numeric" maxlength="7" placeholder="空欄なら調整中">
+            </label>
+            <label>単位<input id="rUnit" maxlength="10" placeholder="台・脚・張など"></label>
+            <label>1社あたりの上限数
+              <input id="rMax" inputmode="numeric" maxlength="3" placeholder="例：20"></label>
+            <label style="grid-column:1/-1">説明（任意）
+              <input id="rNote" maxlength="200"></label>
+          </div>
+          <div class="pchecks">
+            <label><input type="checkbox" id="rActive"> 応募フォームに出す</label>
+          </div>
+          <p class="perr" id="rErr" hidden></p>
+          <div class="pbtns">
+            <button class="print" id="rSave">保存する</button>
+            <button class="ghost" id="rCancel">やめる</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>イベントの設定</h3>
+        <div class="pgrid" id="setFields"></div>
+        <p class="perr" id="setErr" hidden></p>
+        <div class="pbtns">
+          <button class="print" id="setSave">保存する</button>
+          <span class="msg" id="setMsg"></span>
+        </div>
+        <p class="pnote">
+          <b>応募の締切</b>は「2026-09-30 18:00」の形でご入力ください。
+          読み取れない書き方だと、その時点で<b>受付が止まります</b>（安全側に倒す作りのため）。
+        </p>
+      </div>
+
+      <div class="panel pform">
+        <h3>管理ページのパスワード</h3>
+        <p class="pnote" style="margin-top:0">
+          いま設定されている値は、この画面からは見られません（見られると、
+          一般パスワードで入った人が管理者パスワードを読めてしまうため）。
+          <b>変えたいものだけ</b>入力してください。空欄のものは変わりません。
+        </p>
+        <div class="pgrid" id="setPasswords"></div>
+        <p class="pnote" style="background:#FFF3E8;border:1px solid #f0d9c2">
+          <b>パスワードを変えると、いま入っている方は全員（ご自身を含めて）入り直しになります。</b>
+          新しいパスワードを配ってから変更してください。
+        </p>
+        <p class="perr" id="setPwErr" hidden></p>
+        <div class="pbtns">
+          <button class="print" id="setPwSave">パスワードを変更する</button>
+          <span class="msg" id="setPwMsg"></span>
+        </div>
+      </div>
+
+
+    </section>
+  </main>
+</div>
+
+<!-- ── 詳細 ───────────────────────────────── -->
+<div class="drawer">
+  <div class="sheet">
+    <div class="head">
+      <span class="id" id="dId"></span>
+      <span class="t" id="dName"></span>
+      <span class="nav">
+        <button id="dPrev" title="前の応募">‹</button>
+        <button id="dNext" title="次の応募">›</button>
+      </span>
+      <button class="x" id="dClose" aria-label="閉じる">×</button>
+    </div>
+    <div class="body">
+      <div class="grp">
+        <h4>管理側の項目</h4>
+        <div class="editrow"><label for="eStatus">ステータス</label><select id="eStatus"></select></div>
+        <div class="editrow"><label for="eDay">当日ステータス</label><select id="eDay"></select></div>
+        <div class="editrow"><label for="eIn">搬入予定時刻</label><input id="eIn" placeholder="例：9:00"></div>
+        <div class="editrow"><label for="eOut">撤収予定時刻</label><input id="eOut" placeholder="例：18:00"></div>
+        <div class="editrow"><label for="eMemo">担当メモを追記</label><textarea id="eMemo" placeholder="ここに書いた内容が、日付とお名前付きで上に積まれます"></textarea></div>
+        <div class="memolog" id="dMemoLog"></div>
+        <div class="savebar">
+          <button id="dSave">保存する</button>
+          <span class="msg" id="dMsg"></span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <h4>応募内容</h4>
+        <div class="applicant-lock" id="apLock">
+          <p><b>ここから下は、事業者さまが申告された内容です。</b>
+             お電話などで訂正のご連絡をいただいた場合にかぎり、こちらで直せます。
+             変更すると、変更前の内容とあわせて変更履歴に残ります。</p>
+          <button class="ghost" id="apUnlock">応募内容を修正する</button>
+          <!-- 2段階目。ダイアログではなく画面の中に出す
+               （ブラウザでダイアログを止められると、押しても何も起きなくなるため） -->
+          <div class="apconfirm" id="apConfirm" hidden>
+            <p><b>ここから先は、事業者さまが申告された内容の修正です。</b></p>
+            <ul>
+              <li>お電話などで訂正のご連絡をいただいた場合にかぎってください</li>
+              <li>変更前の内容とあわせて、変更履歴に残ります</li>
+              <li>選択式の項目は、事業者さまご本人に直していただいてください</li>
+            </ul>
+            <div class="pbtns">
+              <button class="danger" id="apYes">了解しました。修正に進む</button>
+              <button class="ghost" id="apNo">やめる</button>
+            </div>
+          </div>
+        </div>
+        <div id="apEdit" hidden>
+          <div id="apFields"></div>
+          <div class="editrow">
+            <label for="apReason">変更の理由<span class="req">必須</span></label>
+            <input id="apReason" maxlength="200" placeholder="例：お電話で訂正のご連絡あり">
+          </div>
+          <div class="savebar">
+            <button id="apSave">この内容で修正する</button>
+            <button class="ghost" id="apCancel">やめる</button>
+            <span class="msg" id="apMsg"></span>
+          </div>
+        </div>
+        <div id="dRead"></div>
+        <!-- 採択後に集めた情報。2026-09-02 まで、ここは画面のどこにも出ていなかった。
+             当日いちばん要る情報（現場責任者・搬入車両・保険）を集めているのに、
+             スプレッドシートを開かないと見られない状態だった -->
+        <div id="dConfirm"></div>
+        <!-- 枚数の打ち込み（管理者のみ）。電話で聞いた数の行き場 -->
+        <div id="dCounts"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>${clientJs()}</script>
+</body></html>`;
+}
+
+function main() {
+  const out = path.join(ROOT, 'admin.html');
+  fs.writeFileSync(out, html(), 'utf8');
+  const kb = Math.round(fs.statSync(out).size / 1024);
+  console.log('  書き出し : admin.html (' + kb + 'KB)'
+    + (ENDPOINT.gasUrl ? '' : ' ※接続先が空のため表示確認用'));
+}
+
+if (require.main === module) main();
+module.exports = { html, css, clientJs };

@@ -81,12 +81,27 @@ function appendApplication(values, submissionId) {
  * のいずれでも該当項目が黙って空欄になる。応募者には受付完了メールが届くため誰も気づかない。
  * それを防ぐため、書き込み前にここで止める。
  */
+/**
+ * 応募を書き込む前に、台帳の列が揃っているかを確かめる。
+ *
+ * 見るのは**応募段階の項目だけ**。採択後に聞く項目（火気使用・現場責任者・
+ * 搬入車両台数など）は別シート「出店確定情報」の列であって、応募一覧には無い。
+ * ここで FIELDS 全部を見ていたため、**どの応募も必ず失敗する**状態になっていた
+ * （応募者には送信エラーが出て、中身は退避シート行きになる）。
+ */
 function assertHeaders_(headers) {
   var missing = [];
-  FIELDS.forEach(function (f) {
+  applyFields().forEach(function (f) {
     if (f.sheet && headers.indexOf(f.sheet) === -1) missing.push(f.sheet);
     if (f.unknownCheckbox && headers.indexOf(f.unknownCheckbox.sheet) === -1) {
       missing.push(f.unknownCheckbox.sheet);
+    }
+    // 1つの項目が複数の列になる場合（レンタルの明細と合計）。
+    // ここを漏らすと、列が足りないまま黙って書き込みが進む
+    if (f.extraColumns) {
+      f.extraColumns.forEach(function (c) {
+        if (headers.indexOf(c) === -1) missing.push(c);
+      });
     }
   });
   ADMIN_COLUMNS.forEach(function (c) {
@@ -183,6 +198,9 @@ function detectDuplicate_(sh, headers, values) {
 
 /** ヘッダーの並びに合わせて1行分の配列を組み立てる。列順はヘッダーが正。 */
 function buildRow_(headers, values, meta) {
+  // 1行ぶんで1回だけ計算する。列ごとに呼ぶと、
+  // 明細と合計のあいだにシートが変わって食い違うことがある
+  var rental = rentalSummary_(values);
   var byLabel = {};
   FIELDS.forEach(function (f) {
     if (!f.sheet) return;
@@ -198,14 +216,56 @@ function buildRow_(headers, values, meta) {
       case '当日ステータス': return '未着';
       case '素材トークン': return meta.token;
       case '重複フラグ':   return meta.duplicateFlag;
-      case '主形態':       return primaryType_(values.boothTypes);
+      case '主形態':       return safeCell_(primaryType_(values.boothTypes));
       // 列構成が万一ずれても、ここから応募内容を完全に復元できる
-      case '生データ(JSON)': return JSON.stringify(values).slice(0, 40000);
+      case '生データ(JSON)': return rawJson_(values);
+      case 'レンタル明細':     return rental.detail;
+      case 'レンタル合計(円)': return rental.total;
     }
     var f = byLabel[h];
     if (!f) return ''; // 管理側の空欄（担当メモ・搬入予定時刻など）
     return formatCell_(f, values[f.key]);
   });
+}
+
+/**
+ * レンタルの明細と合計を、**台帳の単価から**組み立てる。
+ *
+ * 画面から送られてくるのは「品目名 → 個数」だけで、金額は送らせない。
+ * 送られた金額を信じると、通信を書き換えるだけで請求額を変えられる。
+ * 単価はここでレンタル品目シートから引き直す。
+ *
+ * 品目シートに無い名前は無視する（無効にした品目・打ち間違い）。
+ * 個数は整数に丸め、上限を超えていたら上限に寄せる。
+ */
+function rentalSummary_(values) {
+  var qty = (values && values.rentalItems) || {};
+  var detail = [], total = 0;
+
+  // テント。区画に紐づくので、数量品目とは別に足す
+  if (values && values.tentChoice === 'レンタルする' && values.tentSize) {
+    var prices = getPrices();
+    var tp = (values.tentSize === 'T1') ? prices.tentT1 : prices.tentT2;
+    var tLabel = (values.tentSize === 'T1')
+      ? 'レンタルテント（1区画用）' : 'レンタルテント（2区画用）';
+    if (tp !== null && tp !== undefined) {
+      detail.push(tLabel + ' × 1');
+      total += tp;
+    } else {
+      detail.push(tLabel + ' × 1（単価未定）');
+    }
+  }
+
+  var items = getRentalQtyItems();
+  items.forEach(function (it) {
+    var n = Math.floor(Number(qty[it.name]) || 0);
+    if (n <= 0) return;
+    if (n > it.max) n = it.max;
+    detail.push(it.name + ' × ' + n + it.unit);
+    total += it.price * n;
+  });
+
+  return { detail: safeCell_(detail.join(' ／ ')), total: detail.length ? total : '' };
 }
 
 /** 複数選択された出店形態のうち、色分けに使う主形態（初期値は最初に選んだもの） */
@@ -238,12 +298,58 @@ function safeCell_(v) {
   return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
 }
 
+/**
+ * 生データ(JSON) に入れる文字列を作る。
+ *
+ * これまでは JSON.stringify(...).slice(0, 40000) だった。
+ * 上限を超えると**構文として壊れたJSON**が入り、読む側はすべて catch して
+ * 空として扱う。その結果、事業者さまの修正画面が全項目空で開き、
+ * そのまま保存すると必須項目が全部欠けて修正不能になる。
+ * 長い記入欄から順に落とし、何を落としたかを値として残す。
+ */
+var RAW_JSON_MAX = 40000;
+
+function rawJson_(values) {
+  var out = JSON.stringify(values);
+  if (out.length <= RAW_JSON_MAX) return out;
+
+  var copy = {};
+  Object.keys(values).forEach(function (k) { copy[k] = values[k]; });
+  var omitted = [];
+
+  // 長い順に落とす
+  var byLength = Object.keys(copy).filter(function (k) {
+    return typeof copy[k] === 'string' && copy[k].length > 200;
+  }).sort(function (a, b) { return String(copy[b]).length - String(copy[a]).length; });
+
+  for (var i = 0; i < byLength.length; i++) {
+    copy[byLength[i]] = '（長すぎるため省略。変更履歴と台帳の各列をご覧ください）';
+    omitted.push(byLength[i]);
+    out = JSON.stringify(copy);
+    if (out.length <= RAW_JSON_MAX) break;
+  }
+  copy._omitted = omitted;
+  out = JSON.stringify(copy);
+  return out.length <= RAW_JSON_MAX ? out : JSON.stringify({ _omitted: ['すべて'] });
+}
+
 /** 変更履歴に1行残す。管理ページの操作はすべてここを通す。 */
+var HISTORY_CELL_MAX = 5000;   // 1セルに入れる上限。超える値は切って印を付ける
+
+/** 変更履歴の1セルぶんに収める。長すぎる値で appendRow ごと落とさないため */
+function historyCell_(v) {
+  var s = String(v === undefined || v === null ? '' : v);
+  if (s.length <= HISTORY_CELL_MAX) return safeCell_(s);
+  return safeCell_(s.slice(0, HISTORY_CELL_MAX) + '…（以降' + (s.length - HISTORY_CELL_MAX) + '文字を省略）');
+}
+
 function appendHistory(operator, receiptId, item, before, after, reason) {
+  // 台帳側は safeCell_ を通しているのに、ここだけ生値で書いていた。
+  // 担当メモに =IMAGE(...) と入れて保存すると、変更履歴シートで数式として動く。
+  // 呼び出し側を全部直すより、書き込む側で1回止めるほうが確実。
   sheet_(SHEET.HISTORY).appendRow([
-    new Date(), operator || '', receiptId || '', item || '',
-    before === undefined ? '' : before,
-    after === undefined ? '' : after,
-    reason || '',
+    new Date(),
+    historyCell_(operator), historyCell_(receiptId), historyCell_(item),
+    historyCell_(before), historyCell_(after), historyCell_(reason),
   ]);
 }
