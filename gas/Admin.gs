@@ -1251,6 +1251,17 @@ var SETTING_KEYS_ = [
     help: '制作スケジュールで、期日の**何日前から**「まもなく」の色を出すかです。'
         + '出るのは**未着手と停滞中**のものだけで、進行中や確認中には出しません'
         + '（手が付いているものに急かす色を出しても、することがありません）。' },
+  // ② タイムスケジュール。**版番号（タイムスケジュール版）と最終更新は、ここに出さない。**
+  // あれは人が触るものではなく、触られると「ぶつかり」の検出が壊れる。
+  { key: '進行表の日付',        label: 'タイムスケジュールの日',  type: 'date',
+    help: 'タイムスケジュール（当日の時間割）が指す日です。'
+        + '**当日運営タブの出店者一覧とは別物**で、こちらは進行・音響・司会が見る'
+        + '「11:00 オープニング」のような時間割です。'
+        + 'いまは1日ぶんだけ組めます。' },
+  { key: '進行表の自動保存分',  label: 'タイムスケジュールの自動保存', type: 'int', min: 1, max: 30,
+    help: 'タイムスケジュールを**何分おきに自動保存するか**です。'
+        + 'ドラッグのたびには保存しません（保存が追いつかないため）。'
+        + '空欄や読み取れない値のときは3分で動きます。' },
   { key: '区画総数',           label: '区画の総数',           type: 'int', min: 1, max: 500,
     help: '会場に用意する区画の数です。出店エリアマップのマス目の数になります。'
         + 'すでに割り当てた番号より小さくすることはできません。' },
@@ -1752,6 +1763,12 @@ function adminDispatch_(payload) {
     case 'adminSched':       return adminSched_(auth);
     case 'adminSchedSave':   return adminSchedSave_(auth, payload);
     case 'adminSchedDelete': return adminSchedDelete_(auth, payload);
+    // ② タイムスケジュール。①と同じく **adminOnly には入れない**（全員が触れる）。
+    // 削除の action が無いのは、保存が「まるごと差し替え」だから
+    // （消したい行を外して保存する。§3-3）
+    case 'adminTimetable':          return adminTimetable_(auth);
+    case 'adminTimetableSave':      return adminTimetableSave_(auth, payload);
+    case 'adminTimetableHeartbeat': return adminTimetableHeartbeat_(auth);
     case 'adminConfirmSave':  return adminConfirmSave_(auth, payload);
     case 'adminMailTemplate':      return adminMailTemplate_(auth, payload);
     case 'adminMailTemplateSave':  return adminMailTemplateSave_(auth, payload);

@@ -206,6 +206,7 @@ const DB = {
   ],
   settings: { '締切日時': '2026-09-30 18:00', '区画総数': '50', '目標出店社数': '',
               '要対応_経過日数': '3', 'スケジュールの警告日数': '3',
+              '進行表の日付': '2026-10-24', '進行表の自動保存分': '3',
               '担当社員への結果通知': 'ON',
               '問い合わせメール': 'fcosaka_bondance@kreha-c.com',
               // ふだんはOFF（本番の既定と同じ）。模擬で通しを試すときにONにする
@@ -432,6 +433,121 @@ const SCHED = (() => {
   vm.runInContext(src, box);
   return box;
 })();
+
+/**
+ * ② タイムスケジュールは、**本番の gas/Timetable.gs を丸ごと動かす**。
+ *
+ * ①（SCHED）は検証の関数だけを借りて、保存の流れは模擬に写しを持っている。
+ * そのせいで 2026-09-04、模擬の保存が100%落ちる状態に**誰も気づけなかった**
+ * （切り出しが CRLF で空文字になっていた。テスト832件は全部通っていた）。
+ *
+ * ②は写しをひとつも持たない。シートだけを代役にして、
+ * 読み・保存・券・版番号・札は**本番の関数がそのまま走る**。
+ * 版のぶつかりは本番では試せないので、ここが唯一の確認手段になる（§7-6）。
+ */
+const TT = (() => {
+  const norm = t => t.split('\r\n').join('\n');
+  const G = require('./gasbox.js');
+  const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Timetable.gs'), 'utf8'));
+  const adminSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8'));
+  const authSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Auth.gs'), 'utf8'));
+  const setupSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Setup.gs'), 'utf8'));
+
+  const TT_HEADERS = ['ID', 'レーン', '開始', '所要分', 'タイトル', '出演者', '詳細', 'ロック', '並び順'];
+
+  /** 見本の時間割。空だと「何を作る画面なのか」が伝わらない */
+  const seed = [
+    ['tt000001', '全体',     '09:30',  60, '設営・搬入', '', '出店者は9:30〜10:30に搬入', '', 1],
+    ['tt000002', '全体',     '10:30',   0, 'ゲートオープン', '', '', 'TRUE', 2],
+    ['tt000003', 'イベント', '11:00',  10, 'オープニングセレモニー', '○○市長', '', 'TRUE', 3],
+    ['tt000004', 'イベント', '11:10',  30, '和太鼓ステージ', '△△和太鼓保存会', '', '', 4],
+    ['tt000005', '備考',     '10:00',   0, '音響チェック', '', '', '', 5],
+    ['tt000006', '備考',     '10:40',   0, '来賓到着', '○○市長', '控室へご案内', '', 6],
+    ['tt000007', 'イベント', '13:00',  40, '盆踊り講習', '□□先生', '', '', 7],
+    ['tt000008', '全体',     '17:30',   0, '営業終了', '', '', '', 8],
+  ];
+
+  const sheets = { 'タイムスケジュール': G.makeSheet(TT_HEADERS, seed) };
+
+  /**
+   * 設定シートの代役は、**DB.settings をそのまま映す**。
+   * 写しを持つと、設定タブで変えた自動保存の間隔が進行表に届かない。
+   */
+  function configSheet() {
+    const keys = () => Object.keys(DB.settings);
+    return {
+      getLastRow: () => keys().length + 1,
+      getLastColumn: () => 3,
+      getRange(row, col, nRows) {
+        return {
+          getValues: () => {
+            const ks = keys();
+            const out = [];
+            for (let r = 0; r < (nRows || 1); r++) out.push([ks[row - 2 + r]]);
+            return out;
+          },
+          getValue: () => {
+            const k = keys()[row - 2];
+            return col === 1 ? k : DB.settings[k];
+          },
+          setValue: v => { const k = keys()[row - 2]; if (k !== undefined) DB.settings[k] = v; },
+        };
+      },
+      appendRow: line => { DB.settings[String(line[0])] = line[1]; },
+    };
+  }
+
+  const cache = G.makeCache();
+  const box = {
+    Array, Object, String, Number, JSON, RegExp, Math, isFinite, parseInt, Boolean, Date,
+    console: { error() {}, log() {} },
+    SpreadsheetApp: { flush() {} },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
+    LOCK_WAIT_MS: 30000,
+    CacheService: cache,
+    Utilities: G.makeUtilities(),
+    SHEET: { TIMETABLE: 'タイムスケジュール', CONFIG: '設定' },
+    // 模擬の鍵。本番は gas/Auth.gs（パスワードの指紋を含む）
+    authSecret_: () => 'mock-timetable-secret',
+    sheet_: name => (name === '設定' ? configSheet() : sheets[name]),
+    // 列名は who / id。**operator / receiptId ではない**（DB.history の形に合わせる）
+    appendHistory: (operator, receiptId, item, before, after, reason) => {
+      DB.history.unshift({ at: nowText(), who: operator, id: receiptId,
+                           item, before, after, reason });
+    },
+    logError_: () => {},
+    configNumber: key => {
+      const v = DB.settings[key];
+      if (v === '' || v === null || v === undefined) return null;
+      const n = Number(v);
+      return isFinite(n) ? n : null;
+    },
+  };
+  vm.createContext(box);
+  // 切り出しは src/gasbox.js のもの。切り出せなければ**その場で止まる**
+  // （空文字のまま進むのがいちばん危ない。2026-09-04 に①でそれが起きた）
+  vm.runInContext([G.cutFunction(adminSrc, 'asText_'), G.cutFunction(adminSrc, 'safeCellText_'),
+                   G.cutFunction(authSrc, 'safeEquals_'),
+                   G.cutFunction(setupSrc, 'findConfigRow_')]
+                  .join(String.fromCharCode(10)), box);
+  vm.runInContext(src, box);
+  return { box, sheets, cache };
+})();
+
+/**
+ * 本番の関数を、模擬の中から呼ぶ。
+ *
+ * **返りは素の値に写す。** `vm.runInContext` の中で作られた配列・オブジェクトは
+ * Node のものと別物で、`deepStrictEqual` が
+ * 「同じ形だが同一ではない」と言って落ちる（引き継ぎ書§8）。
+ * JSON にすると同じに見えるので、**HTTP越しには気づけない**。
+ */
+function ttCall(name, auth, payload) {
+  TT.box.__auth = auth;
+  TT.box.__payload = payload === undefined ? null : payload;
+  const r = vm.runInContext(name + '(__auth, __payload)', TT.box);
+  return r === undefined || r === null ? r : JSON.parse(JSON.stringify(r));
+}
 
 /** 行を見分ける印。本番の schedNewId_ と同じ 8桁 */
 const schedNewIdMock = () => crypto.randomBytes(4).toString('hex');
@@ -1299,6 +1415,28 @@ function handle(payload) {
                            before: JSON.stringify(gone), after: '', reason: '' });
       DB.sched.splice(i, 1);
       return { ok: true, title: gone.title };
+    }
+
+    // ── ② タイムスケジュール。**adminOnly には入れない**（全員が触れる・本番と同じ）。
+    //    中身は本番の gas/Timetable.gs がそのまま走る。模擬に写しを持たない
+    case 'adminTimetable':          return ttCall('adminTimetable_', auth);
+    case 'adminTimetableSave':      return ttCall('adminTimetableSave_', auth, payload);
+    case 'adminTimetableHeartbeat': return ttCall('adminTimetableHeartbeat_', auth);
+
+    /*
+     * **模擬だけの入口。本番のGASにこの経路は無い**（`?probe=` と同じ扱い）。
+     *
+     * 「ほかの人が先に保存した」を起こす。版のぶつかり（§4-4 の帯）は
+     * 本番では試せないので、これが唯一の確認手段になる。
+     * 一括削除で同じ判断をした。
+     */
+    case 'mockTimetableBumpVersion': {
+      const other = { person: (payload && payload.person) || '佐藤 花子', role: '担当' };
+      const got = ttCall('adminTimetable_', other);
+      const rows = JSON.parse(JSON.stringify(got.rows));
+      if (rows.length) rows[0].title = rows[0].title + '（' + other.person + 'が変更）';
+      const r = ttCall('adminTimetableSave_', other, { ticket: got.ticket, rows });
+      return { ok: true, version: r.version, by: other.person };
     }
 
     case 'adminTodos':

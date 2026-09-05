@@ -21,6 +21,7 @@ function setup() {
   setupSpacesSheet_(ss);
   setupMailTemplateSheet_(ss);
   setupSchedSheet_(ss);   // 制作スケジュール（確認事項の移行を含む）
+  setupTimetableSheet_(ss);   // タイムスケジュール（当日の時間割）
   ensureDocsFolders_();       // 資料フォルダの区分と、提出物フォルダ（社外秘）
   cleanupOldPriceRows_(ss);   // 単価を移したあとに、設定シートの古い行を片づける
   removeDefaultSheet_(ss);
@@ -37,7 +38,8 @@ function setup() {
    */
   var msg = '台帳の構築が完了しました：'
        + [SHEET.LEDGER, SHEET.CONFIRM, SHEET.HISTORY, SHEET.SPACES, SHEET.CONFIG,
-          SHEET.PEOPLE, SHEET.RENTAL, SHEET.SCHED, SHEET.MAILTPL].join(' / ');
+          SHEET.PEOPLE, SHEET.RENTAL, SHEET.SCHED, SHEET.TIMETABLE,
+          SHEET.MAILTPL].join(' / ');
   console.log(msg);
   return msg;
 }
@@ -477,6 +479,57 @@ function setupSchedSheet_(ss) {
 
   // 確認事項の行を移す。元シートは消さず、名前を変えるだけ
   schedMigrateTodos_(ss);
+  return sh;
+}
+
+// ───────────────────────────────── ② タイムスケジュール（当日の時間割）
+/**
+ * 当日（10/24）の進行の時間割。
+ *
+ * ■ 開始時刻の列に、時刻の表示形式を付けない
+ *   付けると Sheets が値を時刻として持ち、GAS では **Date として読まれて
+ *   タイムゾーンで化ける**（design_timetable.md §2-1）。
+ *   ①では日付列に `m/d(ddd)` を付けたせいで `2026-09-20 00:00` になった。
+ *   ここは**書式なしのテキスト**で持ち、読む口は ttCellTime_ ひとつにする。
+ *
+ * ■ 版番号の行を、設定シートに用意しておく
+ *   無くても ttVersion_() は 0 に落ちて動くが、
+ *   人が設定シートを見たときに「これは何だ」と分かる説明を1行残しておきたい。
+ */
+function setupTimetableSheet_(ss) {
+  var sh = getOrCreate_(ss, SHEET.TIMETABLE);
+  var head = TT_HEADERS_;
+  if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, head.length).setValues([head]);
+  styleHeader_(sh, head.length);
+
+  var n = Math.max(sh.getMaxRows() - 1, 1);
+  setDropdown_(sh, 2, 2, n, TT_LANES_);
+
+  // 開始の列は**書式を「書式なしテキスト」に固定する**。
+  // 既定のままだと、人が 11:00 と打った瞬間に Sheets が時刻値にしてしまう
+  sh.getRange(2, 3, n, 1).setNumberFormat('@');
+
+  [90, 90, 70, 70, 300, 220, 340, 70, 70]
+    .forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  sh.getRange('C1').setNote('「11:00」の形のテキストです。時刻の書式にしないでください'
+                          + '（GASが読むとタイムゾーンで化けます）。');
+  sh.getRange('D1').setNote('0 は「時刻だけの目印」です（ゲートオープンなど）。');
+  sh.getRange('A1').setNote('行を見分ける印です。手で変えないでください。');
+
+  // 版番号の行を用意しておく。**設定タブには出さない**（人が触るものではない）
+  var cfg = ss.getSheetByName(SHEET.CONFIG);
+  if (cfg && !findConfigRow_(cfg, TT_VERSION_KEY_)) {
+    cfg.appendRow([TT_VERSION_KEY_, 0,
+      'タイムスケジュールの保存がぶつかっていないかを見るための番号です。手で変えないでください']);
+  }
+
+  /*
+   * **0件でも必ずログに出す。**
+   * 2026-09-04、setup() の戻り値がログに出ないせいで、
+   * けいたが実行できたのか分からなくなった。「黙って正常」を作らない。
+   */
+  console.log('タイムスケジュールのシートを用意しました（いまの予定は '
+    + Math.max(sh.getLastRow() - 1, 0) + ' 件です）。');
   return sh;
 }
 
