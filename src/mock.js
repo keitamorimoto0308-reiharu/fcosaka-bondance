@@ -1434,7 +1434,11 @@ function handle(payload) {
       const other = { person: (payload && payload.person) || '佐藤 花子', role: '担当' };
       const got = ttCall('adminTimetable_', other);
       const rows = JSON.parse(JSON.stringify(got.rows));
-      if (rows.length) rows[0].title = rows[0].title + '（' + other.person + 'が変更）';
+      // **同じ印を積み重ねない。**撮影のたびに呼ぶと
+      // 「設営・搬入（○○が変更）（○○が変更）…」と伸び続けて、
+      // 画像が回を追うごとに違うものになる（2026-09-05 に実際にそうなった）
+      var mark = '（' + other.person + 'が変更）';
+      if (rows.length && rows[0].title.indexOf(mark) < 0) rows[0].title = rows[0].title + mark;
       const r = ttCall('adminTimetableSave_', other, { ticket: got.ticket, rows });
       return { ok: true, version: r.version, by: other.person };
     }

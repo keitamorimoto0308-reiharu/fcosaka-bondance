@@ -226,6 +226,53 @@ describe('管理ページ：画面側', () => {
     assert.match(built(), /<meta name="robots" content="noindex, nofollow">/);
   });
 
+  test('hidden 属性が、どんな規則にも負けないようにしてある', () => {
+    /*
+     * **これは3度目に踏んだ罠。**
+     * ブラウザ既定の `[hidden]{display:none}` は詳細度が 0,1,0 しかないので、
+     * `.editrow{display:grid}` `.tt-pop label{display:block}` のような
+     * 作者側の規則に負ける。**HTMLもJSも正しいのにCSSだけで機能が死ぬ**ので、
+     * テストでは捕まらず、目で見るまで気づけない。
+     *
+     * ①は「負けるクラスを列挙する」形で塞いだが、それは**新しいクラスを
+     * 足すたびに破れる**。実際、②の窓の詳細欄で同じことが起きた
+     * （2026-09-05・撮影して発覚）。
+     * `!important` は詳細度によらず勝つので、1本置けばこの種類が終わる。
+     */
+    const h = built();
+    const css = h.slice(h.indexOf('<style'), h.indexOf('</style>'));
+    // **説明のコメントを見てはいけない。**
+    // 「いちばん上の [hidden]{display:none!important} が面倒を見る」と
+    // コメントに書いただけで、規則を消しても通ってしまう（2026-09-05 に実際に起きた）
+    const body = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const flat = body.split(' ').join('').split(String.fromCharCode(10)).join('');
+    assert.ok(flat.indexOf('[hidden]{display:none!important}') >= 0,
+      '[hidden]{display:none!important} がありません。'
+      + 'これが無いと、display を持つ規則に hidden が負けます');
+  });
+
+  test('CSSの変数は、全部どこかで定義されている', () => {
+    /*
+     * **未定義の var() は、その宣言をまるごと無効にする。**
+     * `border:1px solid var(--line)` は「線が濃くなる」のではなく、
+     * border-style も初期値（none）に戻るので**線が消える**。
+     * エラーも警告も出ないので、目で見ても「そういうデザイン」に見えてしまう。
+     *
+     * 2026-09-05 に実際に見つけた：①の制作スケジュール表が `var(--line)` を
+     * 8か所で使っていたが、その変数はどこにも定義されていなかった。
+     */
+    const h = built();
+    const css = h.slice(h.indexOf('<style'), h.indexOf('</style>'));
+    const defined = new Set();
+    for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) defined.add(m[1]);
+    const used = new Set();
+    for (const m of css.matchAll(/var\((--[a-z0-9-]+)/gi)) used.add(m[1]);
+    const missing = [...used].filter(v => !defined.has(v));
+    assert.deepStrictEqual(missing, [],
+      '定義されていないCSS変数があります: ' + missing.join(', ')
+      + '（使っている宣言がまるごと無効になります）');
+  });
+
   test('画面にパスワードを埋め込んでいない', () => {
     const h = built();
     // 公開ページなので、当然だが機械的に見張る

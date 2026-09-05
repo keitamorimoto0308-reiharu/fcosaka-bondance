@@ -198,8 +198,8 @@ describe('② タイムスケジュール：版番号と引換券（§7-3 の 1�
     const b = makeBox({ version: 12 });
     const r = loadThenSave(b, [OPENING]);
     assert.strictEqual(r.ok, true, JSON.stringify(r));
-    assert.strictEqual(r.version, 13);
-    assert.strictEqual(load(b).version, 13);
+    assert.strictEqual(r.version, 13, '版が1つ進みませんでした');
+    assert.strictEqual(load(b).version, 13, '版が1つ進みませんでした');
     assert.strictEqual(rowAt(b, 2)['タイトル'], 'オープニングセレモニー');
   });
 
@@ -220,9 +220,10 @@ describe('② タイムスケジュール：版番号と引換券（§7-3 の 1�
 
     const before = JSON.stringify(sheetRows(b));
     const r = save(b, { ticket: mine, rows: [OPENING] });
-    assert.strictEqual(r.ok, false);
-    assert.strictEqual(r.error, 'conflict', JSON.stringify(r));
-    assert.strictEqual(JSON.stringify(sheetRows(b)), before, 'シートが書き換わっています');
+    assert.strictEqual(r.ok, false, '版が進んでいるのに保存されました: ' + JSON.stringify(r));
+    assert.strictEqual(r.error, 'conflict', '版が進んでいるのに保存されました: ' + JSON.stringify(r));
+    assert.strictEqual(JSON.stringify(sheetRows(b)), before,
+      '版が進んでいるのにシートが書き換わりました');
   });
 
   test('2b. 断るときは、最新の行と新しい券を一緒に返す（入れ直せるように）', () => {
@@ -260,9 +261,9 @@ describe('② タイムスケジュール：版番号と引換券（§7-3 の 1�
     const bad = parts[0] + '.' + parts[1].slice(0, -1) + (last === 'A' ? 'B' : 'A');
 
     const r = save(b, { ticket: bad, rows: [OPENING] });
-    assert.strictEqual(r.ok, false);
-    assert.strictEqual(r.error, 'bad_ticket', JSON.stringify(r));
-    assert.strictEqual(sheetRows(b).length, 0, 'シートが書き換わっています');
+    assert.strictEqual(r.ok, false, '署名が違う券が通りました: ' + JSON.stringify(r));
+    assert.strictEqual(r.error, 'bad_ticket', '署名が違う券が通りました: ' + JSON.stringify(r));
+    assert.strictEqual(sheetRows(b).length, 0, '署名が違う券でシートが書き換わりました');
   });
 
   test('3b. 中身だけ書き換えて版を偽っても断る（署名が合わない）', () => {
@@ -277,7 +278,8 @@ describe('② タイムスケジュール：版番号と引換券（§7-3 の 1�
     const forged = Buffer.from(JSON.stringify({ v: 13, e: b.now() + 3600000 }))
       .toString('base64').split('+').join('-').split('/').join('_');
     const r = save(b, { ticket: forged + '.' + t.split('.')[1], rows: [OPENING] });
-    assert.strictEqual(r.error, 'bad_ticket', JSON.stringify(r));
+    assert.strictEqual(r.error, 'bad_ticket',
+      '中身を書き換えた券が通りました: ' + JSON.stringify(r));
   });
 
   test('4. |purge の鍵で作った券では通らない（鍵が分かれている）', () => {
@@ -289,7 +291,8 @@ describe('② タイムスケジュール：版番号と引換券（§7-3 の 1�
       .update(payload).digest('base64').split('+').join('-').split('/').join('_');
 
     const r = save(b, { ticket: payload + '.' + sig, rows: [OPENING] });
-    assert.strictEqual(r.error, 'bad_ticket', JSON.stringify(r));
+    assert.strictEqual(r.error, 'bad_ticket',
+      '|purge の鍵で作った券が通りました（鍵が分かれていません）: ' + JSON.stringify(r));
   });
 
   test('4b. 逆に、この画面の鍵で作った券なら通る（検査そのものの前提を確かめる）', () => {
@@ -428,9 +431,11 @@ describe('② タイムスケジュール：入力の検証（§3-4・§7-3 の 
       { lane: 'イベント', start: '13:00', min: 30, title: '' },   // タイトルが空
       GATE,
     ]);
-    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.ok, false,
+      '通らない行があるのに保存されました: ' + JSON.stringify(r));
     assert.strictEqual(r.error, 'bad_value', JSON.stringify(r));
-    assert.strictEqual(JSON.stringify(sheetRows(b)), before, 'シートが書き換わっています');
+    assert.strictEqual(JSON.stringify(sheetRows(b)), before,
+      '通らない行があるのにシートが書き換わりました');
   });
 
   test('6b. 断るときは、何件目の何が悪いかを言う', () => {
@@ -470,8 +475,9 @@ describe('② タイムスケジュール：入力の検証（§3-4・§7-3 の 
     const b = makeBox({ version: 1 });
     ['25:00', '11:60', '1100', '11時', '', '11:0', 'あ11:00'].forEach(bad => {
       const r = loadThenSave(makeBox({ version: 1 }), [Object.assign({}, OPENING, { start: bad })]);
-      assert.strictEqual(r.ok, false, '「' + bad + '」が通っています');
-      assert.match(r.message, /開始時刻/, '「' + bad + '」: ' + r.message);
+      assert.strictEqual(r.ok, false, '時刻でないものが通りました：「' + bad + '」');
+      assert.match(r.message, /開始時刻/,
+        '時刻でないものが、別の理由で断られました：「' + bad + '」→ ' + r.message);
     });
   });
 
@@ -491,7 +497,8 @@ describe('② タイムスケジュール：入力の検証（§3-4・§7-3 の 
   test('レーンの許可リストは constructor で開かない（§7-2）', () => {
     const r = loadThenSave(makeBox({ version: 1 }),
       [Object.assign({}, OPENING, { lane: 'constructor' })]);
-    assert.strictEqual(r.ok, false, JSON.stringify(r));
+    assert.strictEqual(r.ok, false,
+      'constructor がレーン名として通りました（許可リストが素のオブジェクトです）');
     assert.match(r.message, /レーン/, r.message);
   });
 
@@ -592,7 +599,8 @@ describe('② タイムスケジュール：入力の検証（§3-4・§7-3 の 
   test('券が無いときは、行の中身を見る前に断る', () => {
     // 検証を先にすると、券を持たない人が「何を送ると通るか」を試せる
     const r = save(makeBox({ version: 1 }), { rows: [{ lane: 'だめ', start: 'だめ', title: '' }] });
-    assert.strictEqual(r.error, 'no_ticket', JSON.stringify(r));
+    assert.strictEqual(r.error, 'no_ticket',
+      '券が無いのに、行の中身を先に見ています: ' + JSON.stringify(r));
   });
 });
 

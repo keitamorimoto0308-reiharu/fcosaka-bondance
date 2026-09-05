@@ -28,6 +28,19 @@ const SHOTS = [
   // ステータスの選択肢。resize で閉じる作りなので、撮影の直前に開き直す
   { name: 'sched-status', role: 'admin', tab: 'sched', w: 1400, h: 900,
     after: "var b=document.querySelector('.sch-status[data-sid]'); if(b){b.click();}" },
+  // ② タイムスケジュール
+  { name: 'tt',         role: 'admin', tab: 'tt',   w: 1400, h: 1200 },
+  { name: 'tt-sp',      role: 'admin', tab: 'tt',   w: 390,  h: 1100 },
+  { name: 'tt-pop',     role: 'admin', tab: 'tt',   w: 1400, h: 900,
+    after: 'ttOpenPop(null);' },
+  // 重なりを作って、警告の帯と半分幅の共存を目で確かめる
+  { name: 'tt-overlap', role: 'admin', tab: 'tt',   w: 1400, h: 1000,
+    after: "ttApply('確認用', ttInsert(TT.rows, {id:'zzzz9999',lane:TT.lanes[1],"
+         + "start:'11:20',min:30,title:'重なりの確認',casts:[],detail:'',locked:false}));" },
+  // ぶつかったときの帯。**本番では起こせない**ので、模擬だけの入口で起こす
+  { name: 'tt-conflict', role: 'admin', tab: 'tt',  w: 1400, h: 1000,
+    after: "ttApply('確認用', ttMove(TT.rows, TT.rows[0].id, TT.rows[0].lane, '09:45', TT.lanes));"
+         + "api('mockTimetableBumpVersion').then(function(){ ttSave(false); });" },
   { name: 'list',       role: 'admin', tab: 'list', w: 1400, h: 900 },
   { name: 'map',        role: 'admin', tab: 'map',  w: 1400, h: 1000 },
   { name: 'detail',     role: 'admin', tab: 'list', w: 1400, h: 1100, open: 'SB-0003' },

@@ -33,6 +33,8 @@ const { TOKENS: T, icon } = require('./theme.js');
  * （esc をモジュールから呼ばず、引数で受け取っているのはそのため）。
  */
 const { linkifyDetail } = require('./linkify.js');
+// ②のずらし・共存・ロックの規則。**画面の中に書かない**（テストから呼べなくなる）
+const { rulesSource } = require('./timetable-rules.js');
 
 const endpointPath = path.join(ROOT, 'src', 'endpoint.json');
 const ENDPOINT = fs.existsSync(endpointPath)
@@ -111,7 +113,7 @@ nav.tabs{background:#fff;border-bottom:1px solid var(--border);position:sticky;t
   color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
 .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand-deep)}
 /* まだ素材を出していない事業者。営業が一目で拾えるようにする */
-.docs-vendor.yet summary{color:var(--ink-muted)}
+.docs-vendor.yet summary{color:var(--muted)}
 .docs-vendor.yet .cnt{color:var(--error);font-weight:700}
 main{max-width:1280px;margin:0 auto;padding:20px 16px 64px}
 .view{display:none}
@@ -613,6 +615,14 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
    2026-09-04、「種類がタスクなのに終了日の欄が出る」形で実際に踏んだ。
    HTMLもJSも正しいのにCSSだけで機能が死ぬので、目で見るまで気づけない。
    .editrow は他のパネルでも使っているので、そちらの穴もここで塞がる。 */
+/* **これ1本で、この種類のバグが終わる。**
+   !important は詳細度によらず勝つので、あとから
+   .tt-pop label{display:block} のような規則が増えても負けない。
+   下の列挙（①のときに書いたもの）は、これがあれば要らないが、
+   「なぜ要るのか」の説明として残しておく。
+   （ここはCSSを書き出すテンプレートリテラルの中なので、
+     説明にバッククォートを使わない。文字列がそこで終わる） */
+[hidden]{display:none!important}
 .editrow[hidden],.grp[hidden],.sch-bar[hidden],.sch-terms[hidden]{display:none}
 
 /* ─────────────── ① 制作スケジュール表
@@ -621,14 +631,14 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
    勝手に色が付いた。同じ名前を別の意味で2回使うと、静かに混ざる。 */
 .sch-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
 .sch-bar .sp{margin-left:auto}
-.sch-chip{background:#fff;border:1px solid var(--line);border-radius:999px;
+.sch-chip{background:#fff;border:1px solid var(--border);border-radius:999px;
   padding:7px 14px;font-size:12.5px;cursor:pointer;color:var(--ink)}
 .sch-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
 .sch-note{font-size:11.5px;color:var(--muted);margin:0 0 14px;line-height:1.7}
 
 /* いま動いている期間の帯 */
 .sch-terms{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 16px}
-.sch-term{flex:1 1 240px;background:#fff;border:1px solid var(--line);
+.sch-term{flex:1 1 240px;background:#fff;border:1px solid var(--border);
   border-left:3px solid var(--accent);border-radius:6px;padding:11px 14px}
 .sch-term .n{font-weight:700;font-size:13px;margin-bottom:5px}
 .sch-term .d{font-size:11.5px;color:var(--muted)}
@@ -642,8 +652,8 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-group.late h3{color:var(--error)}
 
 .sch-table{width:100%;border-collapse:collapse;background:#fff;
-  border:1px solid var(--line);border-radius:6px;overflow:hidden}
-.sch-table td{padding:10px 12px;border-top:1px solid var(--line);font-size:13px;
+  border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.sch-table td{padding:10px 12px;border-top:1px solid var(--border);font-size:13px;
   vertical-align:top}
 .sch-table tr:first-child td{border-top:0}
 .sch-row{cursor:pointer}
@@ -652,7 +662,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-row .ttl{font-weight:600}
 .sch-row .dsc{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.6;
   white-space:pre-wrap;word-break:break-word}
-.sch-row .dsc a{color:var(--brandDeep)}
+.sch-row .dsc a{color:var(--brand-deep)}
 .sch-row .who{white-space:nowrap;width:1%}
 
 /* 遅れ・注意は**塗りと左の線の2つで**示す。色だけに頼らない
@@ -667,7 +677,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-row.done td:first-child{box-shadow:inset 3px 0 0 #CFCBC9}
 .sch-row.done .dt,.sch-row.done .ttl{color:var(--muted)}
 .sch-row.done .ttl{text-decoration:line-through}
-.sch-row.mile td{background:var(--accentPale)}
+.sch-row.mile td{background:var(--accent-pale)}
 .sch-row.mile td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 
 /* 会社の頭文字。Bebas Neue は使わない
@@ -678,26 +688,26 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   font-family:${T.fontBody};margin-right:3px;vertical-align:middle}
 .sch-ico.dotted{background:#fff;border:1px dashed #8C8481;color:#6E6763}
 
-.sch-status{display:inline-block;border:1px solid var(--line);border-radius:999px;
+.sch-status{display:inline-block;border:1px solid var(--border);border-radius:999px;
   padding:3px 10px;font-size:11.5px;background:#fff;cursor:pointer;white-space:nowrap}
-.sch-status.s2{border-color:var(--brandDeep);color:var(--brandDeep)}
+.sch-status.s2{border-color:var(--brand-deep);color:var(--brand-deep)}
 .sch-status.s3{border-color:var(--accent);color:var(--accent)}
 .sch-status.s4{background:#EFEBE9;color:var(--muted)}
 .sch-status.s5{border-color:#C97A16;color:#9A5B24}
 .sch-status.s6{background:#F5F5F4;color:var(--muted);text-decoration:line-through}
 
 /* ステータスの選択肢。押したその場で出す小窓（パネルは開かない） */
-.sch-menu{position:fixed;z-index:70;background:#fff;border:1px solid var(--line);
+.sch-menu{position:fixed;z-index:70;background:#fff;border:1px solid var(--border);
   border-radius:8px;box-shadow:0 10px 28px rgba(35,24,22,.18);padding:5px;min-width:150px}
 .sch-menu button{display:block;width:100%;text-align:left;background:none;border:0;
   padding:9px 12px;font-size:13px;border-radius:5px;cursor:pointer;color:var(--ink)}
 .sch-menu button:hover{background:#F5F2F0}
 .sch-menu button[aria-pressed="true"]{background:var(--ink);color:#fff}
 
-.sch-add{width:100%;background:none;border:1px dashed var(--line);border-radius:6px;
+.sch-add{width:100%;background:none;border:1px dashed var(--border);border-radius:6px;
   padding:9px;font-size:12px;color:var(--muted);cursor:pointer;margin-top:6px}
-.sch-add:hover{border-color:var(--brandDeep);color:var(--brandDeep)}
-.sch-empty{background:#fff;border:1px solid var(--line);border-radius:6px;
+.sch-add:hover{border-color:var(--brand-deep);color:var(--brand-deep)}
+.sch-empty{background:#fff;border:1px solid var(--border);border-radius:6px;
   padding:26px;text-align:center;color:var(--muted);font-size:13px}
 
 /* 完了にしたときのえふし君。**クリックは通り抜ける**（操作を止めない） */
@@ -720,6 +730,108 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 @media (max-width:700px){
   .sch-table td{padding:9px 10px}
   .sch-row .who{display:none}
+}
+
+/* ─────────────── ② タイムスケジュール（当日の時間割）
+   このタブのCSSは**全部 tt- で始める**（設計 §4-7）。
+   設計案v2で .alert という名前が①と衝突し、勝手に色が付いた。
+   同じ名前を別の意味で2回使うと、静かに混ざる。 */
+
+/* 保存の状態と、いま編集している人。**帯で出す**（§4-4） */
+.tt-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.tt-bar .sp{margin-left:auto}
+/* 変更が無いときは押せない。押せるように見えるボタンは、迷いを生む */
+.tt-bar button[disabled]{opacity:.45;cursor:default}
+.tt-state{font-size:12px;color:var(--muted)}
+.tt-state.dirty{color:var(--brand-deep);font-weight:700}
+.tt-editors{display:flex;flex-wrap:wrap;gap:6px;font-size:11.5px;color:var(--muted)}
+.tt-editors i{font-style:normal;background:var(--subtle);border:1px solid var(--border);
+  border-radius:999px;padding:3px 9px}
+
+/* 断られたときの帯。**トーストにしない**（数秒で消えると
+   離席中に流れて「保存されたつもり」になる。それがいちばん危ない・§4-4） */
+.tt-banner{background:#FFF4F2;border:1px solid var(--error);border-left:4px solid var(--error);
+  border-radius:6px;padding:13px 15px;margin:0 0 14px;font-size:13px;line-height:1.8}
+.tt-banner h4{margin:0 0 6px;font-size:13.5px;color:var(--error)}
+.tt-banner ul{margin:6px 0 10px;padding-left:1.2em}
+.tt-banner li{font-size:12.5px}
+.tt-banner .btns{display:flex;gap:8px;flex-wrap:wrap}
+
+/* 重なりの警告。押すと4択が出る（§5-2） */
+.tt-warn{background:#FFF9E8;border:1px solid #E0B84A;border-left:4px solid #E0B84A;
+  border-radius:6px;padding:11px 14px;margin:0 0 14px;font-size:12.5px;cursor:pointer}
+.tt-warn b{display:block;margin-bottom:3px;font-size:13px}
+
+.tt-wrap{background:#fff;border:1px solid var(--border);border-radius:8px;
+  overflow:auto;max-height:70vh;position:relative}
+.tt-head{display:grid;position:sticky;top:0;z-index:3;background:#fff;
+  border-bottom:1px solid var(--border)}
+.tt-head div{padding:9px 8px;font-size:12px;font-weight:700;text-align:center;
+  border-left:1px solid var(--border)}
+.tt-head div:first-child{border-left:0}
+/* 上下に余白。無いと 08:00 の目盛りが半分だけ枠の外に出る */
+.tt-body{display:grid;position:relative;padding:10px 0 14px}
+.tt-times{position:relative}
+.tt-times span{position:absolute;right:6px;font-size:11px;color:var(--muted);
+  transform:translateY(-50%)}
+.tt-lane{--tt-hour:72px;position:relative;border-left:1px solid var(--border);
+  background-image:repeating-linear-gradient(to bottom,
+    var(--border) 0 1px, transparent 1px var(--tt-hour, 72px))}
+.tt-lane.on{background-color:var(--brand-pale)}
+
+.tt-ev{position:absolute;border-radius:5px;padding:4px 6px;font-size:11.5px;
+  line-height:1.4;overflow:hidden;cursor:grab;border:1px solid var(--brand-deep);
+  background:var(--brand-pale);color:var(--ink);touch-action:none}
+.tt-ev.lane1{border-color:#2E7D5B;background:#E7F3EC}
+.tt-ev.lane2{border-color:#8A6D3B;background:#F6EFE2}
+.tt-ev b{display:block;font-weight:700;font-size:12px}
+.tt-ev .t{color:var(--muted);font-size:10.5px}
+.tt-ev .cast{font-size:10.5px;color:var(--brand-deep)}
+.tt-ev.mark{border-style:none;background:none;border-top:2px solid var(--ink);
+  border-radius:0;padding:2px 6px}
+/* 短い予定は1行に詰める。2行だと枠から出て、次の予定に重なって見える */
+.tt-ev.slim{display:flex;gap:6px;align-items:baseline;white-space:nowrap;padding:2px 6px}
+.tt-ev.slim b{font-size:11.5px}
+.tt-ev.over{outline:2px solid #E0B84A;outline-offset:-2px}
+.tt-ev.lock::after{content:"鍵";position:absolute;top:2px;right:4px;font-size:9px;
+  color:var(--muted)}
+.tt-ev.sel{box-shadow:0 0 0 2px var(--ink)}
+.tt-grip{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize}
+.tt-ghost{position:absolute;border:1px dashed var(--ink);background:rgba(0,0,0,.05);
+  border-radius:5px;pointer-events:none}
+
+/* クイック作成の窓（§4-1）。Googleカレンダーの作法をまねる */
+.tt-pop{position:fixed;z-index:80;background:#fff;border:1px solid var(--border);
+  border-radius:8px;box-shadow:0 10px 34px rgba(0,0,0,.18);padding:14px;width:320px;
+  max-width:calc(100vw - 24px)}
+.tt-pop label{display:block;font-size:11.5px;color:var(--muted);margin:0 0 9px}
+.tt-pop input,.tt-pop select,.tt-pop textarea{width:100%;padding:8px 9px;font-size:13px;
+  border:1px solid var(--border);border-radius:5px;font-family:inherit}
+.tt-pop .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.tt-pop .btns{display:flex;gap:8px;align-items:center;margin-top:4px}
+.tt-pop .btns .sp{margin-left:auto}
+.tt-pop .more{font-size:11.5px;color:var(--brand-deep);background:none;border:0;
+  padding:0;cursor:pointer;text-decoration:underline}
+.tt-pop .err{color:var(--error);font-size:11.5px;margin:0 0 8px}
+
+/* スマホの＋。スクロールしても付いてくる（§4-1） */
+.tt-fab{position:fixed;right:16px;bottom:16px;z-index:40;width:52px;height:52px;
+  border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:26px;
+  cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.24)}
+
+/* hidden 属性は、いちばん上の [hidden]{display:none!important} が面倒を見る。
+   **ここでクラスを列挙しない。**列挙する形は、新しいクラスを足すたびに破れる。
+   実際、②の窓の詳細欄（<label hidden> が .tt-pop label{display:block} に負けた）で
+   同じことが起きた（2026-09-05）。 */
+
+@media (max-width:700px){
+  .tt-wrap{max-height:64vh}
+  .tt-ev{font-size:11px;padding:3px 5px}
+  .tt-ev .cast{display:none}
+}
+@media (min-width:701px){
+  /* PCでは上の「予定を追加」を使う。丸ボタンは重ねない */
+  .tt-fab{display:none}
 }
 `;
 }
@@ -2106,6 +2218,9 @@ function showTab(name, keepHash){
   // 制作スケジュールは毎回読み直す。全員が触れる画面なので、
   // 開いたときに古い並びを見せると、他の人が入れたものに気づけない
   if (name === 'sched') loadSched();
+  // タイムスケジュールも毎回読み直す。全員が触れる画面なので、
+  // 開いたときに古い時間割を見せると、他の人の変更に気づけないまま上書きする
+  if (name === 'tt') loadTimetable();
   if (name === 'map' && !S.spaces) loadSpaces();
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
@@ -2127,7 +2242,7 @@ function showTab(name, keepHash){
 function applyHash(){
   var parts = location.hash.replace(/^#/, '').split('/');
   var tab = parts[0];
-  if (['dash','sched','list','map','day','docs','mail','people','history','settings'].indexOf(tab) < 0) return;
+  if (['dash','sched','tt','list','map','day','docs','mail','people','history','settings'].indexOf(tab) < 0) return;
   showTab(tab, true);
   if (tab === 'list' && parts[1]){
     var wait = setInterval(function(){
@@ -3460,6 +3575,7 @@ document.addEventListener('DOMContentLoaded', function(){
   $('.drawer').addEventListener('click', function(e){ if (e.target === $('.drawer')) closeDetail(); });
   $('#dSave').addEventListener('click', saveDetail);
   bindSched();
+  bindTimetable();
   $('#aWho').addEventListener('change', onWhoChange);
   $('#aDel').addEventListener('click', unassign);
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDetail(); });
@@ -4011,6 +4127,668 @@ function bindSched(){
   }, true);
   window.addEventListener('resize', schCloseMenu);
 }
+
+// ─────────────────────────── ② タイムスケジュール（当日の時間割）
+/*
+ * この画面は、この仕組みの中で**唯一「入力して記録する画面」ではない**。
+ * 直接つかんで動かすエディタなので、操作の作法は Googleカレンダーをまねる（§4-1）。
+ * **操作を発明しない。** ビジネスパーソンが慣れているものをそのまま持ってくる。
+ *
+ * ずらし・共存・ロックの規則は、ここに書かない。
+ * src/timetable-rules.js に置いて、**画面とテストが同じものを呼ぶ**（§9 手順4）。
+ * 下の塊は rulesSource() が書き出したもので、
+ * **関数の外側のスコープは失われている**（レーン名を引数で受け取るのはそのため）。
+ */
+${rulesSource()}
+
+var TT = { rows: [], lanes: [], casts: [], version: 0, ticket: '', day: '',
+           autosaveMin: 3, editors: [], me: {}, loaded: false,
+           dirty: false, savedAt: 0, log: [], undo: [], sel: null,
+           drag: null, timer: null, beat: null, pop: null };
+
+/*
+ * 1分あたりの高さ(px)。
+ *
+ * **1.2 では足りなかった。**10分の予定が 12px にしかならず、
+ * 最低高さ(22px)まで引き伸ばされて**次の予定にはみ出し**、
+ * あとから描かれたほうに覆われて見えなくなった（2026-09-05・撮影して発覚）。
+ * HTMLもJSも正しいのに**目で見るまで気づけない**形。
+ * 1.8 なら 10分 = 18px で、最低高さと一致してはみ出さない。
+ */
+var TT_PPM = 1.8;
+var TT_SNAP = 5;       // 5分刻み。1分刻みにすると、指では狙えない
+
+/** 表示する時間の幅。予定に合わせて広がる（既定は 08:00〜20:00） */
+function ttRange(){
+  var from = 8 * 60, to = 20 * 60;
+  TT.rows.forEach(function(r){
+    var s = ttMinutes(r.start); if (s === null) return;
+    var e = ttEnd(r);
+    if (s < from) from = Math.floor(s / 60) * 60;
+    if (e > to) to = Math.ceil(e / 60) * 60;
+  });
+  return { from: Math.max(from, 0), to: Math.min(Math.max(to, from + 120), 1440) };
+}
+
+function ttSnap(min){
+  var n = Math.round(min / TT_SNAP) * TT_SNAP;
+  return Math.max(0, Math.min(n, 1440));
+}
+
+function ttFind(id){
+  for (var i = 0; i < TT.rows.length; i++) if (TT.rows[i].id === id) return TT.rows[i];
+  return null;
+}
+
+/** 画面だけの仮のID。保存のときサーバーが8桁の本物を振る */
+function ttTempId(){
+  return 'n' + String(Date.now()).slice(-6) + String(Math.floor(Math.random() * 90) + 10);
+}
+
+function ttVisible(){
+  var v = document.getElementById('v-tt');
+  return !!(v && v.classList.contains('on'));
+}
+
+function loadTimetable(){
+  api('adminTimetable').then(function(r){
+    if (!r || !r.ok){
+      toast((r && r.message) || 'タイムスケジュールを読み込めませんでした', true);
+      return;
+    }
+    /*
+     * 未保存の変更を、黙って捨てない。**捨てるのは人が決めること**。
+     * ただし、やめたときは**やめたと言う**。黙って何も起きないと、
+     * 「押したのに何も変わらない」ようにしか見えないうえ、
+     * 券が古いままなので、次の保存が必ず断られる（2026-09-05 に実際に迷った）。
+     */
+    if (TT.dirty && !confirm('保存していない変更があります。読み込み直すと失われます。よろしいですか。')){
+      toast('読み込み直しをやめました。いまの変更はそのままです');
+      return;
+    }
+    TT.rows = r.rows || [];
+    TT.lanes = r.lanes || [];
+    TT.casts = r.casts || [];
+    TT.version = r.version || 0;
+    TT.ticket = r.ticket || '';
+    TT.day = r.day || '';
+    TT.autosaveMin = r.autosaveMin || 3;
+    TT.editors = r.editors || [];
+    TT.me = r.me || {};
+    TT.dirty = false; TT.log = []; TT.undo = []; TT.savedAt = Date.now();
+    TT.loaded = true;
+    $('#ttBanner').hidden = true;
+    ttRenderHead(); renderTT(); ttStatus(); ttStartTimers();
+  }, function(e){ toast(String(e && e.message || e), true); });
+}
+
+function ttRenderHead(){
+  // **レーン名は画面に直書きしない。**サーバーが返した配列から組む（§7-5）
+  /*
+   * レーンは**細くしすぎない**。スマホで3本を等分すると1本100pxほどになり、
+   * 「オープニングセレモニー」が2文字も入らない。
+   * minmax で下限を置いて、入らなければ**枠の中で横にスクロール**させる
+   * （ページ全体を横に広げてはいけない。.tt-wrap が overflow:auto で受ける）。
+   */
+  var cols = '56px repeat(' + Math.max(TT.lanes.length, 1) + ', minmax(132px, 1fr))';
+  var head = $('#ttHead'), body = $('#ttBody');
+  head.style.gridTemplateColumns = cols;
+  body.style.gridTemplateColumns = cols;
+  head.innerHTML = '<div>時刻</div>'
+    + TT.lanes.map(function(l){ return '<div>' + esc(l) + '</div>'; }).join('');
+}
+
+function renderTT(){
+  if (!TT.loaded) return;
+  var R = ttRange();
+  var h = Math.round((R.to - R.from) * TT_PPM);
+  var lay = ttLayout(TT.rows);
+
+  var times = '<div class="tt-times" style="height:' + h + 'px">';
+  for (var m = R.from; m <= R.to; m += 60){
+    times += '<span style="top:' + Math.round((m - R.from) * TT_PPM) + 'px">'
+           + ttHhmm(m) + '</span>';
+  }
+  times += '</div>';
+
+  var lanes = TT.lanes.map(function(lane, li){
+    var evs = TT.rows.filter(function(r){ return r.lane === lane; })
+      .map(function(r){ return ttEvHtml(r, li, lay[r.id] || {col:0,cols:1}, R); })
+      .join('');
+    return '<div class="tt-lane" data-lane="' + esc(lane) + '" data-li="' + li + '" '
+         + 'style="height:' + h + 'px;--tt-hour:' + Math.round(60 * TT_PPM) + 'px">'
+         + evs + '</div>';
+  }).join('');
+
+  $('#ttBody').innerHTML = times + lanes;
+  ttRenderWarn();
+  var n = TT.rows.length;
+  $('#ttNote').textContent = (TT.day ? TT.day + ' の進行表です。' : '')
+    + '予定は ' + n + ' 件です。'
+    + '空いているところを押すと予定を作れます。予定を押すと中身が開きます。';
+}
+
+function ttEvHtml(r, li, lay, R){
+  var s = ttMinutes(r.start);
+  if (s === null){
+    // 読めない時刻の行を**消さない**。消すと、直す手がかりごと失われる
+    return '<div class="tt-ev" data-id="' + esc(r.id) + '" style="top:0;left:0;right:0">'
+         + '<b>' + esc(r.title) + '</b><span class="t">時刻を読み取れません</span></div>';
+  }
+  var e = ttEnd(r);
+  var top = Math.round((s - R.from) * TT_PPM);
+  var isMark = !(r.min > 0);
+  var hh = isMark ? 18 : Math.max(Math.round((e - s) * TT_PPM), 18);
+  // 低い枠に2行を詰めると、下の行が枠から出る。短いものは1行にする
+  var slim = !isMark && hh < 40;
+  var cols = lay.cols || 1, col = lay.col || 0;
+  var left = (col / cols * 100), width = (100 / cols);
+  var cls = 'tt-ev lane' + li
+    + (isMark ? ' mark' : '')
+    + (slim ? ' slim' : '')
+    + (lay.overlap ? ' over' : '')
+    + (r.locked ? ' lock' : '')
+    + (TT.sel === r.id ? ' sel' : '');
+  var when = isMark ? r.start : (r.start + '〜' + ttHhmm(e));
+  var casts = (r.casts && r.casts.length)
+    ? '<span class="cast">' + esc(r.casts.join('・')) + '</span>' : '';
+  return '<div class="' + cls + '" data-id="' + esc(r.id) + '" '
+    + 'style="top:' + top + 'px;height:' + hh + 'px;'
+    + 'left:calc(' + left + '% + 2px);width:calc(' + width + '% - 4px)">'
+    + '<b>' + esc(r.title) + '</b>'
+    + '<span class="t">' + esc(when) + '</span> ' + casts
+    + (isMark ? '' : '<div class="tt-grip"></div>')
+    + '</div>';
+}
+
+/**
+ * 重なりの警告。**帯で出す。トーストにしない**（§4-4・§5-2）。
+ * 押したときに4択を出す。ドラッグのたびにダイアログを出すと、
+ * 「とりあえず置いてみて、あとで直す」ができなくなる。
+ */
+function ttRenderWarn(){
+  var w = ttWarnings(TT.rows);
+  var box = $('#ttWarn');
+  if (!w.length){ box.hidden = true; TT.warn = []; return; }
+  TT.warn = w;
+  box.hidden = false;
+  box.innerHTML = '<b>時間が重なっています（' + w.length + 'か所）</b>'
+    + w.map(function(g){
+        return '<div>' + esc(g.lane) + '　' + esc(g.start) + '　'
+             + esc(g.titles.join(' ／ ')) + '</div>';
+      }).join('')
+    + '<div style="margin-top:6px;color:#8A6D3B">押すと、どうするかを選べます。</div>';
+}
+
+// ── 保存
+
+function ttStatus(){
+  var el = $('#ttState');
+  var save = $('#ttSave');
+  if (!TT.loaded){ el.textContent = ''; return; }
+  if (TT.dirty){
+    el.textContent = '保存していません（変更 ' + TT.log.length + ' 件）';
+    el.className = 'tt-state dirty';
+  } else {
+    var ago = TT.savedAt ? ttAgo(Math.round((Date.now() - TT.savedAt) / 1000)) : '';
+    // 「たった今に保存しました」は日本語として読めない。助詞を分ける
+    el.textContent = ago ? (ago === 'たった今' ? 'たった今保存しました'
+                                              : ago + 'に保存しました') : '';
+    el.className = 'tt-state';
+  }
+  if (save) save.disabled = !TT.dirty;
+  $('#ttUndo').disabled = !TT.undo.length;
+
+  var ed = $('#ttEditors');
+  if (!TT.editors.length){ ed.hidden = true; }
+  else {
+    ed.hidden = false;
+    ed.innerHTML = TT.editors.map(function(x){
+      return '<i>' + esc(x.person) + 'さんが編集中</i>';
+    }).join('');
+  }
+}
+
+function ttAgo(sec){
+  if (sec < 60) return 'たった今';
+  var m = Math.round(sec / 60);
+  if (m < 60) return m + '分前';
+  return Math.round(m / 60) + '時間前';
+}
+
+/**
+ * 1手ぶんの記録を残してから、行を差し替える（§4-3）。
+ *
+ * この1つのリストが2つの役に立つ：
+ *   1. 元に戻す（Ctrl+Z）
+ *   2. 保存がぶつかったとき、「あなたが加えていた変更」としてそのまま出す
+ * **差分を作る仕組みを別に書かない。**記録を残すほうが短くて、しかも文章が良い。
+ */
+function ttApply(label, res){
+  TT.undo.push({ rows: JSON.parse(JSON.stringify(TT.rows)), label: label });
+  if (TT.undo.length > 50) TT.undo.shift();
+  TT.rows = res.rows;
+  TT.log.push(label);
+  TT.dirty = true;
+  renderTT(); ttStatus();
+  if (res.stopped === 'locked') toast('鍵の付いた予定があるので、そこで止めました');
+  if (res.stopped === 'day') toast('その先は翌日になるので、動かしませんでした', true);
+  if (res.stopped === 'lane') toast('その列には移せませんでした', true);
+}
+
+function ttUndoOne(){
+  var u = TT.undo.pop();
+  if (!u) return;
+  TT.rows = u.rows;
+  TT.log.pop();
+  TT.dirty = true;
+  renderTT(); ttStatus();
+  toast('「' + u.label + '」を取り消しました');
+}
+
+function ttSave(auto){
+  if (!TT.loaded || !TT.ticket) return;
+  api('adminTimetableSave', { ticket: TT.ticket, rows: TT.rows }).then(function(r){
+    if (r && r.ok){
+      TT.version = r.version; TT.ticket = r.ticket; TT.rows = r.rows || TT.rows;
+      TT.dirty = false; TT.log = []; TT.savedAt = Date.now();
+      $('#ttBanner').hidden = true;
+      renderTT(); ttStatus();
+      if (!auto) toast('保存しました');
+      return;
+    }
+    // **自動保存が断られたときも、必ず帯を出す**（§4-5）。黙って失敗させない
+    if (r && r.error === 'conflict'){ ttConflictBanner(r); return; }
+    ttBanner('保存できませんでした。', (r && r.message) || 'もう一度お試しください。');
+  }, function(e){
+    ttBanner('保存できませんでした。', String(e && e.message || e));
+  });
+}
+
+function ttBanner(head, body){
+  var b = $('#ttBanner');
+  b.innerHTML = '<h4>' + esc(head) + '</h4><div>' + esc(body || '') + '</div>';
+  b.hidden = false;
+}
+
+/**
+ * ぶつかったときの帯（§4-4）。
+ * **消えない帯にする。**トーストだと、離席中に流れて
+ * 「保存されたつもり」になる。それがいちばん危ない。
+ */
+function ttConflictBanner(r){
+  var b = $('#ttBanner');
+  var who = r.by ? esc(r.by) + 'さん' : 'ほかの方';
+  // agoSec が 0（＝たった今）でも出す。**いつ変えられたかは、帯の要**
+  var ago = (r.by && typeof r.agoSec === 'number') ? '（' + ttAgo(r.agoSec) + '）' : '';
+  b.innerHTML = '<h4>保存できませんでした。</h4>'
+    + '<div>あなたが開いてから、<b>' + who + '</b>が変更しています' + ago + '。</div>'
+    + (TT.log.length
+        ? '<div>あなたが加えていた変更：</div><ul>'
+          + TT.log.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
+        : '')
+    + '<div class="btns"><button class="btn" id="ttTakeLatest">最新を読み込む</button></div>';
+  b.hidden = false;
+  TT.pending = r;
+  $('#ttTakeLatest').addEventListener('click', ttTakeLatest);
+}
+
+/**
+ * 最新を入れる。**変更の一覧は帯に残す**（§4-4）。
+ * それを見ながら入れ直すのが、この機能の使いみち。
+ */
+function ttTakeLatest(){
+  var r = TT.pending;
+  if (!r) return;
+  var log = TT.log.slice();
+  TT.rows = r.rows || []; TT.version = r.version; TT.ticket = r.ticket;
+  TT.dirty = false; TT.log = []; TT.undo = []; TT.savedAt = Date.now();
+  renderTT(); ttStatus();
+  var b = $('#ttBanner');
+  b.innerHTML = '<h4>最新を読み込みました。</h4>'
+    + (log.length
+        ? '<div>あなたが加えていた変更です。見ながら入れ直してください：</div><ul>'
+          + log.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
+        : '<div>あなたの変更はありませんでした。</div>')
+    + '<div class="btns"><button class="ghost" id="ttBannerClose">閉じる</button></div>';
+  $('#ttBannerClose').addEventListener('click', function(){ b.hidden = true; });
+}
+
+function ttStartTimers(){
+  if (TT.timer) clearInterval(TT.timer);
+  if (TT.beat) clearInterval(TT.beat);
+  // 自動保存。ドラッグのたびには保存しない（保存が追いつかない・§1-10）
+  TT.timer = setInterval(function(){
+    if (ttVisible() && TT.dirty) ttSave(true);
+    ttStatus();
+  }, Math.max(TT.autosaveMin, 1) * 60000);
+  // 札は60秒ごと。**見えるだけ。締め出さない**（§4-6）
+  TT.beat = setInterval(function(){
+    if (!ttVisible()) return;
+    api('adminTimetableHeartbeat').then(function(r){
+      if (r && r.ok){ TT.editors = r.editors || []; ttStatus(); }
+    }, function(){});
+  }, 60000);
+}
+
+// ── 操作（Googleカレンダーからまねる・§4-1）
+
+function ttOnDown(e){
+  if (e.button !== undefined && e.button !== 0) return;
+  var lane = e.target.closest ? e.target.closest('.tt-lane') : null;
+  if (!lane) return;
+  var R = ttRange();
+  var rect = lane.getBoundingClientRect();
+  var at = ttSnap(R.from + (e.clientY - rect.top) / TT_PPM);
+  var evEl = e.target.closest('.tt-ev');
+
+  if (evEl){
+    var row = ttFind(evEl.getAttribute('data-id'));
+    if (!row) return;
+    TT.sel = row.id;
+    TT.drag = {
+      mode: e.target.classList.contains('tt-grip') ? 'resize' : 'move',
+      id: row.id, y0: e.clientY, x0: e.clientX,
+      start0: ttMinutes(row.start), len0: Number(row.min) || 0,
+      lane0: row.lane, moved: false, el: evEl,
+    };
+  } else {
+    TT.drag = { mode: 'create', lane: lane.getAttribute('data-lane'),
+                y0: e.clientY, x0: e.clientX, start0: at, moved: false, host: lane };
+  }
+  try { $('#ttBody').setPointerCapture(e.pointerId); } catch(err){}
+  e.preventDefault();
+}
+
+function ttOnMove(e){
+  var d = TT.drag; if (!d) return;
+  var dy = e.clientY - d.y0;
+  if (!d.moved && Math.abs(dy) < 4 && Math.abs(e.clientX - d.x0) < 4) return;
+  d.moved = true;
+  d.deltaMin = ttSnap(dy / TT_PPM);
+  if (d.mode === 'create') ttGhost(d.host, d.start0, Math.max(d.deltaMin, TT_SNAP));
+  else if (d.mode === 'move') ttGhost(ttLaneElAt(e.clientX) || d.el.parentNode,
+                                      d.start0 + d.deltaMin, d.len0);
+  else ttGhost(d.el.parentNode, d.start0, Math.max(d.len0 + d.deltaMin, 0));
+}
+
+function ttOnUp(e){
+  var d = TT.drag; TT.drag = null;
+  ttGhostOff();
+  if (!d) return;
+
+  if (d.mode === 'create'){
+    // 押しただけなら30分。ドラッグしたら、その長さ（§4-1）
+    var len = d.moved ? Math.max(d.deltaMin, TT_SNAP) : 30;
+    ttOpenPop(null, { lane: d.lane, start: ttHhmm(d.start0), min: len });
+    return;
+  }
+  var row = ttFind(d.id);
+  if (!row) return;
+  if (!d.moved){ ttOpenPop(row); return; }        // 動かさなければ「押した」＝編集
+
+  if (d.mode === 'move'){
+    var laneEl = ttLaneElAt(e.clientX);
+    var lane = laneEl ? laneEl.getAttribute('data-lane') : row.lane;
+    var to = ttHhmm(ttSnap(d.start0 + d.deltaMin));
+    // ロックは「うっかり動かさない」ための印。**動かせないものではない**（§5-3）
+    if (row.locked && !confirm('「' + row.title + '」には鍵が付いています。動かしますか。')){
+      renderTT(); return;
+    }
+    ttApply(row.title + ' ' + row.start + ' → ' + to
+            + (lane !== row.lane ? '（' + lane + 'へ）' : ''),
+            ttMove(TT.rows, row.id, lane, to, TT.lanes));
+  } else {
+    var len = Math.max(d.len0 + d.deltaMin, 0);
+    ttApply(row.title + ' ' + row.min + '分 → ' + len + '分',
+            ttResize(TT.rows, row.id, len));
+  }
+}
+
+function ttLaneElAt(x){
+  var els = $$('.tt-lane');
+  for (var i = 0; i < els.length; i++){
+    var r = els[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right) return els[i];
+  }
+  return null;
+}
+
+function ttGhost(host, start, len){
+  ttGhostOff();
+  if (!host) return;
+  var R = ttRange();
+  var g = document.createElement('div');
+  g.className = 'tt-ghost';
+  g.style.top = Math.round((start - R.from) * TT_PPM) + 'px';
+  g.style.height = Math.max(Math.round(len * TT_PPM), 12) + 'px';
+  g.style.left = '2px'; g.style.right = '2px';
+  host.appendChild(g);
+  TT.ghost = g;
+}
+function ttGhostOff(){
+  if (TT.ghost && TT.ghost.parentNode) TT.ghost.parentNode.removeChild(TT.ghost);
+  TT.ghost = null;
+}
+
+// ── クイック作成・編集の窓（§4-1）
+
+function ttOpenPop(row, seed){
+  ttClosePop();
+  var isNew = !row;
+  var v = row || { id: ttTempId(), lane: (seed && seed.lane) || TT.lanes[0],
+                   start: (seed && seed.start) || '11:00', min: (seed && seed.min) || 30,
+                   title: '', casts: [], detail: '', locked: false };
+  var pop = document.createElement('div');
+  pop.className = 'tt-pop';
+  pop.innerHTML =
+      '<p class="err" id="ttPopErr" hidden></p>'
+    + '<label>タイトル<input id="ttPopTitle" maxlength="100" '
+    + 'value="' + esc(v.title) + '" placeholder="例：オープニングセレモニー"></label>'
+    + '<div class="row2">'
+    + '<label>開始<input id="ttPopStart" value="' + esc(v.start) + '" placeholder="11:00"></label>'
+    + '<label>所要（分）<input id="ttPopMin" value="' + esc(String(v.min)) + '" '
+    + 'inputmode="numeric" placeholder="30"></label>'
+    + '</div>'
+    + '<label>どの列に入れるか<select id="ttPopLane">'
+    + TT.lanes.map(function(l){
+        return '<option' + (l === v.lane ? ' selected' : '') + '>' + esc(l) + '</option>';
+      }).join('')
+    + '</select></label>'
+    + '<label>出演者（カンマ区切り・自由に書けます）'
+    + '<input id="ttPopCasts" list="ttCastList" maxlength="320" '
+    + 'value="' + esc((v.casts || []).join(', ')) + '" placeholder="例：○○市長"></label>'
+    + '<datalist id="ttCastList">'
+    + TT.casts.map(function(c){ return '<option value="' + esc(c) + '">'; }).join('')
+    + '</datalist>'
+    + '<label style="display:flex;gap:7px;align-items:center">'
+    + '<input type="checkbox" id="ttPopLock" style="width:auto"' + (v.locked ? ' checked' : '') + '>'
+    + 'うっかり動かさないように鍵をかける</label>'
+    + '<button class="more" id="ttPopMore">その他の項目を編集</button>'
+    + '<label id="ttPopDetailBox" hidden style="margin-top:8px">詳細'
+    + '<textarea id="ttPopDetail" rows="3" maxlength="500">' + esc(v.detail || '') + '</textarea></label>'
+    + '<div class="btns">'
+    + (isNew ? '' : '<button class="ghost" id="ttPopDel">削除</button>'
+                  + '<button class="ghost" id="ttPopDup">複製</button>')
+    + '<span class="sp"></span>'
+    + '<button class="ghost" id="ttPopCancel">やめる</button>'
+    + '<button class="print" id="ttPopOk">' + (isNew ? '追加する' : '保存') + '</button>'
+    + '</div>';
+  document.body.appendChild(pop);
+  TT.pop = { el: pop, row: row, draft: v, isNew: isNew };
+  ttPlacePop(pop);
+
+  $('#ttPopMore').addEventListener('click', function(){
+    var d = $('#ttPopDetailBox'); d.hidden = !d.hidden;
+  });
+  $('#ttPopCancel').addEventListener('click', ttClosePop);
+  $('#ttPopOk').addEventListener('click', ttPopSave);
+  if (!isNew){
+    $('#ttPopDel').addEventListener('click', ttPopDelete);
+    $('#ttPopDup').addEventListener('click', ttPopDuplicate);
+  }
+  // **タイトルを打って Enter で確定**できる（§4-1）
+  pop.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA'){ e.preventDefault(); ttPopSave(); }
+  });
+  var t = $('#ttPopTitle'); if (t) t.focus();
+}
+
+function ttPlacePop(pop){
+  var w = pop.getBoundingClientRect();
+  var top = Math.max(Math.round((window.innerHeight - w.height) / 2), 8);
+  var left = Math.max(Math.round((window.innerWidth - w.width) / 2), 8);
+  pop.style.top = top + 'px'; pop.style.left = left + 'px';
+}
+
+function ttClosePop(){
+  if (TT.pop && TT.pop.el && TT.pop.el.parentNode) TT.pop.el.parentNode.removeChild(TT.pop.el);
+  TT.pop = null;
+}
+
+function ttPopSave(){
+  var P = TT.pop; if (!P) return;
+  var err = $('#ttPopErr');
+  var title = $('#ttPopTitle').value.trim();
+  var start = $('#ttPopStart').value.trim();
+  var minRaw = $('#ttPopMin').value.trim();
+  var lane = $('#ttPopLane').value;
+  var casts = $('#ttPopCasts').value.split(',').map(function(s){ return s.trim(); })
+                .filter(function(s){ return s; });
+  var detail = ($('#ttPopDetail') ? $('#ttPopDetail').value : (P.draft.detail || ''));
+  var locked = $('#ttPopLock').checked;
+
+  function ng(m){ err.textContent = m; err.hidden = false; }
+  if (!title) return ng('タイトルをご記入ください。');
+  if (ttMinutes(start) === null) return ng('開始は「11:00」の形でご入力ください。');
+  var min = minRaw === '' ? 0 : Number(minRaw);
+  if (!isFinite(min) || min < 0 || min > 600 || min !== Math.floor(min)){
+    return ng('所要は0〜600分の整数でご入力ください。');
+  }
+  if (ttMinutes(start) + min > 24 * 60) return ng('当日のうちに終わる時間でご入力ください。');
+  if (casts.length > 10) return ng('出演者は10人までです。');
+
+  var item = { id: P.draft.id, lane: lane, start: start, min: min,
+               title: title, casts: casts, detail: detail, locked: locked };
+  ttClosePop();
+
+  if (P.isNew){
+    ttApply('「' + title + '」を追加（' + start + '・' + min + '分）',
+            ttInsert(TT.rows, item));
+  } else {
+    // 中身の書き換えは、ずらしを起こさない（つかんで動かしたのと同じ扱い）。
+    // 所要時間を変えたときだけ、後ろが続いていればずれる
+    var rows = TT.rows.map(function(r){
+      if (r.id !== item.id) return r;
+      var o = {}; for (var k in r) o[k] = r[k];
+      o.lane = item.lane; o.title = item.title; o.casts = item.casts;
+      o.detail = item.detail; o.locked = item.locked;
+      return o;
+    });
+    var moved = ttMove(rows, item.id, item.lane, item.start, TT.lanes);
+    var sized = ttResize(moved.rows, item.id, item.min);
+    ttApply('「' + title + '」を編集', { rows: sized.rows, moved: sized.moved,
+                                         stopped: sized.stopped || moved.stopped });
+  }
+}
+
+function ttPopDelete(){
+  var P = TT.pop; if (!P || !P.row) return;
+  if (!confirm('「' + P.row.title + '」を削除します。よろしいですか。')) return;
+  var title = P.row.title, id = P.row.id;
+  ttClosePop();
+  ttApply('「' + title + '」を削除',
+          { rows: TT.rows.filter(function(r){ return r.id !== id; }), moved: [], stopped: '' });
+}
+
+function ttPopDuplicate(){
+  var P = TT.pop; if (!P || !P.row) return;
+  var src = P.row;
+  ttClosePop();
+  var copy = { id: ttTempId(), lane: src.lane, start: src.start, min: src.min,
+               title: src.title, casts: (src.casts || []).slice(),
+               detail: src.detail, locked: false };
+  ttApply('「' + src.title + '」を複製', ttInsert(TT.rows, copy));
+}
+
+/**
+ * 重なりの4択（§5-2）。**警告を押したときに出す。**
+ * 操作の瞬間には出さない（「とりあえず置いてみて、あとで直す」ができなくなる）。
+ */
+function ttOverlapMenu(){
+  var w = (TT.warn || [])[0];
+  if (!w) return;
+  var rows = w.ids.map(ttFind).filter(function(x){ return x; });
+  if (rows.length < 2) return;
+  var a = rows[0], b = rows[1];
+  ttClosePop();
+  var pop = document.createElement('div');
+  pop.className = 'tt-pop';
+  pop.innerHTML = '<div style="font-size:13px;margin-bottom:10px">'
+    + '<b>' + esc(a.title) + '</b> と <b>' + esc(b.title) + '</b> の時間が重なっています。'
+    + '</div>'
+    + '<div class="btns" style="flex-direction:column;align-items:stretch;gap:7px">'
+    + '<button class="ghost" id="ttOvKeep">このままにする</button>'
+    + '<button class="ghost" id="ttOvPush">「' + esc(b.title) + '」を後ろにずらす</button>'
+    + '<button class="ghost" id="ttOvLane">「' + esc(b.title) + '」を別の列へ移す</button>'
+    + '<button class="ghost" id="ttOvDel">「' + esc(b.title) + '」を削除する</button>'
+    + '</div>';
+  document.body.appendChild(pop);
+  TT.pop = { el: pop };
+  ttPlacePop(pop);
+
+  $('#ttOvKeep').addEventListener('click', ttClosePop);
+  $('#ttOvPush').addEventListener('click', function(){
+    var to = ttHhmm(ttEnd(a));
+    ttClosePop();
+    ttApply('「' + b.title + '」を ' + to + ' へずらす',
+            ttMove(TT.rows, b.id, b.lane, to, TT.lanes));
+  });
+  $('#ttOvLane').addEventListener('click', function(){
+    var others = TT.lanes.filter(function(l){ return l !== b.lane; });
+    if (!others.length){ ttClosePop(); return; }
+    ttClosePop();
+    ttApply('「' + b.title + '」を ' + others[0] + ' へ移す',
+            ttMove(TT.rows, b.id, others[0], b.start, TT.lanes));
+  });
+  $('#ttOvDel').addEventListener('click', function(){
+    if (!confirm('「' + b.title + '」を削除します。よろしいですか。')) return;
+    var id = b.id, title = b.title;
+    ttClosePop();
+    ttApply('「' + title + '」を削除',
+            { rows: TT.rows.filter(function(r){ return r.id !== id; }), moved: [], stopped: '' });
+  });
+}
+
+function bindTimetable(){
+  $('#ttAdd').addEventListener('click', function(){ ttOpenPop(null); });
+  $('#ttFab').addEventListener('click', function(){ ttOpenPop(null); });
+  $('#ttSave').addEventListener('click', function(){ ttSave(false); });
+  $('#ttUndo').addEventListener('click', ttUndoOne);
+  $('#ttReload').addEventListener('click', loadTimetable);
+  $('#ttWarn').addEventListener('click', ttOverlapMenu);
+
+  var body = $('#ttBody');
+  body.addEventListener('pointerdown', ttOnDown);
+  body.addEventListener('pointermove', ttOnMove);
+  body.addEventListener('pointerup', ttOnUp);
+  body.addEventListener('pointercancel', function(){ TT.drag = null; ttGhostOff(); });
+
+  document.addEventListener('keydown', function(e){
+    if (!ttVisible()) return;
+    if (e.key === 'Escape' && TT.pop){ ttClosePop(); return; }
+    // Ctrl+Z（Mac は ⌘Z）。窓の中で打っているときは、文字入力の取り消しに任せる
+    var z = (e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey);
+    if (z && !TT.pop && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){
+      e.preventDefault(); ttUndoOne();
+    }
+  });
+  // 未保存のまま閉じようとしたら止める。**黙って捨てない**
+  window.addEventListener('beforeunload', function(e){
+    if (!TT.dirty) return;
+    e.preventDefault(); e.returnValue = '';
+  });
+}
 `;
 }
 
@@ -4089,6 +4867,44 @@ const HOWTO = {
     ['自分が担当', '担当社員として登録されている方は、'
                  + '**最初からご自身の担当分だけ**が出ています。'
                  + '全社を見るときはチェックを外してください。'],
+  ]],
+  tt: ['タイムスケジュールの見かた', [
+    ['この画面は何か', '当日（10/24）の**進行の時間割**です。'
+                    + '「11:00 オープニングセレモニー」のような、'
+                    + '進行・音響・司会が見る表をここで組みます。'
+                    + '**「当日運営」タブとは別物です。**'
+                    + 'あちらは出店者の一覧（搬入時間・現場責任者）です。'],
+    ['いつ使うか', '**前日までにPCで組んでおく**ための画面です。'
+                 + '当日は、印刷したものかPDFをご覧ください。'],
+    ['3本の列', '**全体／イベント（ステージ）／備考**の3本です。'
+              + 'ステージを使うもの（リハーサルを含む）はイベント、'
+              + 'ステージを使わないもの（会場入り・音響チェック・来賓到着）は備考に入れます。'],
+    ['予定の作りかた', '**空いているところを押す**と、その時刻で30分の予定ができます。'
+                    + '**縦にドラッグ**すれば、その長さで作れます。'
+                    + 'スマホは右下の＋からでも作れます。'],
+    ['動かす・伸ばす', '予定を**つかんで動かす**と、時刻が変わります（横に動かせば列も変わります）。'
+                    + '**下のふちを引っぱる**と長さが変わり、'
+                    + '**すぐ後ろに続いている予定も一緒にずれます**。'
+                    + 'つかんで動かしたときは、後ろはずれません。'],
+    ['出演者', '○○市長・△△バンドなど、**その予定に出る人**です。自由に書けます。'
+             + '関係者リスト（主催側の担当者）とは別のものです。'],
+    ['鍵（ロック）', '**うっかり動かさないための印**です。'
+                  + '鍵の付いた予定は、ほかの予定を伸ばしても押し出されません。'
+                  + '**動かせないわけではありません。**'],
+    ['重なったとき', '同じ列で時間が重なると、**半分の幅で並んで**表示され、'
+                  + '上に黄色い帯が出ます。押すと「このままにする／後ろにずらす／'
+                  + '別の列へ移す／削除する」から選べます。'
+                  + '**列が違うもの（イベントと備考など）は重なりとして見ません。**'],
+    ['保存', '**数分おきに自動で保存します。**画面の上に「◯分前に保存しました」と出ます。'
+           + 'すぐ保存したいときは「保存する」を押してください。'],
+    ['ほかの人が先に保存したとき', '**赤い帯**が出て、その方のお名前と、'
+                              + 'あなたが加えていた変更の一覧が並びます。'
+                              + '「最新を読み込む」を押すと最新が入り、'
+                              + '**一覧は帯に残る**ので、それを見ながら入れ直せます。'],
+    ['元に戻す', '直前の1手を取り消せます（Ctrl＋Z、Macは⌘Z）。'],
+    ['誰が触れるか', '**全員です。**制作スケジュールと同じで、'
+                  + '追加も編集も削除もできます。保存のたびに、'
+                  + '誰が何件にしたかが「変更履歴」タブに残ります。'],
   ]],
   map: ['出店エリアマップの見かた', [
     ['マス目', '1つが1区画（約2.7m×3.6m）です。'
@@ -4295,6 +5111,7 @@ function html() {
   <nav class="tabs"><div class="in">
     <button data-tab="dash" aria-selected="true">ダッシュボード</button>
     <button data-tab="sched" aria-selected="false">制作スケジュール</button>
+    <button data-tab="tt" aria-selected="false">タイムスケジュール</button>
     <button data-tab="list" aria-selected="false">出店者一覧</button>
     <button data-tab="map"  aria-selected="false">出店エリアマップ</button>
     <button data-tab="day"  aria-selected="false">当日運営</button>
@@ -4322,6 +5139,29 @@ function html() {
       <div class="sch-bar" id="schStatusBox" hidden></div>
       <p class="sch-note" id="schNote"></p>
       <div id="schList"></div>
+    </section>
+
+    <!-- ② タイムスケジュール（当日の時間割）。当日運営タブとは別物で、
+         あちらは出店者の一覧、こちらは進行・音響・司会が見る時間割 -->
+    <section class="view" id="v-tt">
+      ${howto('tt')}
+      <div class="tt-banner" id="ttBanner" hidden></div>
+      <div class="tt-warn" id="ttWarn" hidden></div>
+      <div class="tt-bar">
+        <span class="tt-state" id="ttState"></span>
+        <span class="tt-editors" id="ttEditors" hidden></span>
+        <span class="sp"></span>
+        <button class="ghost" id="ttUndo" disabled>元に戻す</button>
+        <button class="ghost" id="ttReload">読み込み直す</button>
+        <button class="btn" id="ttAdd">＋ 予定を追加</button>
+        <button class="print" id="ttSave">保存する</button>
+      </div>
+      <div class="tt-wrap" id="ttWrap">
+        <div class="tt-head" id="ttHead"></div>
+        <div class="tt-body" id="ttBody"></div>
+      </div>
+      <p class="sch-note" id="ttNote"></p>
+      <button class="tt-fab" id="ttFab" aria-label="予定を追加">＋</button>
     </section>
 
     <!-- ダッシュボード -->

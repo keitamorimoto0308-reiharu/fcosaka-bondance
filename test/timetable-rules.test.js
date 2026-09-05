@@ -140,8 +140,9 @@ describe('②の規則：所要時間を変える（§5-1・§7-3 の 7〜9）',
       ev('z', '全体', '11:10', 30),
     ];
     const r = call('ttResize', rows, 'a', 20);
-    assert.strictEqual(shape(r.rows), 'a 11:00 20 / z 11:10 30');
-    assert.deepStrictEqual(r.moved, []);
+    assert.strictEqual(shape(r.rows), 'a 11:00 20 / z 11:10 30',
+      'ずらしがレーンをまたぎました');
+    assert.deepStrictEqual(r.moved, [], 'ずらしがレーンをまたぎました');
   });
 
   test('8. 隙間があると、そこでずらしが止まる', () => {
@@ -152,8 +153,9 @@ describe('②の規則：所要時間を変える（§5-1・§7-3 の 7〜9）',
       ev('c', 'イベント', '11:45', 30),
     ];
     const r = call('ttResize', rows, 'a', 20);
-    assert.strictEqual(shape(r.rows), 'a 11:00 20 / b 11:20 30 / c 11:45 30');
-    assert.deepStrictEqual(r.moved, ['b']);
+    assert.strictEqual(shape(r.rows), 'a 11:00 20 / b 11:20 30 / c 11:45 30',
+      '隙間があるのにずらしが止まりませんでした');
+    assert.deepStrictEqual(r.moved, ['b'], '隙間があるのにずらしが止まりませんでした');
     assert.strictEqual(r.stopped, 'gap');
   });
 
@@ -173,8 +175,9 @@ describe('②の規則：所要時間を変える（§5-1・§7-3 の 7〜9）',
       ev('c', 'イベント', '11:40', 30),
     ];
     const r = call('ttResize', rows, 'a', 20);
-    assert.strictEqual(shape(r.rows), 'a 11:00 20 / b 11:10 30 / c 11:40 30');
-    assert.deepStrictEqual(r.moved, []);
+    assert.strictEqual(shape(r.rows), 'a 11:00 20 / b 11:10 30 / c 11:40 30',
+      'ロックされた予定が押し出されました');
+    assert.deepStrictEqual(r.moved, [], 'ロックされた予定が押し出されました');
     assert.strictEqual(r.stopped, 'locked');
   });
 
@@ -328,8 +331,8 @@ describe('②の規則：重なりと共存（§5-2・§5-4・§7-3 の 11）', 
       ev('b', 'イベント', '11:10', 30),
     ];
     const L = call('ttLayout', rows);
-    assert.strictEqual(L.a.cols, 1);
-    assert.strictEqual(L.a.overlap, false);
+    assert.strictEqual(L.a.cols, 1, '隣り合っているだけで重なり扱いになりました');
+    assert.strictEqual(L.a.overlap, false, '隣り合っているだけで重なり扱いになりました');
   });
 
   test('11e. 0分の目印は、重なりにしない（点であって帯ではない）', () => {
@@ -338,8 +341,8 @@ describe('②の規則：重なりと共存（§5-2・§5-4・§7-3 の 11）', 
       ev('m', 'イベント', '11:10', 0),
     ];
     const L = call('ttLayout', rows);
-    assert.strictEqual(L.a.overlap, false);
-    assert.strictEqual(L.m.overlap, false);
+    assert.strictEqual(L.a.overlap, false, '重なりの印が付いてはいけないものに付きました（0分の目印）');
+    assert.strictEqual(L.m.overlap, false, '重なりの印が付いてはいけないものに付きました（0分の目印）');
   });
 
   test('11f. ロックに重なるものも、置ける（止めない・§5-3）', () => {
