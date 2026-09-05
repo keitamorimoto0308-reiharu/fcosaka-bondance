@@ -185,7 +185,9 @@ function ttVersion_() {
 
 /** 誰がいつ保存したか。`小谷|1760000000000` の形で持つ */
 function ttLastBy_() {
-  var raw = asText_(ttConfigRaw_(TT_LASTBY_KEY_));
+  // 書くときに safeCellText_ を通しているので、= で始まる氏名には ' が付く。
+  // 帯に「'山田」と出さないよう、読むときに落とす
+  var raw = asText_(ttConfigRaw_(TT_LASTBY_KEY_)).replace(/^'/, '');
   var i = raw.lastIndexOf('|');
   if (i < 0) return { person: '', at: 0 };
   var at = Number(raw.slice(i + 1));
@@ -426,8 +428,17 @@ function ttCasts_(raw, where) {
 function ttCastList_(v) {
   if (v === null || v === undefined || v === '') return [];
   if (typeof v !== 'string' && typeof v !== 'number') return [v];   // 型は ttText_ が断る
-  return asText_(v).split(',').map(function (s) { return s.trim(); })
-    .filter(function (s) { return s.length > 0; });
+  var s = asText_(v);
+  /*
+   * **split の前に長さを見る。**
+   * 人数の上限（10人）は中身を読む前に見ているが、その手前の split が
+   * 先に走るので、カンマ200万個を送られると配列で数百MBになり、
+   * 件数の上限に達する前にメモリを使い切れる（2026-09-05 の検証役が実測）。
+   * 10人 × 30字 ＋ 区切りで足りるので、余裕を見て400字で切る。
+   */
+  if (s.length > 400) return ['__too_long__'];   // ttCasts_ が字数で断る
+  return s.split(',').map(function (x) { return x.trim(); })
+    .filter(function (x) { return x.length > 0; });
 }
 
 // ───────────────────────────────────────────────── 編集中の札（§4-6）
@@ -550,22 +561,67 @@ function ttReadRows_() {
   var idx = {};
   values[0].forEach(function (h, i) { idx[String(h).trim()] = i; });
 
+  /*
+   * **見出しが揃っていなければ、その場で止める。**
+   *
+   * 以前は idx['タイトル'] が undefined になると全行がタイトル空扱いになり、
+   * **黙って0件**を返していた。次のまるごと差し替えでシートが空になる。
+   * gas/Admin.gs の indexOf_ は列が無ければ例外を投げる。②だけ黙って進んでいた
+   * （2026-09-05 の検証役が指摘）。
+   */
+  TT_HEADERS_.forEach(function (h) {
+    if (idx[h] === undefined) {
+      throw new Error('タイムスケジュールのシートに「' + h + '」の列がありません。'
+        + '見出しを直すか、setup() を実行し直してください。');
+    }
+  });
+
   var out = [];
   for (var i = 1; i < values.length; i++) {
     var r = values[i];
     var title = asText_(r[idx['タイトル']]).trim();
-    if (!title) continue;                      // 空行は無いものとして扱う
-    var min = Number(asText_(r[idx['所要分']]).trim());
+    var casts = ttCastList_(asText_(r[idx['出演者']]));
+    var detail = asText_(r[idx['詳細']]).trim();
+    var start = ttCellTime_(r[idx['開始']]);
+    // 何も無い行は、本当に空行。飛ばす
+    if (!title && !casts.length && !detail && !start) continue;
+
+    /*
+     * **読めない所要分を、黙って 0 にしない。**
+     * 0 は「時刻だけの目印」という意味を持っているので、
+     * 読めない値を 0 に倒すと、次の保存で元の値が失われる
+     * （ttAutosaveMin_ は「0にしない」と書いてあるのに、ここだけ倒していた）。
+     * 印を付けて画面に出し、人に直してもらう。
+     */
+    var minRaw = asText_(r[idx['所要分']]).trim();
+    var min = Number(minRaw);
+    var minBad = !(minRaw === '' || (isFinite(min) && min >= 0 && min === Math.floor(min)));
+
+    var lane = asText_(r[idx['レーン']]).trim();
+    /*
+     * 知らないレーンの行も**消さない**。
+     * 消すと画面に描かれないのに保存だけが永久に断られ、
+     * **画面から直す手段が無くなる**（スプレッドシートを開くしかなくなる）。
+     * 読めない時刻の行を残しているのと同じ配慮。
+     */
+    var laneBad = TT_LANES_.indexOf(lane) < 0;
+
     out.push({
-      id:     asText_(r[idx['ID']]).trim(),
-      lane:   asText_(r[idx['レーン']]).trim(),
-      start:  ttCellTime_(r[idx['開始']]),
-      min:    (isFinite(min) && min >= 0) ? Math.floor(min) : 0,
-      title:  title,
-      casts:  ttCastList_(asText_(r[idx['出演者']])),
-      detail: asText_(r[idx['詳細']]).trim(),
-      locked: asText_(r[idx['ロック']]).trim().toUpperCase() === 'TRUE',
-      order:  Number(r[idx['並び順']]) || 0,
+      id:      asText_(r[idx['ID']]).trim(),
+      lane:    lane,
+      laneBad: laneBad,
+      start:   start,
+      min:     minBad ? 0 : (minRaw === '' ? 0 : Math.floor(min)),
+      minBad:  minBad,
+      minRaw:  minBad ? minRaw : '',
+      // タイトルが空でも、他の列に中身があれば残す。
+      // 出演者と詳細だけ先に書いた下書きが、誰かの保存で消えてはいけない
+      title:    title || '（タイトルがありません）',
+      titleBad: !title,
+      casts:   casts,
+      detail:  detail,
+      locked:  asText_(r[idx['ロック']]).trim().toUpperCase() === 'TRUE',
+      order:   Number(r[idx['並び順']]) || 0,
     });
   }
   return out;
@@ -573,6 +629,19 @@ function ttReadRows_() {
 
 /** 全行＋版番号＋引換券を返す */
 function adminTimetable_(auth) {
+  /*
+   * **版を、行より先に、1回だけ読む。**
+   *
+   * 行を先に読むと、その隙間に他人の保存が確定したとき、
+   * **古い行と、新しい版の券**を同時に渡してしまう。
+   * 券は新しい版のものなので次の保存が通り、相手の変更が黙って消える
+   * （2026-09-05 の検証役が実測で再現した）。
+   *
+   * 先に読めば、隙間に保存が入っても券は古い版のものになり、
+   * 次の保存は conflict（安全側）に倒れる。
+   * 版を2回読んでいたのも直す（version と券の中身が食い違いえた）。
+   */
+  var version = ttVersion_();
   var rows = ttReadRows_();
 
   // 出演者の候補は「すでに使われた名前」から作る（§2-3）。
@@ -584,8 +653,8 @@ function adminTimetable_(auth) {
 
   return {
     ok: true,
-    version: ttVersion_(),
-    ticket: ttIssueTicket_(ttVersion_()),
+    version: version,
+    ticket: ttIssueTicket_(version),
     rows: rows,
     lanes: TT_LANES_.slice(),
     casts: casts,
@@ -621,28 +690,49 @@ function adminTimetableSave_(auth, payload) {
     var rows = v.value;
 
     var before = ttReadRows_();
-    ttWriteRows_(rows);
+    var beforeText = ttDigest_(before);
+    var afterText = ttDigest_(rows);
 
+    /*
+     * **中身が変わっていなければ、版を上げない。**
+     *
+     * 無条件に上げると、一般パスワードを持つ誰かが、何も変えない保存を
+     * 投げ続けるだけで**全員の券が古くなり、誰ひとり保存できなくなる**。
+     * 一般パスワードは FC大阪の営業に広く配る前提で、
+     * ウェブアプリは匿名アクセスを許可している。
+     * しかも変更履歴には1行も残らないので、あとから誰がやったか追えない。
+     * 引き継ぎ書§6「私が入れた保護が攻撃の道具になった」と同じ形
+     * （2026-09-05 の検証役が指摘）。
+     *
+     * 券だけ出し直して ok を返す。画面から見た使い勝手は変わらない。
+     */
+    if (beforeText === afterText) {
+      return { ok: true, version: version, ticket: ttIssueTicket_(version),
+               count: rows.length, rows: before, unchanged: true };
+    }
+
+    ttWriteRows_(rows);
     var next = version + 1;
     ttSetConfig_(TT_VERSION_KEY_, next);
-    var now = new Date().getTime();
-    ttSetLastBy_((auth && auth.person) || '', now);
+    ttSetLastBy_((auth && auth.person) || '', new Date().getTime());
     SpreadsheetApp.flush();
 
     /*
      * 変更履歴は**1回の保存につき1行だけ**（§3-3 の4）。
-     * 自動保存が2〜3分おきに走るので、1件ずつ残すと本当の変更が埋もれる。
-     * 変わっていないときは残さない（①のステータスのチップと同じ理屈）。
+     *
+     * **ここは「戻せる控え」ではない。**変更履歴のセルは5000字で切られる
+     * （gas/Ledger.gs の HISTORY_CELL_MAX）ので、40件の進行表なら
+     * 3分の2が「…以降◯文字を省略」になる。切れた全文は復元に使えないうえ、
+     * 本当の変更を埋もれさせる（2026-09-05 の検証役が実測）。
+     * 戻すのは Google スプレッドシートの版履歴に任せ、
+     * ここには**誰が・いつ・何をしたか**の手がかりを置く。
      */
-    var beforeText = ttDigest_(before);
-    var afterText = ttDigest_(rows);
-    if (beforeText !== afterText) {
-      appendHistory((auth && auth.person) || '', '（進行表）', '保存',
-                    beforeText, afterText, '');
-    }
+    var out = ttReadRows_();
+    appendHistory((auth && auth.person) || '', '（進行表）', '保存',
+                  before.length + '件', rows.length + '件', ttChangeNote_(before, rows));
 
     return { ok: true, version: next, ticket: ttIssueTicket_(next),
-             count: rows.length, rows: ttReadRows_() };
+             count: rows.length, rows: out };
   } finally {
     lock.releaseLock();
   }
@@ -663,7 +753,36 @@ function ttConflict_(version) {
   };
 }
 
-/** 変更履歴に残す要約。行の中身をそのまま持つ（削除の復元手段になる） */
+/**
+ * 何が変わったかを、人が読める短い1行にする。
+ *
+ * **全文は残さない。**変更履歴のセルは5000字で切られるので、
+ * 40件の進行表を入れると3分の2が省略され、復元にも使えない。
+ * 戻すのはスプレッドシートの版履歴に任せ、ここには追える手がかりを置く。
+ */
+function ttChangeNote_(before, after) {
+  var was = {}, now = {};
+  before.forEach(function (r) { if (r.id) was[r.id] = r; });
+  after.forEach(function (r) { if (r.id) now[r.id] = r; });
+  var added = 0, removed = 0, changed = [];
+  after.forEach(function (r) {
+    if (!r.id || !was[r.id]) { added++; return; }
+    if (ttDigest_([was[r.id]]) !== ttDigest_([r])) changed.push(r.title);
+  });
+  before.forEach(function (r) { if (r.id && !now[r.id]) removed++; });
+
+  var parts = [];
+  if (added) parts.push('追加' + added + '件');
+  if (removed) parts.push('削除' + removed + '件');
+  if (changed.length) {
+    parts.push('変更' + changed.length + '件（'
+      + changed.slice(0, 5).join('／').slice(0, 200)
+      + (changed.length > 5 ? ' ほか' : '') + '）');
+  }
+  return parts.length ? parts.join(' ／ ') : '変更なし';
+}
+
+/** 行の中身を、比べるための形にする */
 function ttDigest_(rows) {
   return JSON.stringify(rows.map(function (r) {
     return [r.lane, r.start, r.min, r.title, r.casts.join(','), r.detail,
@@ -680,8 +799,27 @@ function ttDigest_(rows) {
 function ttWriteRows_(rows) {
   var sh = ttSheet_();
   var last = sh.getLastRow();
-  if (last >= 2) sh.deleteRows(2, last - 1);
+  /*
+   * **`deleteRows` を使ってはいけない。**
+   *
+   * 本物の `deleteRows` は、シートの**行数そのもの**（`getMaxRows`）を減らす。
+   * 消した行は補充されないので、まるごと差し替えのたびにシートが縮み、
+   * 40件の進行表なら**25回目の保存**で行が足りなくなって `setValues` が例外になる。
+   *
+   * しかも例外は行を消した**あと**に起きるので、
+   *   ・予定は全部消えている
+   *   ・版番号は上がっていない
+   *   ・画面には「保存できませんでした」としか出ない
+   * という形で、**進行表が黙って空になる**。
+   * 自動保存は3分おきなので、編集を続けた75分後に起きる。
+   * （2026-09-05 の検証役が見つけた。代役が本物より優しくて隠れていた）
+   *
+   * 行は消さず、**中身だけ消す**。足りないときだけ足す。
+   */
+  if (last >= 2) sh.getRange(2, 1, last - 1, TT_HEADERS_.length).clearContent();
   if (!rows.length) return;
+  var need = rows.length + 1;
+  if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
 
   var lines = rows.map(function (r, i) {
     return [

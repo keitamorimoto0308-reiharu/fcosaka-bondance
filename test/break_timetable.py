@@ -255,6 +255,77 @@ CASES = [
         ('src/mock.js', "    case 'adminTimetableSave':      return ttCall('adminTimetableSave_', auth, payload);",
             "    case 'adminTimetableSave':      return { ok: true, version: 99, ticket: 'x', rows: payload.rows };"),
     ], 'レーン'),
+
+    # ── 2026-09-05 の検証役3体が見つけた穴 ────────────────────
+    # 本物の deleteRows はシートの行数そのものを減らす。
+    # 40件なら25回目の保存で範囲外になり、**進行表が黙って空になる**
+    # 行の足し直し（insertRowsAfter）も一緒に外す。
+    # 片方だけ戻すと、もう片方が埋め合わせて落ちない＝**何を確かめたのか分からない**
+    ('まるごと差し替えを deleteRows に戻す（シートが縮んでいく）', [
+        (T, "  if (last >= 2) sh.getRange(2, 1, last - 1, TT_HEADERS_.length).clearContent();",
+            "  if (last >= 2) sh.deleteRows(2, last - 1);"),
+        (T, "  if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());",
+            "  if (false) sh.insertRowsAfter(1, 1);"),
+    ], '回目の保存で落ちました'),
+
+    # 行を先に読むと、隙間に入った他人の保存を黙って消せる
+    ('読み出しで、版を行より後に読むようにする', [
+        (T, "  var version = ttVersion_();\n  var rows = ttReadRows_();",
+            "  var rows = ttReadRows_();\n  var version = ttVersion_();"),
+    ], '読み取りの隙間に入った他人の変更を、黙って消しました'),
+
+    # 版を無条件に上げると、何も変えない保存の連打で全員を止められる
+    ('中身が同じでも、版を上げるようにする', [
+        (T, "    if (beforeText === afterText) {", "    if (false) {"),
+    ], '中身が同じなのに版が上がりました'),
+
+    # 見出しが1文字違うと、黙って0件を返し、次の保存でシートが空になる
+    ('読み出しで、見出しの検査を外す', [
+        (T, "    if (idx[h] === undefined) {", "    if (false) {"),
+    ], '見出しが違うのに、黙って0件を返しています'),
+
+    # 読めない所要分を 0 に倒すと、保存のときに元の値が失われる
+    ('読めない所要分を、黙って0にする', [
+        (T, "    var minBad = !(minRaw === '' || (isFinite(min) && min >= 0 && min === Math.floor(min)));",
+            "    var minBad = false;"),
+    ], '読めない所要分を、黙って0'),
+
+    # タイトルが空の行を落とすと、書きかけの下書きが誰かの保存で消える
+    ('タイトルが空の行を、読み出しで落とす', [
+        (T, "    if (!title && !casts.length && !detail && !start) continue;",
+            "    if (!title) continue;"),
+    ], 'タイトルが空の行を消しています'),
+
+    # 知らないレーンの行は画面に描かれないのに、保存だけを永久に断る
+    ('知らないレーンの行に、印を付けないようにする', [
+        (T, "    var laneBad = TT_LANES_.indexOf(lane) < 0;", "    var laneBad = false;"),
+    ], '知らないレーンに印を付けていません'),
+
+    # 画面の仮ID（9文字）をそのまま送ると、新規の予定が1件も保存できない
+    ('画面が、仮のIDを外さずに送るようにする', [
+        (A, "  var sent = ttStripTempIds(TT.rows);", "  var sent = TT.rows;"),
+    ], '仮のIDを外さずに送っています'),
+
+    # 門番が無いと、連打や自動保存の重なりで**自分と自分がぶつかる**
+    ('保存中の門番を外す', [
+        (A, "  if (TT.saving) return;\n  TT.saving = true;", "  TT.saving = true;"),
+    ], '保存中かどうかを見ていません'),
+
+    # 読み込んだだけで「保存しました」と出ると、「保存されたつもり」になる
+    ('読み込んだだけで「保存しました」と出すようにする', [
+        (A, "    // **読み込んだだけで「保存しました」と出さない。**自分の保存は1文字も通っていない\n    TT.savedAt = 0;",
+            "    TT.savedAt = Date.now();"),
+    ], 'が「保存しました」と出る状態にしています'),
+
+    # 印刷の入口が無いと、作った表を配れない（ヘルプには「印刷して」と書いてある）
+    ('印刷のボタンを消す', [
+        (A, '<button class="ghost" id="ttPrint">印刷する（A4縦）</button>', ''),
+    ], '印刷のボタンがありません'),
+
+    # IDの無い行が衝突すると、重なりの4択が別の予定を指す
+    ('IDの無い行に、仮のIDを振らないようにする', [
+        (A, "    TT.rows = ttFillIds(r.rows || []);", "    TT.rows = r.rows || [];"),
+    ], 'IDの無い行に仮のIDを振っていません'),
 ]
 
 

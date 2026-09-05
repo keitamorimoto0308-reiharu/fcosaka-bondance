@@ -44,17 +44,43 @@ function asBuffer(v) {
  * @param {Array} headers 見出しの行
  * @param {Array} rows    見出しを除いた行
  */
-function makeSheet(headers, rows) {
+function makeSheet(headers, rows, opts) {
+  opts = opts || {};
   const grid = [headers.slice()].concat((rows || []).map(r => r.slice()));
+
+  /*
+   * **シートの行数（getMaxRows）を、実際に持つ。**
+   *
+   * 以前は `Math.max(grid.length, 1000)` を返し、`deleteRows` は splice するだけで、
+   * `setValues` は足りなければ勝手に伸びていた。**本物より優しい代役**だったので、
+   * 本物なら落ちる書き込みが必ず成功していた。
+   *
+   * 2026-09-05 の検証役が、これで隠れていた【高】を1件見つけた：
+   * 本物の `deleteRows` は**シートの行数そのものを減らす**（補充されない）。
+   * まるごと差し替えのたびに40行ずつ縮み、25回目の保存で範囲外になる。
+   * しかも例外は行を消した**あと**に起きるので、**進行表が黙って空になる**。
+   *
+   * ①（gas/Purge.gs の deleteRows）も同じ代役を通っている。
+   */
+  let maxRows = Math.max(opts.maxRows || 1000, grid.length);
+
+  const outside = (row, nRows) => {
+    if (row < 1 || row + (nRows || 1) - 1 > maxRows) {
+      throw new Error('範囲外です（シートは ' + maxRows + ' 行しかありません。'
+        + (row + (nRows || 1) - 1) + ' 行目に触ろうとしました）');
+    }
+  };
+
   const sheet = {
     grid,
     name: '',
     getName: () => sheet.name,
     getLastRow: () => grid.length,
     getLastColumn: () => headers.length,
-    getMaxRows: () => Math.max(grid.length, 1000),
+    getMaxRows: () => maxRows,
     getDataRange: () => ({ getValues: () => grid.map(r => r.slice()) }),
     getRange(row, col, nRows, nCols) {
+      outside(row, nRows);
       return {
         getValues: () => {
           const out = [];
@@ -84,9 +110,14 @@ function makeSheet(headers, rows) {
         setNumberFormat: () => {}, setWrap: () => {}, setDataValidation: () => {},
       };
     },
-    appendRow: line => grid.push(line.slice()),
-    deleteRow: n => { grid.splice(n - 1, 1); },
-    deleteRows: (n, count) => { grid.splice(n - 1, count); },
+    appendRow: line => {
+      grid.push(line.slice());
+      if (grid.length > maxRows) maxRows = grid.length;   // 本物も足りなければ増える
+    },
+    deleteRow: n => { grid.splice(n - 1, 1); maxRows -= 1; },
+    // **本物は、シートの行数そのものを減らす。**消した行は補充されない
+    deleteRows: (n, count) => { grid.splice(n - 1, count); maxRows -= count; },
+    insertRowsAfter: (after, count) => { maxRows += count; },
     setColumnWidth: () => {}, setFrozenRows: () => {},
   };
   return sheet;

@@ -1243,7 +1243,16 @@ describe('① 画面：hidden が効く形になっているか', () => {
     // どちらか片方だけだと、素の esc で済ませても誰も止められない
     assert.ok(ADMIN.indexOf('function linkifyDetail(text, esc)') >= 0,
       'linkifyDetail が画面に埋め込まれていません');
-    assert.ok(ADMIN.indexOf('linkifyDetail(r.detail, esc)') >= 0,
+    /*
+     * **①のコードの中を見る。**
+     * 2026-09-05、②も同じ関数を共有したので、ファイル全体を見る形だと
+     * 「どこかにあればよい」になり、①側を素の esc に戻しても通ってしまった
+     * （わざと壊す検査が [NG] 落ちず を出して発覚）。
+     */
+    const at = ADMIN.indexOf('linkifyDetail(r.detail, esc)');
+    const ttStarts = ADMIN.indexOf('var TT = { rows: []');
+    assert.ok(ttStarts > 0, '②の始まりを見つけられませんでした');
+    assert.ok(at >= 0 && at < ttStarts,
       '詳細の描画が linkifyDetail を通っていません');
   });
 });

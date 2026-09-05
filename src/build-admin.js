@@ -772,6 +772,9 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 /* 上下に余白。無いと 08:00 の目盛りが半分だけ枠の外に出る */
 .tt-body{display:grid;position:relative;padding:10px 0 14px}
 .tt-times{position:relative}
+/* 横にスクロールしても時刻が残る。無いと、スマホで右へ寄せたときに
+   「予定は見えるが、それが何時か分からない」状態になる（検証役の指摘） */
+.tt-times{position:sticky;left:0;z-index:2;background:#fff}
 .tt-times span{position:absolute;right:6px;font-size:11px;color:var(--muted);
   transform:translateY(-50%)}
 .tt-lane{--tt-hour:72px;position:relative;border-left:1px solid var(--border);
@@ -793,17 +796,29 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .tt-ev.slim{display:flex;gap:6px;align-items:baseline;white-space:nowrap;padding:2px 6px}
 .tt-ev.slim b{font-size:11.5px}
 .tt-ev.over{outline:2px solid #E0B84A;outline-offset:-2px}
+/* 読み取れない行。**消さずに、直せる形で出す** */
+.tt-ev.bad{border-style:dashed;border-color:var(--error);background:#FFF4F2}
+.tt-ev:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.tt-warn:focus-visible{outline:2px solid var(--ink)}
 .tt-ev.lock::after{content:"鍵";position:absolute;top:2px;right:4px;font-size:9px;
   color:var(--muted)}
 .tt-ev.sel{box-shadow:0 0 0 2px var(--ink)}
 .tt-grip{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize}
+/* 指では8pxを狙えない。触る画面では広げる（誤って伸ばすのも減る） */
+@media (pointer:coarse){ .tt-grip{height:14px} }
 .tt-ghost{position:absolute;border:1px dashed var(--ink);background:rgba(0,0,0,.05);
   border-radius:5px;pointer-events:none}
 
 /* クイック作成の窓（§4-1）。Googleカレンダーの作法をまねる */
+/* 窓の背後を覆う。**外を押したら閉じる**ようにしないと、
+   打ちかけの内容が黙って消える／別のタブの上に浮いたまま残る（検証役の指摘） */
+.tt-pop-back{position:fixed;inset:0;z-index:79;background:rgba(0,0,0,.12)}
 .tt-pop{position:fixed;z-index:80;background:#fff;border:1px solid var(--border);
   border-radius:8px;box-shadow:0 10px 34px rgba(0,0,0,.18);padding:14px;width:320px;
-  max-width:calc(100vw - 24px)}
+  max-width:calc(100vw - 24px);
+  /* 横向きのスマホや、文字キーボードが出た状態では画面が低い。
+     max-height が無いと、保存ボタンが画面の外に出て**押せなくなる** */
+  max-height:calc(100vh - 24px);overflow:auto}
 .tt-pop label{display:block;font-size:11.5px;color:var(--muted);margin:0 0 9px}
 .tt-pop input,.tt-pop select,.tt-pop textarea{width:100%;padding:8px 9px;font-size:13px;
   border:1px solid var(--border);border-radius:5px;font-family:inherit}
@@ -813,6 +828,24 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .tt-pop .more{font-size:11.5px;color:var(--brand-deep);background:none;border:0;
   padding:0;cursor:pointer;text-decoration:underline}
 .tt-pop .err{color:var(--error);font-size:11.5px;margin:0 0 8px}
+
+/* 印刷して配る（§6-1）。画面では出さない */
+.tt-paper{display:none}
+.tt-paper h2{font-size:13pt;margin:0 0 2mm}
+.tt-paper .day{font-size:9pt;margin:0 0 4mm;color:#000}
+.tt-paper table{width:100%;border-collapse:collapse}
+.tt-paper th,.tt-paper td{border:1px solid #999;padding:2mm 2.5mm;
+  font-size:9pt;vertical-align:top;text-align:left}
+.tt-paper th{background:#EEE;font-size:8.5pt}
+.tt-paper td.at{white-space:nowrap;font-weight:700;width:16mm}
+.tt-paper .cast{display:block;font-size:8pt;color:#333}
+.tt-paper .len{color:#555;font-size:8pt}
+.tt-paper .memo{display:block;font-size:8pt;color:#333}
+
+/* 詳細は、枠に余裕があるときだけ出す（URLは①と同じ関数でリンクにする・§7-1） */
+.tt-ev .memo{display:block;font-size:10px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis}
+.tt-ev .memo a{color:var(--brand-deep)}
 
 /* スマホの＋。スクロールしても付いてくる（§4-1） */
 .tt-fab{position:fixed;right:16px;bottom:16px;z-index:40;width:52px;height:52px;
@@ -827,11 +860,24 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 @media (max-width:700px){
   .tt-wrap{max-height:64vh}
   .tt-ev{font-size:11px;padding:3px 5px}
-  .tt-ev .cast{display:none}
+  /* 出演者は**スマホでこそ見たい**（現場で「誰が出るんだっけ」を見る）。
+     以前は消していた。狭いぶん小さくするだけにする */
+  .tt-ev .cast{font-size:9.5px}
 }
 @media (min-width:701px){
   /* PCでは上の「予定を追加」を使う。丸ボタンは重ねない */
   .tt-fab{display:none}
+}
+
+/* 進行表を刷るとき。**画面の格子は刷らない**（鍵の斜線も出ない＝インクの無駄・§6-1）。
+   当日運営タブは A4横、こちらは A4縦。@page はページ全体にかかるので、
+   向きは印刷の直前に足して、終わったら外す（ttPrint の中） */
+@media print{
+  .tt-printing .tt-paper{display:block!important}
+  .tt-printing .tt-wrap{display:none!important}
+  .tt-printing .tt-bar,.tt-printing .tt-warn,.tt-printing .tt-banner,
+  .tt-printing .tt-fab,.tt-printing .sch-note{display:none!important}
+  .tt-printing .view:not(.on){display:none!important}
 }
 `;
 }
@@ -2221,6 +2267,8 @@ function showTab(name, keepHash){
   // タイムスケジュールも毎回読み直す。全員が触れる画面なので、
   // 開いたときに古い時間割を見せると、他の人の変更に気づけないまま上書きする
   if (name === 'tt') loadTimetable();
+  // 窓を開けたまま別のタブへ移ると、その上に浮いたまま残る（検証役の指摘）
+  if (name !== 'tt' && typeof ttClosePop === 'function') ttClosePop();
   if (name === 'map' && !S.spaces) loadSpaces();
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
@@ -3564,6 +3612,9 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#dPrev').addEventListener('click', function(){ stepDetail(-1); });
   $('#dNext').addEventListener('click', function(){ stepDetail(1); });
   $('#dPrint').addEventListener('click', function(){ window.print(); });
+  $$('[data-goto]').forEach(function(b){
+    b.addEventListener('click', function(){ showTab(b.getAttribute('data-goto')); });
+  });
   ['dOnlyAssigned','dFire'].forEach(function(id){
     $('#'+id).addEventListener('change', renderDay);
   });
@@ -4180,9 +4231,63 @@ function ttFind(id){
   return null;
 }
 
-/** 画面だけの仮のID。保存のときサーバーが8桁の本物を振る */
+/**
+ * 画面だけの仮のID。
+ *
+ * **サーバーが通す形（8桁の英数字）と、必ず違う形にする。**
+ * 同じ形にすると「外し忘れても偶然通る」ことがあり、外し忘れに気づけない。
+ * tmp- を頭に付けて、ひと目で分かるようにしてある。
+ */
 function ttTempId(){
-  return 'n' + String(Date.now()).slice(-6) + String(Math.floor(Math.random() * 90) + 10);
+  return 'tmp-' + String(Date.now()).slice(-6) + String(Math.floor(Math.random() * 90) + 10);
+}
+
+function ttIsTempId(id){
+  return String(id || '').indexOf('tmp-') === 0;
+}
+
+/**
+ * IDを持たない行に、画面だけの仮のIDを振る。
+ *
+ * 人がシートに直接足した行は、IDの列が空。
+ * そのまま並べると**同じ「空のID」が衝突**して、
+ * 重なりの4択が別の予定を指す／取り消しが効かない／幅の計算が混ざる、
+ * といった取り違えが起きる（2026-09-05 に再現した）。
+ * 仮のIDは保存時に外れるので、サーバーが8桁を振り直す。
+ */
+function ttFillIds(rows){
+  return (rows || []).map(function(r){
+    if (r.id) return r;
+    var o = {}; for (var k in r) o[k] = r[k];
+    o.id = ttTempId();
+    return o;
+  });
+}
+
+/**
+ * 送る直前に、仮のIDを外す。
+ *
+ * **サーバーのIDのきまり（8桁）は緩めない。**
+ * IDは「行の並べ替えでも変わらない印」で、①では行番号で指したせいで
+ * 他人の行を丸ごと上書きした。ここを緩めると、その学びが消える。
+ * 空で送れば、サーバー（ttWriteRows_）が8桁を振る。
+ */
+function ttStripTempIds(rows){
+  return rows.map(function(r){
+    if (!ttIsTempId(r.id)) return r;
+    var o = {}; for (var k in r) o[k] = r[k];
+    o.id = '';
+    return o;
+  });
+}
+
+/** 全角の数字と記号を半角に直す。サーバーの ttHalfWidth_ と同じ考え方 */
+function ttHalf(v){
+  return String(v == null ? '' : v)
+    .replace(/[０-９]/g, function(c){ return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+    .replace(/[：︓]/g, ':')
+    .replace(/　/g, ' ')
+    .trim();
 }
 
 function ttVisible(){
@@ -4206,7 +4311,7 @@ function loadTimetable(){
       toast('読み込み直しをやめました。いまの変更はそのままです');
       return;
     }
-    TT.rows = r.rows || [];
+    TT.rows = ttFillIds(r.rows || []);
     TT.lanes = r.lanes || [];
     TT.casts = r.casts || [];
     TT.version = r.version || 0;
@@ -4215,7 +4320,10 @@ function loadTimetable(){
     TT.autosaveMin = r.autosaveMin || 3;
     TT.editors = r.editors || [];
     TT.me = r.me || {};
-    TT.dirty = false; TT.log = []; TT.undo = []; TT.savedAt = Date.now();
+    TT.dirty = false; TT.log = []; TT.undo = [];
+    // **読み込んだだけで「保存しました」と出さない。**自分の保存は1文字も通っていない
+    TT.savedAt = 0;
+    TT.saving = false;
     TT.loaded = true;
     $('#ttBanner').hidden = true;
     ttRenderHead(); renderTT(); ttStatus(); ttStartTimers();
@@ -4263,9 +4371,10 @@ function renderTT(){
   $('#ttBody').innerHTML = times + lanes;
   ttRenderWarn();
   var n = TT.rows.length;
-  $('#ttNote').textContent = (TT.day ? TT.day + ' の進行表です。' : '')
-    + '予定は ' + n + ' 件です。'
-    + '空いているところを押すと予定を作れます。予定を押すと中身が開きます。';
+  $('#ttDay').textContent = TT.day ? TT.day + ' の進行表' : '進行表';
+  $('#ttNote').textContent = '予定は ' + n + ' 件です。'
+    + '空いているところを押すと予定を作れます。予定を押すと中身が開きます。'
+    + (n >= 200 ? '　※200件を超えると保存できません。減らしてください。' : '');
 }
 
 function ttEvHtml(r, li, lay, R){
@@ -4283,20 +4392,42 @@ function ttEvHtml(r, li, lay, R){
   var slim = !isMark && hh < 40;
   var cols = lay.cols || 1, col = lay.col || 0;
   var left = (col / cols * 100), width = (100 / cols);
+  // サーバーが「読み取れない」と言った行は、消さずに印を付けて出す。
+  // 消すと画面から直せなくなり、しかも保存だけが永久に断られる
+  var bad = !!(r.laneBad || r.minBad || r.titleBad);
   var cls = 'tt-ev lane' + li
     + (isMark ? ' mark' : '')
     + (slim ? ' slim' : '')
     + (lay.overlap ? ' over' : '')
+    + (bad ? ' bad' : '')
     + (r.locked ? ' lock' : '')
     + (TT.sel === r.id ? ' sel' : '');
+  var why = r.laneBad ? '「' + r.lane + '」という列はありません'
+          : r.minBad ? '所要時間を読み取れません（' + r.minRaw + '）'
+          : r.titleBad ? 'タイトルがありません' : '';
+  // 0分の目印にも**時刻を出す**。
+  // 「営業終了」の時刻が出ない紙は、進行・音響に配れない（検証役の指摘）
   var when = isMark ? r.start : (r.start + '〜' + ttHhmm(e));
   var casts = (r.casts && r.casts.length)
     ? '<span class="cast">' + esc(r.casts.join('・')) + '</span>' : '';
+  /*
+   * 詳細は、枠に余裕があるときだけ出す。
+   * 出さないと「書いた意味があったのか分からない」（検証役の指摘）。
+   * URLのリンク化は **src/linkify.js を①と共有**する（§7-1）。
+   * 2つ書くと必ずズレるので、ここに書かない。
+   */
+  var memo = (!isMark && hh >= 56 && r.detail)
+    ? '<span class="memo">' + linkifyDetail(r.detail, esc) + '</span>' : '';
+  // キーボードだけでも開けるようにする。
+  // 以前は div のままで、Tabで辿り着けず、読み上げソフトでは1件も開けなかった
   return '<div class="' + cls + '" data-id="' + esc(r.id) + '" '
+    + 'role="button" tabindex="0" '
+    + (why ? 'title="' + esc(why) + '" ' : '')
     + 'style="top:' + top + 'px;height:' + hh + 'px;'
     + 'left:calc(' + left + '% + 2px);width:calc(' + width + '% - 4px)">'
     + '<b>' + esc(r.title) + '</b>'
-    + '<span class="t">' + esc(when) + '</span> ' + casts
+    + '<span class="t">' + esc(when) + '</span> ' + casts + memo
+    + (why ? '<span class="t">' + esc(why) + '</span>' : '')
     + (isMark ? '' : '<div class="tt-grip"></div>')
     + '</div>';
 }
@@ -4313,8 +4444,8 @@ function ttRenderWarn(){
   TT.warn = w;
   box.hidden = false;
   box.innerHTML = '<b>時間が重なっています（' + w.length + 'か所）</b>'
-    + w.map(function(g){
-        return '<div>' + esc(g.lane) + '　' + esc(g.start) + '　'
+    + w.map(function(g, i){
+        return '<div data-warn="' + i + '">' + esc(g.lane) + '　' + esc(g.start) + '　'
              + esc(g.titles.join(' ／ ')) + '</div>';
       }).join('')
     + '<div style="margin-top:6px;color:#8A6D3B">押すと、どうするかを選べます。</div>';
@@ -4376,39 +4507,103 @@ function ttApply(label, res){
   if (res.stopped === 'lane') toast('その列には移せませんでした', true);
 }
 
+/**
+ * その時刻が見える位置まで、表を動かす。
+ *
+ * 15:00 に予定を作っても、画面は 11:00 のままだった。
+ * **作れたのかどうか、その場では分からない**（検証役の指摘）。
+ */
+function ttScrollTo(hhmm){
+  var at = ttMinutes(hhmm);
+  if (at === null) return;
+  var R = ttRange();
+  var wrap = $('#ttWrap');
+  if (!wrap) return;
+  var y = (at - R.from) * TT_PPM - wrap.clientHeight / 3;
+  wrap.scrollTop = Math.max(y, 0);
+}
+
 function ttUndoOne(){
   var u = TT.undo.pop();
-  if (!u) return;
+  if (!u){ toast('これ以上は戻せません'); return; }
   TT.rows = u.rows;
   TT.log.pop();
   TT.dirty = true;
   renderTT(); ttStatus();
-  toast('「' + u.label + '」を取り消しました');
+  // ラベルに既にかぎ括弧が入っていることがある（「「◯◯」を削除」を取り消しました）
+  toast(u.label + ' を取り消しました');
 }
 
 function ttSave(auto){
   if (!TT.loaded || !TT.ticket) return;
-  api('adminTimetableSave', { ticket: TT.ticket, rows: TT.rows }).then(function(r){
+  /*
+   * **保存の最中は、次の保存を始めない。**
+   * 門番が無いと、「保存する」の連打や、手で押した保存と自動保存が重なったときに、
+   * 2本目が同じ券を使って断られ、**自分と自分がぶつかった赤い帯**が出る
+   * （「あなたが開いてから、山田 太郎さんが変更しています」＝自分）。
+   */
+  if (TT.saving) return;
+  TT.saving = true;
+  /*
+   * 送った時点の「変更の数」を控える。
+   * 返事が返る前に予定を動かすと、以前は TT.rows = r.rows で**その変更が消え**、
+   * しかも「たった今保存しました」と出た（取り消しでも戻せない）。
+   * GASの書き込みは1〜2秒（§8）、自動保存は3分おきなので、日常的に当たる。
+   */
+  TT.dirtySince = TT.log.length;
+  var sent = ttStripTempIds(TT.rows);
+
+  api('adminTimetableSave', { ticket: TT.ticket, rows: sent }).then(function(r){
+    TT.saving = false;
     if (r && r.ok){
-      TT.version = r.version; TT.ticket = r.ticket; TT.rows = r.rows || TT.rows;
-      TT.dirty = false; TT.log = []; TT.savedAt = Date.now();
+      TT.version = r.version; TT.ticket = r.ticket;
+      var addedWhileSaving = TT.log.length > TT.dirtySince;
+      if (!addedWhileSaving){
+        // 送ったあと何も足されていないときだけ、サーバーの行で置き換える
+        TT.rows = ttFillIds(r.rows || TT.rows);
+        TT.dirty = false; TT.log = []; TT.undo = [];
+        TT.savedAt = Date.now();
+      } else {
+        /*
+         * 保存中に加えた変更は**残す**。消してはいけない。
+         * ただしIDはサーバーが振り直しているので、そのぶんは次の保存で揃う。
+         * 未保存のままにして、次の自動保存に任せる
+         */
+        TT.log = TT.log.slice(TT.dirtySince);
+        TT.dirty = true;
+        TT.savedAt = Date.now();
+      }
       $('#ttBanner').hidden = true;
       renderTT(); ttStatus();
-      if (!auto) toast('保存しました');
+      if (!auto) toast(addedWhileSaving ? '保存しました（そのあとの変更は未保存です）' : '保存しました');
       return;
     }
     // **自動保存が断られたときも、必ず帯を出す**（§4-5）。黙って失敗させない
     if (r && r.error === 'conflict'){ ttConflictBanner(r); return; }
-    ttBanner('保存できませんでした。', (r && r.message) || 'もう一度お試しください。');
+    ttBanner('保存できませんでした。', (r && r.message) || 'もう一度お試しください。', true);
   }, function(e){
-    ttBanner('保存できませんでした。', String(e && e.message || e));
+    TT.saving = false;
+    ttBanner('保存できませんでした。', String(e && e.message || e), true);
   });
 }
 
-function ttBanner(head, body){
+/**
+ * 断りの帯。**押せるものを必ず1つ置く。**
+ * 「読み込み直してから、もう一度お願いします」と書いてあるのに
+ * ボタンが無いと、どこを押せばよいのか分からない（検証役の指摘）。
+ */
+function ttBanner(head, body, withReload){
   var b = $('#ttBanner');
-  b.innerHTML = '<h4>' + esc(head) + '</h4><div>' + esc(body || '') + '</div>';
+  b.innerHTML = '<h4>' + esc(head) + '</h4><div>' + esc(body || '') + '</div>'
+    + (withReload
+        ? '<div class="btns"><button class="ghost" id="ttBannerReload">読み込み直す</button>'
+          + '<button class="ghost" id="ttBannerClose2">閉じる</button></div>'
+        : '');
   b.hidden = false;
+  if (withReload){
+    $('#ttBannerReload').addEventListener('click', loadTimetable);
+    $('#ttBannerClose2').addEventListener('click', function(){ b.hidden = true; });
+  }
 }
 
 /**
@@ -4441,8 +4636,10 @@ function ttTakeLatest(){
   var r = TT.pending;
   if (!r) return;
   var log = TT.log.slice();
-  TT.rows = r.rows || []; TT.version = r.version; TT.ticket = r.ticket;
-  TT.dirty = false; TT.log = []; TT.undo = []; TT.savedAt = Date.now();
+  TT.rows = ttFillIds(r.rows || []); TT.version = r.version; TT.ticket = r.ticket;
+  // **「最新を読み込む」は保存ではない。**「保存しました」と出すと、
+  // §4-4 が避けたかった「保存されたつもり」そのものになる
+  TT.dirty = false; TT.log = []; TT.undo = []; TT.savedAt = 0;
   renderTT(); ttStatus();
   var b = $('#ttBanner');
   b.innerHTML = '<h4>最新を読み込みました。</h4>'
@@ -4459,7 +4656,9 @@ function ttStartTimers(){
   if (TT.beat) clearInterval(TT.beat);
   // 自動保存。ドラッグのたびには保存しない（保存が追いつかない・§1-10）
   TT.timer = setInterval(function(){
-    if (ttVisible() && TT.dirty) ttSave(true);
+    // **見えているかどうかは見ない。**§4-5 にその条件は無い。
+    // 未保存のままダッシュボードへ移ると、いつまでも保存されなかった（検証役の指摘）
+    if (TT.dirty) ttSave(true);
     ttStatus();
   }, Math.max(TT.autosaveMin, 1) * 60000);
   // 札は60秒ごと。**見えるだけ。締め出さない**（§4-6）
@@ -4480,7 +4679,12 @@ function ttOnDown(e){
   var R = ttRange();
   var rect = lane.getBoundingClientRect();
   var at = ttSnap(R.from + (e.clientY - rect.top) / TT_PPM);
+  // 詳細の中のリンクは、そのまま開かせる（①の schList と同じ作法）
+  if (e.target.closest('a')) return;
   var evEl = e.target.closest('.tt-ev');
+  // 押しただけのときは、5分ではなく**15分の切りのいい時刻**に寄せる。
+  // 時間割で 12:25 開始はまず作らない（検証役の指摘）
+  var atCoarse = Math.round(at / 15) * 15;
 
   if (evEl){
     var row = ttFind(evEl.getAttribute('data-id'));
@@ -4494,7 +4698,8 @@ function ttOnDown(e){
     };
   } else {
     TT.drag = { mode: 'create', lane: lane.getAttribute('data-lane'),
-                y0: e.clientY, x0: e.clientX, start0: at, moved: false, host: lane };
+                y0: e.clientY, x0: e.clientX, start0: at, coarse: atCoarse,
+                moved: false, host: lane };
   }
   try { $('#ttBody').setPointerCapture(e.pointerId); } catch(err){}
   e.preventDefault();
@@ -4518,9 +4723,12 @@ function ttOnUp(e){
   if (!d) return;
 
   if (d.mode === 'create'){
-    // 押しただけなら30分。ドラッグしたら、その長さ（§4-1）
-    var len = d.moved ? Math.max(d.deltaMin, TT_SNAP) : 30;
-    ttOpenPop(null, { lane: d.lane, start: ttHhmm(d.start0), min: len });
+    // 押しただけなら30分。ドラッグしたら、その長さ（§4-1）。
+    // **上向きにドラッグしても、その範囲で作る**（以前は5分になっていた）
+    var len = d.moved ? Math.max(Math.abs(d.deltaMin), TT_SNAP) : 30;
+    var from = (d.moved && d.deltaMin < 0) ? d.start0 + d.deltaMin : d.start0;
+    if (!d.moved) from = d.coarse;
+    ttOpenPop(null, { lane: d.lane, start: ttHhmm(Math.max(from, 0)), min: len });
     return;
   }
   var row = ttFind(d.id);
@@ -4535,11 +4743,19 @@ function ttOnUp(e){
     if (row.locked && !confirm('「' + row.title + '」には鍵が付いています。動かしますか。')){
       renderTT(); return;
     }
-    ttApply(row.title + ' ' + row.start + ' → ' + to
-            + (lane !== row.lane ? '（' + lane + 'へ）' : ''),
-            ttMove(TT.rows, row.id, lane, to, TT.lanes));
+    // 時刻が変わっていないときに「13:00 → 13:00」と書かない
+    var label = (to === row.start)
+      ? (row.title + ' を ' + lane + ' へ移動')
+      : (row.title + ' ' + row.start + ' → ' + to
+         + (lane !== row.lane ? '（' + lane + 'へ）' : ''));
+    ttApply(label, ttMove(TT.rows, row.id, lane, to, TT.lanes));
   } else {
     var len = Math.max(d.len0 + d.deltaMin, 0);
+    // 鍵は「うっかり動かさない」ための印（§5-3）。
+    // つかんで動かすときだけ確認していて、**伸ばすときは素通り**だった
+    if (row.locked && !confirm('「' + row.title + '」には鍵が付いています。長さを変えますか。')){
+      renderTT(); return;
+    }
     ttApply(row.title + ' ' + row.min + '分 → ' + len + '分',
             ttResize(TT.rows, row.id, len));
   }
@@ -4604,18 +4820,30 @@ function ttOpenPop(row, seed){
     + '<label style="display:flex;gap:7px;align-items:center">'
     + '<input type="checkbox" id="ttPopLock" style="width:auto"' + (v.locked ? ' checked' : '') + '>'
     + 'うっかり動かさないように鍵をかける</label>'
-    + '<button class="more" id="ttPopMore">その他の項目を編集</button>'
-    + '<label id="ttPopDetailBox" hidden style="margin-top:8px">詳細'
+    + '<button class="more" id="ttPopMore">詳細（メモ）を書く</button>'
+    + '<label id="ttPopDetailBox" hidden style="margin-top:8px">'
+    + '詳細（枠に余裕があるときだけ表に出ます。印刷には必ず出ます）'
     + '<textarea id="ttPopDetail" rows="3" maxlength="500">' + esc(v.detail || '') + '</textarea></label>'
     + '<div class="btns">'
     + (isNew ? '' : '<button class="ghost" id="ttPopDel">削除</button>'
                   + '<button class="ghost" id="ttPopDup">複製</button>')
     + '<span class="sp"></span>'
     + '<button class="ghost" id="ttPopCancel">やめる</button>'
-    + '<button class="print" id="ttPopOk">' + (isNew ? '追加する' : '保存') + '</button>'
+    // 右上の「保存する」と紛らわしい。**この窓は台帳に書かない**
+    + '<button class="print" id="ttPopOk">' + (isNew ? '追加する' : 'この予定を反映') + '</button>'
     + '</div>';
+  /*
+   * 窓の背後を覆う。無いと：
+   *   ・窓を開けたまま背後を押すと、打ちかけの内容が黙って消える
+   *   ・窓を開けたままタブを移ると、別のタブの上に浮いたまま残る
+   * （どちらも 2026-09-05 の検証役が再現した）
+   */
+  var back = document.createElement('div');
+  back.className = 'tt-pop-back';
+  back.addEventListener('click', ttClosePop);
+  document.body.appendChild(back);
   document.body.appendChild(pop);
-  TT.pop = { el: pop, row: row, draft: v, isNew: isNew };
+  TT.pop = { el: pop, back: back, row: row, draft: v, isNew: isNew };
   ttPlacePop(pop);
 
   $('#ttPopMore').addEventListener('click', function(){
@@ -4642,7 +4870,10 @@ function ttPlacePop(pop){
 }
 
 function ttClosePop(){
-  if (TT.pop && TT.pop.el && TT.pop.el.parentNode) TT.pop.el.parentNode.removeChild(TT.pop.el);
+  if (!TT.pop) return;
+  [TT.pop.el, TT.pop.back].forEach(function(el){
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  });
   TT.pop = null;
 }
 
@@ -4650,8 +4881,10 @@ function ttPopSave(){
   var P = TT.pop; if (!P) return;
   var err = $('#ttPopErr');
   var title = $('#ttPopTitle').value.trim();
-  var start = $('#ttPopStart').value.trim();
-  var minRaw = $('#ttPopMin').value.trim();
+  // 日本語IMEでは「１１：００」「３０」が普通に出る。
+  // サーバーは ttHalfWidth_ で受けているのに、画面だけ断るのは食い違い（検証役の指摘）
+  var start = ttHalf($('#ttPopStart').value);
+  var minRaw = ttHalf($('#ttPopMin').value);
   var lane = $('#ttPopLane').value;
   var casts = $('#ttPopCasts').value.split(',').map(function(s){ return s.trim(); })
                 .filter(function(s){ return s; });
@@ -4675,6 +4908,9 @@ function ttPopSave(){
   if (P.isNew){
     ttApply('「' + title + '」を追加（' + start + '・' + min + '分）',
             ttInsert(TT.rows, item));
+    TT.sel = item.id;
+    ttScrollTo(start);
+    renderTT();
   } else {
     // 中身の書き換えは、ずらしを起こさない（つかんで動かしたのと同じ扱い）。
     // 所要時間を変えたときだけ、後ろが続いていればずれる
@@ -4687,9 +4923,23 @@ function ttPopSave(){
     });
     var moved = ttMove(rows, item.id, item.lane, item.start, TT.lanes);
     var sized = ttResize(moved.rows, item.id, item.min);
+    /*
+     * **何も変わっていなければ、記録に足さない。**
+     * 窓を開いて何も直さずに閉じただけで「変更 N 件」が増えていた。
+     * N が増えると、何が未保存なのか分からなくなる（検証役の指摘）。
+     */
+    var was = JSON.stringify(TT.rows.map(ttRowKey));
+    var now = JSON.stringify(sized.rows.map(ttRowKey));
+    if (was === now){ toast('変わっていません'); return; }
     ttApply('「' + title + '」を編集', { rows: sized.rows, moved: sized.moved,
                                          stopped: sized.stopped || moved.stopped });
   }
+}
+
+/** 行を比べるための形。並び順や画面だけの印は見ない */
+function ttRowKey(r){
+  return [r.id, r.lane, r.start, r.min, r.title,
+          (r.casts || []).join(','), r.detail, r.locked ? 1 : 0].join('|');
 }
 
 function ttPopDelete(){
@@ -4715,49 +4965,167 @@ function ttPopDuplicate(){
  * 重なりの4択（§5-2）。**警告を押したときに出す。**
  * 操作の瞬間には出さない（「とりあえず置いてみて、あとで直す」ができなくなる）。
  */
-function ttOverlapMenu(){
-  var w = (TT.warn || [])[0];
+/**
+ * 重なりの4択（§5-2）。**警告を押したときに出す。**
+ * 操作の瞬間には出さない（「とりあえず置いてみて、あとで直す」ができなくなる）。
+ *
+ * 直したこと（2026-09-05 の検証役）：
+ *   ・どこを押しても1か所目の窓が出ていた → **押した重なり**に対して出す
+ *   ・3件以上重なっても最初の2件しか出なかった → **全部並べて選ばせる**
+ *   ・「別の列へ移す」が先頭の列に決め打ちだった → **行き先を選ばせる**
+ *   ・「後ろにずらす」が何分ずれるか分からなかった → **結果を書く**
+ */
+function ttOverlapMenu(which){
+  var w = (TT.warn || [])[which || 0];
   if (!w) return;
   var rows = w.ids.map(ttFind).filter(function(x){ return x; });
   if (rows.length < 2) return;
-  var a = rows[0], b = rows[1];
   ttClosePop();
+
+  // どれを動かすかを選ばせる。**先頭の2件に決め打ちしない**
   var pop = document.createElement('div');
   pop.className = 'tt-pop';
-  pop.innerHTML = '<div style="font-size:13px;margin-bottom:10px">'
-    + '<b>' + esc(a.title) + '</b> と <b>' + esc(b.title) + '</b> の時間が重なっています。'
-    + '</div>'
+  pop.innerHTML = '<div style="font-size:13px;margin-bottom:4px">'
+    + esc(w.lane) + 'で、次の ' + rows.length + ' 件の時間が重なっています。</div>'
+    + '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'
+    + rows.map(function(r){ return esc(r.start + '　' + r.title); }).join('<br>') + '</div>'
+    + '<label>どれを動かしますか<select id="ttOvWho">'
+    + rows.map(function(r, i){
+        return '<option value="' + i + '">' + esc(r.title) + '</option>';
+      }).join('')
+    + '</select></label>'
+    + '<label>どの列へ移しますか（「別の列へ移す」を選んだとき）<select id="ttOvTo">'
+    + TT.lanes.map(function(l){ return '<option>' + esc(l) + '</option>'; }).join('')
+    + '</select></label>'
     + '<div class="btns" style="flex-direction:column;align-items:stretch;gap:7px">'
     + '<button class="ghost" id="ttOvKeep">このままにする</button>'
-    + '<button class="ghost" id="ttOvPush">「' + esc(b.title) + '」を後ろにずらす</button>'
-    + '<button class="ghost" id="ttOvLane">「' + esc(b.title) + '」を別の列へ移す</button>'
-    + '<button class="ghost" id="ttOvDel">「' + esc(b.title) + '」を削除する</button>'
+    + '<button class="ghost" id="ttOvPush">後ろにずらす</button>'
+    + '<button class="ghost" id="ttOvLane">別の列へ移す</button>'
+    + '<button class="ghost" id="ttOvDel">削除する</button>'
     + '</div>';
+  var back = document.createElement('div');
+  back.className = 'tt-pop-back';
+  back.addEventListener('click', ttClosePop);
+  document.body.appendChild(back);
   document.body.appendChild(pop);
-  TT.pop = { el: pop };
+  TT.pop = { el: pop, back: back };
   ttPlacePop(pop);
+
+  var pick = function(){ return rows[Number($('#ttOvWho').value) || 0]; };
+  // どこへ、何分ずれるのかを、押す前に見せる
+  var refresh = function(){
+    var t = pick();
+    var others = rows.filter(function(r){ return r.id !== t.id; });
+    var to = ttHhmm(Math.max.apply(null, others.map(ttEnd)));
+    $('#ttOvPush').textContent = '「' + t.title + '」を ' + to + ' へずらす';
+    $('#ttOvLane').textContent = '「' + t.title + '」を 「' + $('#ttOvTo').value + '」へ移す';
+    $('#ttOvDel').textContent = '「' + t.title + '」を削除する';
+  };
+  $('#ttOvWho').addEventListener('change', refresh);
+  $('#ttOvTo').addEventListener('change', refresh);
+  refresh();
 
   $('#ttOvKeep').addEventListener('click', ttClosePop);
   $('#ttOvPush').addEventListener('click', function(){
-    var to = ttHhmm(ttEnd(a));
+    var t = pick();
+    var others = rows.filter(function(r){ return r.id !== t.id; });
+    var to = ttHhmm(Math.max.apply(null, others.map(ttEnd)));
     ttClosePop();
-    ttApply('「' + b.title + '」を ' + to + ' へずらす',
-            ttMove(TT.rows, b.id, b.lane, to, TT.lanes));
+    ttApply('「' + t.title + '」を ' + to + ' へずらす',
+            ttMove(TT.rows, t.id, t.lane, to, TT.lanes));
   });
   $('#ttOvLane').addEventListener('click', function(){
-    var others = TT.lanes.filter(function(l){ return l !== b.lane; });
-    if (!others.length){ ttClosePop(); return; }
+    var t = pick();
+    var to = $('#ttOvTo').value;
+    if (to === t.lane){ toast('いまと同じ列です', true); return; }
     ttClosePop();
-    ttApply('「' + b.title + '」を ' + others[0] + ' へ移す',
-            ttMove(TT.rows, b.id, others[0], b.start, TT.lanes));
+    ttApply('「' + t.title + '」を ' + to + ' へ移す',
+            ttMove(TT.rows, t.id, to, t.start, TT.lanes));
   });
   $('#ttOvDel').addEventListener('click', function(){
-    if (!confirm('「' + b.title + '」を削除します。よろしいですか。')) return;
-    var id = b.id, title = b.title;
+    var t = pick();
+    if (!confirm('「' + t.title + '」を削除します。よろしいですか。')) return;
+    var id = t.id, title = t.title;
     ttClosePop();
     ttApply('「' + title + '」を削除',
             { rows: TT.rows.filter(function(r){ return r.id !== id; }), moved: [], stopped: '' });
   });
+}
+
+/**
+ * 配る紙を組む（§6-1）。
+ *
+ * ■ 行は5分刻みではなく、**予定の境目**で作る
+ *   5分刻みにすると、17:30まででも100行を超えてA4に入らない。
+ *   境目だけなら、40件の進行表が1枚に収まる。
+ *
+ * ■ 鍵の斜線は刷らない（インクの無駄）。鍵の印だけ
+ *
+ * ■ 出演者はタイトルの下に小さく
+ */
+function ttBuildPrint(){
+  var lanes = TT.lanes;
+  // 予定が始まる時刻を、重複なく並べる
+  var times = [];
+  TT.rows.forEach(function(r){
+    var m = ttMinutes(r.start);
+    if (m === null) return;
+    if (times.indexOf(m) < 0) times.push(m);
+  });
+  times.sort(function(a, b){ return a - b; });
+
+  var head = '<tr><th>時刻</th>'
+    + lanes.map(function(l){ return '<th>' + esc(l) + '</th>'; }).join('') + '</tr>';
+
+  var body = times.map(function(m){
+    var cells = lanes.map(function(lane){
+      var here = TT.rows.filter(function(r){
+        return r.lane === lane && ttMinutes(r.start) === m;
+      });
+      if (!here.length) return '<td></td>';
+      return '<td>' + here.map(function(r){
+        return '<b>' + esc(r.title) + '</b>'
+          + (r.locked ? ' 鍵' : '')
+          + (r.min > 0 ? ' <span class="len">（' + r.min + '分）</span>' : '')
+          + ((r.casts && r.casts.length)
+              ? '<span class="cast">' + esc(r.casts.join('・')) + '</span>' : '')
+          + (r.detail ? '<span class="memo">' + esc(r.detail) + '</span>' : '');
+      }).join('<br>') + '</td>';
+    }).join('');
+    return '<tr><td class="at">' + ttHhmm(m) + '</td>' + cells + '</tr>';
+  }).join('');
+
+  $('#ttPaper').innerHTML = '<h2>当日の進行表</h2>'
+    + '<p class="day">' + esc(TT.day || '') + '　'
+    + esc((S.summary && S.summary.eventName) || '') + '</p>'
+    + '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+}
+
+/**
+ * 刷る。**向きは印刷の直前に足して、終わったら外す。**
+ *
+ * 当日運営タブは A4横（@page で指定済み）、こちらは A4縦。
+ * @page はページ全体にかかるので、あとから足したほうが勝つようにする。
+ */
+function ttPrint(){
+  if (TT.dirty && !confirm('保存していない変更があります。'
+      + 'いま刷ると、その内容も紙に出ます。よろしいですか。')) return;
+  ttBuildPrint();
+  var st = document.createElement('style');
+  st.id = 'ttPrintPage';
+  st.textContent = '@media print{@page{size:A4 portrait;margin:10mm}}';
+  document.head.appendChild(st);
+  document.body.classList.add('tt-printing');
+  var off = function(){
+    document.body.classList.remove('tt-printing');
+    var el = document.getElementById('ttPrintPage');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    window.removeEventListener('afterprint', off);
+  };
+  window.addEventListener('afterprint', off);
+  // afterprint が来ない環境（古いSafariなど）でも必ず戻す
+  setTimeout(off, 8000);
+  window.print();
 }
 
 function bindTimetable(){
@@ -4766,7 +5134,18 @@ function bindTimetable(){
   $('#ttSave').addEventListener('click', function(){ ttSave(false); });
   $('#ttUndo').addEventListener('click', ttUndoOne);
   $('#ttReload').addEventListener('click', loadTimetable);
-  $('#ttWarn').addEventListener('click', ttOverlapMenu);
+  $('#ttPrint').addEventListener('click', ttPrint);
+  $('#ttWarn').addEventListener('click', function(e){
+    // **押した行の重なり**を出す。どこを押しても1か所目、では選べない
+    var row = e.target.closest('[data-warn]');
+    ttOverlapMenu(row ? Number(row.getAttribute('data-warn')) : 0);
+  });
+  // キーボードからも押せるようにする
+  $('#ttWarn').setAttribute('role', 'button');
+  $('#ttWarn').setAttribute('tabindex', '0');
+  $('#ttWarn').addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); ttOverlapMenu(0); }
+  });
 
   var body = $('#ttBody');
   body.addEventListener('pointerdown', ttOnDown);
@@ -4774,9 +5153,28 @@ function bindTimetable(){
   body.addEventListener('pointerup', ttOnUp);
   body.addEventListener('pointercancel', function(){ TT.drag = null; ttGhostOff(); });
 
+  // 予定をキーボードから開く
+  body.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var el = e.target.closest ? e.target.closest('.tt-ev[data-id]') : null;
+    if (!el) return;
+    e.preventDefault();
+    var row = ttFind(el.getAttribute('data-id'));
+    if (row) ttOpenPop(row);
+  });
+
   document.addEventListener('keydown', function(e){
-    if (!ttVisible()) return;
+    // 窓は、どのタブを見ていても閉じられるようにする
     if (e.key === 'Escape' && TT.pop){ ttClosePop(); return; }
+    if (!ttVisible()) return;
+    /*
+     * ドラッグの途中の Esc で取り消す。
+     * 以前はゴーストが残ったまま、指を離した瞬間に移動が適用されていた
+     * （Googleカレンダーは Esc で取り消す・§4-1）。
+     */
+    if (e.key === 'Escape' && TT.drag){
+      TT.drag = null; ttGhostOff(); renderTT(); return;
+    }
     // Ctrl+Z（Mac は ⌘Z）。窓の中で打っているときは、文字入力の取り消しに任せる
     var z = (e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey);
     if (z && !TT.pop && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){
@@ -4868,14 +5266,30 @@ const HOWTO = {
                  + '**最初からご自身の担当分だけ**が出ています。'
                  + '全社を見るときはチェックを外してください。'],
   ]],
+  /*
+   * 並びは**詰まった順**にしてある（2026-09-05 の初見レビュー）。
+   * いちばん困ったのは「作った表をどうやって配るか」で、
+   * 次が「保存ボタンが2つあってどちらが効くのか」だった。
+   * 「元に戻す」の説明のように、ボタンを見れば分かることは削った。
+   */
   tt: ['タイムスケジュールの見かた', [
     ['この画面は何か', '当日（10/24）の**進行の時間割**です。'
                     + '「11:00 オープニングセレモニー」のような、'
                     + '進行・音響・司会が見る表をここで組みます。'
                     + '**「当日運営」タブとは別物です。**'
                     + 'あちらは出店者の一覧（搬入時間・現場責任者）です。'],
-    ['いつ使うか', '**前日までにPCで組んでおく**ための画面です。'
-                 + '当日は、印刷したものかPDFをご覧ください。'],
+    ['印刷して配るには', '上の「**印刷する（A4縦）**」を押してください。'
+                     + '時刻と3本の列がそのまま表になった、A4・1枚の紙が出ます。'
+                     + 'PDFにしたいときは、印刷の画面で「PDFに保存」を選んでください。'
+                     + '**当日はこの紙を見ます。**この画面は前日までに組むためのものです。'],
+    ['保存のしかた', '画面の右上の「**保存する**」が、台帳に書き込むボタンです。'
+                  + '**数分おきに自動でも保存します。**'
+                  + '左上に「たった今保存しました」「保存していません（変更◯件）」と出ます。'
+                  + '**予定の窓にある「この予定を反映」は、表に反映するだけ**で、'
+                  + 'まだ台帳には書き込まれていません。'],
+    ['「変更◯件」とは', '保存してからあとに、あなたが加えた**操作の数**です。'
+                     + '「読み込み直す」を押すと、**この変更は消えます**（確認が出ます）。'
+                     + '消したくないときは、先に「保存する」を押してください。'],
     ['3本の列', '**全体／イベント（ステージ）／備考**の3本です。'
               + 'ステージを使うもの（リハーサルを含む）はイベント、'
               + 'ステージを使わないもの（会場入り・音響チェック・来賓到着）は備考に入れます。'],
@@ -4885,26 +5299,29 @@ const HOWTO = {
     ['動かす・伸ばす', '予定を**つかんで動かす**と、時刻が変わります（横に動かせば列も変わります）。'
                     + '**下のふちを引っぱる**と長さが変わり、'
                     + '**すぐ後ろに続いている予定も一緒にずれます**。'
-                    + 'つかんで動かしたときは、後ろはずれません。'],
+                    + 'つかんで動かしたときは、後ろはずれません。'
+                    + '直前の1手は Ctrl＋Z（Macは⌘Z）で取り消せます。'],
     ['出演者', '○○市長・△△バンドなど、**その予定に出る人**です。自由に書けます。'
              + '関係者リスト（主催側の担当者）とは別のものです。'],
+    ['詳細（メモ）', '予定の窓の「詳細（メモ）を書く」から書けます。'
+                  + '**枠に余裕があるときだけ表に出ます**が、'
+                  + '**印刷には必ず出ます**。当日の申し送りはここに書いてください。'],
     ['鍵（ロック）', '**うっかり動かさないための印**です。'
                   + '鍵の付いた予定は、ほかの予定を伸ばしても押し出されません。'
+                  + '動かすときと長さを変えるときに、確認が出ます。'
                   + '**動かせないわけではありません。**'],
     ['重なったとき', '同じ列で時間が重なると、**半分の幅で並んで**表示され、'
-                  + '上に黄色い帯が出ます。押すと「このままにする／後ろにずらす／'
-                  + '別の列へ移す／削除する」から選べます。'
+                  + '上に黄色い帯が出ます。**帯のその行を押す**と、'
+                  + '「このままにする／後ろにずらす／別の列へ移す／削除する」から選べます。'
                   + '**列が違うもの（イベントと備考など）は重なりとして見ません。**'],
-    ['保存', '**数分おきに自動で保存します。**画面の上に「◯分前に保存しました」と出ます。'
-           + 'すぐ保存したいときは「保存する」を押してください。'],
     ['ほかの人が先に保存したとき', '**赤い帯**が出て、その方のお名前と、'
                               + 'あなたが加えていた変更の一覧が並びます。'
                               + '「最新を読み込む」を押すと最新が入り、'
                               + '**一覧は帯に残る**ので、それを見ながら入れ直せます。'],
-    ['元に戻す', '直前の1手を取り消せます（Ctrl＋Z、Macは⌘Z）。'],
     ['誰が触れるか', '**全員です。**制作スケジュールと同じで、'
                   + '追加も編集も削除もできます。保存のたびに、'
-                  + '誰が何件にしたかが「変更履歴」タブに残ります。'],
+                  + '誰が何件にしたかが「変更履歴」タブに残ります。'
+                  + '**元に戻したいときは、スプレッドシートの「版の履歴」**から戻せます。'],
   ]],
   map: ['出店エリアマップの見かた', [
     ['マス目', '1つが1区画（約2.7m×3.6m）です。'
@@ -5148,12 +5565,16 @@ function html() {
       <div class="tt-banner" id="ttBanner" hidden></div>
       <div class="tt-warn" id="ttWarn" hidden></div>
       <div class="tt-bar">
+        <!-- 何の日の表なのかを、いちばん上に出す。
+             以前は画面の最下端に小さく出ていて、見つけられなかった（初見レビュー） -->
+        <b id="ttDay" style="font-size:13px"></b>
         <span class="tt-state" id="ttState"></span>
         <span class="tt-editors" id="ttEditors" hidden></span>
         <span class="sp"></span>
         <button class="ghost" id="ttUndo" disabled>元に戻す</button>
         <button class="ghost" id="ttReload">読み込み直す</button>
         <button class="btn" id="ttAdd">＋ 予定を追加</button>
+        <button class="ghost" id="ttPrint">印刷する（A4縦）</button>
         <button class="print" id="ttSave">保存する</button>
       </div>
       <div class="tt-wrap" id="ttWrap">
@@ -5161,6 +5582,8 @@ function html() {
         <div class="tt-body" id="ttBody"></div>
       </div>
       <p class="sch-note" id="ttNote"></p>
+      <!-- 当日、進行・音響・司会に配る紙。画面では出さない（§6-1） -->
+      <div class="tt-paper" id="ttPaper"></div>
       <button class="tt-fab" id="ttFab" aria-label="予定を追加">＋</button>
     </section>
 
@@ -5272,6 +5695,8 @@ function html() {
         <label style="font-size:13px"><input type="checkbox" id="dOnlyAssigned" checked> 区画が決まっている分だけ</label>
         <label style="font-size:13px"><input type="checkbox" id="dFire"> 火気・発電機のみ</label>
         <button class="print" id="dPrint">印刷する（A4横）</button>
+        <!-- 進行の時間割は別のタブ。ここから行けないと、探し回ることになる（§0） -->
+        <button class="ghost" data-goto="tt">当日の進行表を見る</button>
         <p class="pwarn" id="dayPrintWarn" hidden></p>
       </div>
       <p class="hint-print">当日は電波が切れることがあります。前日までに印刷して持ってください。</p>

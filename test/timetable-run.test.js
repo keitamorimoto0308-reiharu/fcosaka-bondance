@@ -351,7 +351,9 @@ describe('② タイムスケジュール：まるごと差し替え（§3-3）'
     ] });
     const r = loadThenSave(b, [GATE]);
     assert.strictEqual(r.ok, true, JSON.stringify(r));
-    assert.strictEqual(sheetRows(b).length, 1);
+    // シートの**行**は消さない（消すと getMaxRows が減り続けて、いつか書けなくなる）。
+    // 中身だけ消すので、読み出しの件数で見る
+    assert.strictEqual(load(b).rows.length, 1);
     assert.strictEqual(rowAt(b, 2)['タイトル'], 'ゲートオープン');
   });
 
@@ -411,6 +413,170 @@ describe('② タイムスケジュール：まるごと差し替え（§3-3）'
       ['aaaa1111', 'イベント', new Date(2026, 9, 24, 11, 0, 0), 10, '開会', '', '', '', 1],
     ] });
     assert.strictEqual(load(b).rows[0].start, '11:00');
+  });
+});
+
+describe('② タイムスケジュール：検証役2体・3体目が見つけた穴（2026-09-05）', () => {
+
+  test('IDのきまりは緩めない（8桁でないIDは断る）', () => {
+    /*
+     * **②の中心機能が一度も通らない状態だった。**
+     * 画面の ttTempId() が返す仮IDは9文字で、サーバーは8文字ちょうどしか通さない。
+     * 予定を1件でも足すと、手で押しても自動保存でも100%断られていた。
+     *
+     * 直す向きは2つあったが、**サーバーは厳しいままにする**ほうを選んだ。
+     * IDは「行の並べ替えでも変わらない印」で、①では行番号で指したせいで
+     * 他人の行を丸ごと上書きした。ここを緩めると、その学びが消える。
+     * **画面が、送る直前に仮IDを外す**（test/timetable-page.test.js が見張る）。
+     *
+     * テスト1032件が全部通ったまますり抜けたのは、
+     * **画面が作ったIDをサーバーに通す検査が1本も無かった**から
+     * （テストは自前で 'aaaa1111' という正しい8桁を作って送っていた）。
+     */
+    const temp = 'n' + String(Date.now()).slice(-6) + '42';   // 画面の仮ID（9文字）
+    const ng = loadThenSave(makeBox({}), [Object.assign({}, OPENING, { id: temp })]);
+    assert.strictEqual(ng.ok, false, '8桁でないIDが通りました');
+
+    // 画面が仮IDを外して送れば、サーバーが8桁を振る
+    const b = makeBox({});
+    const ok = loadThenSave(b, [Object.assign({}, OPENING, { id: '' })]);
+    assert.strictEqual(ok.ok, true, JSON.stringify(ok));
+    assert.match(String(rowAt(b, 2)['ID']), /^[0-9a-zA-Z]{8}$/);
+  });
+
+  test('何度保存しても、シートの行数が減っていかない', () => {
+    /*
+     * 本物の `deleteRows` は**シートの行数そのものを減らす**（補充されない）。
+     * まるごと差し替えのたびに縮み、行が足りなくなった回で
+     * `setValues` が範囲外の例外になる。
+     * **例外は行を消したあとに起きる**ので、進行表が黙って空になる。
+     * 3分おきの自動保存なので、編集を続けた75分後に起きる。
+     */
+    const b = makeBox({ version: 0 });
+    for (let k = 1; k <= 30; k++) {
+      // **毎回、中身を変える。**同じ内容だと「変わっていないので書かない」に
+      // 当たって、書き込みが1回しか起きない＝この検査が何も見なくなる
+      // （2026-09-05、実際にそうなっていた）
+      const rows = [];
+      for (let i = 0; i < 40; i++) {
+        rows.push({ id: '', lane: '備考', start: '09:00', min: 0, title: '予定' + i + '-' + k });
+      }
+      const got = load(b);
+      let r;
+      // 例外もここで受ける。**落ちた理由が1件ずつ区別できる**ようにしておく
+      try { r = save(b, { ticket: got.ticket, rows: rows }); }
+      catch (e) { assert.fail(k + '回目の保存で落ちました（シートが縮んでいます）: ' + e.message); }
+      assert.strictEqual(r.ok, true, k + '回目の保存で落ちました: ' + JSON.stringify(r));
+      assert.strictEqual(load(b).rows.length, 40, k + '回目のあと、予定が消えています');
+    }
+    assert.ok(b.sheets['タイムスケジュール'].getMaxRows() >= 41,
+      'シートの行数が減り続けています: ' + b.sheets['タイムスケジュール'].getMaxRows());
+  });
+
+  test('行を読んだあとに他人が保存しても、その券では保存できない', () => {
+    /*
+     * `adminTimetable_` が「行を先に読み、そのあと版を読む」形だと、
+     * その隙間に他人の保存が確定したとき、
+     * **古い行と新しい版の券**を同時に渡してしまう。
+     * 券は新しい版のものなので次の保存が通り、相手の変更が黙って消える。
+     * **版を先に1回だけ読めば、安全側（conflict）に倒れる。**
+     */
+    const b = makeBox({ version: 5, rows: [
+      ['aaaa1111', 'イベント', '11:00', 10, 'オープニング', '', '', '', 1],
+    ] });
+
+    // 行を読み終えた瞬間に、他人の保存を割り込ませる
+    let fired = false;
+    const sheets = b.sheets;
+    const tt = sheets['タイムスケジュール'];
+    const realGetDataRange = tt.getDataRange;
+    tt.getDataRange = function () {
+      const out = realGetDataRange.call(tt);
+      if (!fired) {
+        fired = true;
+        const other = load(b, '成田');
+        save(b, { ticket: other.ticket,
+                  rows: [{ id: 'aaaa1111', lane: 'イベント', start: '11:00', min: 10,
+                           title: '成田さんが直した' }] }, '成田');
+      }
+      return out;
+    };
+    const mine = load(b, '小谷');
+    tt.getDataRange = realGetDataRange;
+
+    const r = save(b, { ticket: mine.ticket, rows: mine.rows }, '小谷');
+    assert.strictEqual(r.ok, false,
+      '読み取りの隙間に入った他人の変更を、黙って消しました');
+    assert.strictEqual(r.error, 'conflict');
+  });
+
+  test('中身が変わっていない保存では、版を上げない', () => {
+    /*
+     * 版を無条件に上げると、**一般パスワードを持つ誰かが
+     * 何も変えない保存を投げ続けるだけで、全員の券が古くなり、
+     * 誰ひとり保存できなくなる**（しかも変更履歴に1行も残らない）。
+     * 一般パスワードは FC大阪の営業に広く配る前提。
+     */
+    const b = makeBox({ version: 3 });
+    const first = loadThenSave(b, [OPENING]);
+    assert.strictEqual(first.version, 4);
+
+    const again = save(b, { ticket: first.ticket, rows: [OPENING] });
+    assert.strictEqual(again.ok, true, JSON.stringify(again));
+    assert.strictEqual(again.version, 4, '中身が同じなのに版が上がりました');
+    // 先に読んでいた人の券が、まだ使えること
+    const other = save(b, { ticket: again.ticket, rows: [OPENING, GATE] });
+    assert.strictEqual(other.ok, true, JSON.stringify(other));
+  });
+
+  test('シートの所要分が読めない値でも、黙って0にしない', () => {
+    // 0 は「時刻だけの目印」という意味を持っている。
+    // 読めない値を 0 に倒すと、保存のときに元の値が失われる
+    const b = makeBox({ version: 1, rows: [
+      ['aaaa1111', 'イベント', '11:00', '30分', '打ち合わせ', '', '', '', 1],
+    ] });
+    const got = load(b);
+    assert.strictEqual(got.rows[0].minBad, true,
+      '読めない所要分を、黙って0（時刻だけの目印）にしています');
+  });
+
+  test('タイトルが空でも、中身のある行は消さない', () => {
+    // 出演者と詳細だけ先に書いた下書きが、誰かの保存で消えてはいけない
+    const b = makeBox({ version: 1, rows: [
+      ['aaaa1111', 'イベント', '11:00', 10, '', '○○バンド', '大事なメモ', '', 1],
+    ] });
+    const got = load(b);
+    assert.strictEqual(got.rows.length, 1, 'タイトルが空の行を消しています');
+    assert.strictEqual(got.rows[0].title, '（タイトルがありません）');
+  });
+
+  test('見出しが1文字でも違えば、黙って0件にせず止まる', () => {
+    // 0件で返すと、次のまるごと差し替えでシートが空になる
+    const b = makeBox({ version: 1 });
+    b.sheets['タイムスケジュール'].grid[0][4] = 'タイトル名';   // 見出しを変える
+    b.sheets['タイムスケジュール'].grid.push(['aaaa1111', 'イベント', '11:00', 10, 'あ', '', '', '', 1]);
+    b.box.__auth = { person: '小谷', role: '担当' };
+    assert.throws(() => vm.runInContext('adminTimetable_(__auth)', b.box), /タイトル/,
+      '見出しが違うのに、黙って0件を返しています');
+  });
+
+  test('レーンの一覧に無い行があっても、保存を止めない', () => {
+    /*
+     * 人がシートを直接いじって知らないレーンにすると、
+     * その行は画面に描かれないのに保存だけを永久に断り、
+     * **画面から直す手段が無くなる**。
+     * 読めない時刻の行を消さずに残しているのと、同じ配慮が要る。
+     */
+    const b = makeBox({ version: 1, rows: [
+      ['aaaa1111', 'ステージ裏', '11:00', 10, '知らないレーンの予定', '', '', '', 1],
+    ] });
+    const got = load(b);
+    assert.strictEqual(got.rows.length, 1);
+    assert.strictEqual(got.rows[0].laneBad, true, '知らないレーンに印を付けていません');
+    // 画面はそれを既定のレーンに寄せて保存できる
+    const fixed = got.rows.map(r => Object.assign({}, r, { lane: got.lanes[0] }));
+    const r = save(b, { ticket: got.ticket, rows: fixed });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
   });
 });
 
