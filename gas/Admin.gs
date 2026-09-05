@@ -1769,6 +1769,9 @@ function adminDispatch_(payload) {
     case 'adminTimetable':          return adminTimetable_(auth);
     case 'adminTimetableSave':      return adminTimetableSave_(auth, payload);
     case 'adminTimetableHeartbeat': return adminTimetableHeartbeat_(auth);
+    // 書き出しは①②で共通（gas/Export.gs）。**adminOnly には入れない**
+    case 'adminTimetableExport':    return adminTimetableExport_(auth);
+    case 'adminSchedExport':        return adminSchedExport_(auth);
     case 'adminConfirmSave':  return adminConfirmSave_(auth, payload);
     case 'adminMailTemplate':      return adminMailTemplate_(auth, payload);
     case 'adminMailTemplateSave':  return adminMailTemplateSave_(auth, payload);

@@ -132,6 +132,9 @@ describe('ブラウザ側のコードが、存在しない関数を呼んでい�
     'clearInterval', 'alert', 'confirm', 'prompt', 'crypto', 'console', 'FormData',
     'AbortController', 'Event', 'KeyboardEvent', 'CustomEvent', 'IntersectionObserver',
     'MutationObserver', 'PasswordCredential', 'URLSearchParams', 'Blob', 'URL',
+    // Excel の書き出しを受け取ってダウンロードさせるのに使う（§6-2）。
+    // Base64 → バイト列 → Blob の順で、どれもブラウザに元からあるもの
+    'atob', 'btoa', 'Uint8Array',
     // ファイルの読み込み（素材アップロード・資料置き場で使う）。
     // ここに足し忘れると誤検出になるが、**誤検出のほうが安全**。
     // 逆（知らないものを黙って通す）だと、esc() をブラウザから呼んで

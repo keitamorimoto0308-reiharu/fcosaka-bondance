@@ -533,6 +533,35 @@ function adminSched_(auth) {
   };
 }
 
+/**
+ * Excel に書き出す（§6-2）。中身は gas/Export.gs（②と共通）。
+ * 列は SCHED_HEADERS_ そのまま（人がシートを見るときの並びと同じ）。
+ */
+function adminSchedExport_(auth) {
+  var S = schedRows_();
+  var idx = {};
+  S.headers.forEach(function (h, i) { idx[h] = i; });
+
+  var body = [];
+  for (var i = 0; i < S.rows.length; i++) {
+    var r = S.rows[i];
+    if (!asText_(r[idx['タスク名']]).trim()) continue;
+    body.push(SCHED_HEADERS_.map(function (h) {
+      return (h === '日付' || h === '終了日' || h === '完了日' || h === '起票日')
+        ? schedDate_(r[idx[h]]) : asText_(r[idx[h]]);
+    }));
+  }
+
+  var out = exportXlsx_('制作スケジュール', [{
+    name: '制作スケジュール',
+    headers: SCHED_HEADERS_.slice(),
+    rows: body,
+    widths: [90, 110, 110, 80, 140, 140, 300, 340, 90, 220, 110, 70, 100, 100, 100, 130, 90],
+  }]);
+  if (out.ok && !body.length) out.message = '0件でした（見出しだけの表を書き出しました）。';
+  return out;
+}
+
 /** 1行の追加または更新。row が無ければ追加 */
 function adminSchedSave_(auth, payload) {
   var got = schedRowArg_(payload);

@@ -1424,6 +1424,31 @@ function handle(payload) {
     case 'adminTimetableHeartbeat': return ttCall('adminTimetableHeartbeat_', auth);
 
     /*
+     * Excel の書き出し。**模擬では本物の xlsx は作れない**
+     * （SpreadsheetApp.create も UrlFetchApp も無い）。
+     * 中身は本番の gas/Export.gs が作るので、ここでは
+     * 「画面が受け取ってダウンロードできるか」だけを確かめられる形にする。
+     * **本物より優しくしない**ために、返す形は本番と同じにそろえる。
+     */
+    case 'adminTimetableExport':
+    case 'adminSchedExport': {
+      const sched = (a === 'adminSchedExport');
+      const rows = sched ? DB.sched.length : ttCall('adminTimetable_', auth).rows.length;
+      const day = sched ? '制作スケジュール' : (DB.settings['進行表の日付'] + ' 進行表');
+      return {
+        ok: true,
+        // 模擬の中身は「これは模擬です」と分かる短いテキスト。
+        // 本物の xlsx と取り違えないようにする
+        base64: Buffer.from('模擬サーバーの書き出しです（本物の xlsx は本番でのみ作れます）',
+                            'utf8').toString('base64'),
+        filename: nowText().slice(0, 10) + '_' + day.replace(/[\\/:*?"<>|]/g, '') + '.xlsx',
+        rows,
+        leftover: false,
+        mock: true,
+      };
+    }
+
+    /*
      * **模擬だけの入口。本番のGASにこの経路は無い**（`?probe=` と同じ扱い）。
      *
      * 「ほかの人が先に保存した」を起こす。版のぶつかり（§4-4 の帯）は

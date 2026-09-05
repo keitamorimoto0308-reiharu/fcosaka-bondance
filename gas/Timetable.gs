@@ -441,6 +441,51 @@ function ttCastList_(v) {
     .filter(function (x) { return x.length > 0; });
 }
 
+/**
+ * Excel に書き出す（§6-2）。中身は gas/Export.gs（①と共通）。
+ *
+ * **画面が組んだ表を受け取らない。**サーバーがいま持っている行から組む。
+ * 画面に組ませると、見せている表と書き出したものが食い違いうる。
+ */
+function adminTimetableExport_(auth) {
+  var rows = ttReadRows_();
+  // 印刷の紙（§6-1）と同じ並び：時刻ごとに、レーンの列を並べる
+  var times = [];
+  rows.forEach(function (r) {
+    var m = hhmmToMin_(r.start);
+    if (m === null) return;
+    if (times.indexOf(m) < 0) times.push(m);
+  });
+  times.sort(function (a, b) { return a - b; });
+
+  var body = times.map(function (m) {
+    var line = [minToHhmm_(m)];
+    TT_LANES_.forEach(function (lane) {
+      var here = rows.filter(function (r) {
+        return r.lane === lane && hhmmToMin_(r.start) === m;
+      });
+      line.push(here.map(function (r) {
+        return r.title
+          + (r.min > 0 ? '（' + r.min + '分）' : '')
+          + (r.locked ? '［鍵］' : '')
+          + (r.casts.length ? ' / ' + r.casts.join('・') : '')
+          + (r.detail ? ' / ' + r.detail : '');
+      }).join(' ／ '));
+    });
+    return line;
+  });
+
+  var r = exportXlsx_((ttDay_() || '') + ' 進行表', [{
+    name: '進行表',
+    headers: ['時刻'].concat(TT_LANES_),
+    rows: body,
+    widths: [70, 240, 240, 240],
+  }]);
+  // **0件でも「0件でした」と返す。**黙って正常を作らない
+  if (r.ok && !body.length) r.message = '予定が0件だったので、見出しだけの表を書き出しました。';
+  return r;
+}
+
 // ───────────────────────────────────────────────── 編集中の札（§4-6）
 
 /**

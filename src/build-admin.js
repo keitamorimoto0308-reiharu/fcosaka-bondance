@@ -4120,6 +4120,9 @@ function schSetStatus(row, next){
 function bindSched(){
   schReadFilters();
   $('#schAdd').addEventListener('click', function(){ schOpen(null); });
+  $('#schExcel').addEventListener('click', function(){
+    downloadXlsx('adminSchedExport', '制作スケジュール');
+  });
   $('#schClose').addEventListener('click', schClose);
   $('#schSave').addEventListener('click', schSave);
   $('#schDel').addEventListener('click', schDelete);
@@ -5133,6 +5136,49 @@ function ttPrint(){
   window.print();
 }
 
+/**
+ * Excel を受け取って、ダウンロードさせる（①②で共通）。
+ *
+ * **Drive に置いたリンクは受け取らない**（§6-2）。
+ * 資料フォルダは全共有なので、置いた時点で誰でも開ける可能性がある。
+ * Base64 を Blob にして、その場で保存させる。
+ */
+function downloadXlsx(action, label){
+  toast(label + 'を書き出しています…');
+  api(action).then(function(r){
+    if (!r || !r.ok){
+      toast((r && r.message) || (label + 'を書き出せませんでした'), true);
+      return;
+    }
+    try {
+      var bin = atob(r.base64);
+      var buf = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      var blob = new Blob([buf], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = r.filename || 'export.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){
+        URL.revokeObjectURL(a.href);
+        if (a.parentNode) a.parentNode.removeChild(a);
+      }, 1000);
+    } catch (e){
+      toast('書き出したものを保存できませんでした：' + String(e && e.message || e), true);
+      return;
+    }
+    // **消し漏れは黙って流さない。**Driveに台帳の中身が残っている
+    if (r.leftover){
+      ttBanner('書き出しは終わりましたが、片づけに失敗しました。',
+        'Driveに「[書き出し中] …」という名前のファイルが残っています。'
+        + '中身が入っているので、見つけて削除してください。', false);
+    }
+    if (r.message) toast(r.message);
+  }, function(e){ toast(String(e && e.message || e), true); });
+}
+
 function bindTimetable(){
   $('#ttAdd').addEventListener('click', function(){ ttOpenPop(null); });
   $('#ttFab').addEventListener('click', function(){ ttOpenPop(null); });
@@ -5140,6 +5186,9 @@ function bindTimetable(){
   $('#ttUndo').addEventListener('click', ttUndoOne);
   $('#ttReload').addEventListener('click', loadTimetable);
   $('#ttPrint').addEventListener('click', ttPrint);
+  $('#ttExcel').addEventListener('click', function(){
+    downloadXlsx('adminTimetableExport', '進行表');
+  });
   $('#ttWarn').addEventListener('click', function(e){
     // **押した行の重なり**を出す。どこを押しても1か所目、では選べない
     var row = e.target.closest('[data-warn]');
@@ -5556,6 +5605,7 @@ function html() {
              （押しても何も起きないボタンは、迷いを生むだけ） -->
         <button class="sch-chip" id="schDone" aria-pressed="false" hidden></button>
         <span class="sp"></span>
+        <button class="ghost" id="schExcel">Excelで保存</button>
         <button class="btn" id="schAdd">＋ タスクを追加</button>
       </div>
       <div class="sch-bar" id="schStatusBox" hidden></div>
@@ -5580,6 +5630,7 @@ function html() {
         <button class="ghost" id="ttReload">読み込み直す</button>
         <button class="btn" id="ttAdd">＋ 予定を追加</button>
         <button class="ghost" id="ttPrint">印刷する（A4縦）</button>
+        <button class="ghost" id="ttExcel">Excelで保存</button>
         <button class="print" id="ttSave">保存する</button>
       </div>
       <div class="tt-wrap" id="ttWrap">

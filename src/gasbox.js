@@ -154,6 +154,10 @@ function makeUtilities(opts) {
         getDataAsString: () => buf.toString('utf8'),
       };
     },
+    // GAS には「ふつうの base64」と「URLで使える base64」の両方がある。
+    // 片方だけ代役に置くと、本物では動くのに代役で落ちる（逆も起きる）
+    base64Encode: v => asBuffer(v).toString('base64'),
+    base64Decode: s => toSignedBytes(Buffer.from(String(s), 'base64')),
     base64EncodeWebSafe: v => asBuffer(v).toString('base64')
       .split('+').join('-').split('/').join('_'),
     base64DecodeWebSafe: s => toSignedBytes(

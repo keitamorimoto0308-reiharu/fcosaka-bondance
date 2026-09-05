@@ -4,8 +4,8 @@
 
 ■ 仕様書
   docs/internal/design_timetable.md §7-4 に、足すべき壊し方が14通り書いてある。
-  **10（Excelの一時ファイルを消し忘れる）だけ、まだ書けない。**
-  書き出し（PDF／Excel）は①と共通で作るので、仕様書§9 の手順11で足す。
+  **14通りとも入れ終えた**（10＝Excelの一時ファイルは、手順11で書き出しを作ったときに追加）。
+  そのあと、2026-09-05 の検証役3体が見つけた穴のぶんを足してある。
 
 ■ 「通るテスト」は安全網にならない
   下の壊し方は、どれも「見た目は正しいコード」になる。
@@ -31,6 +31,7 @@ TARGETS = [
     'test/timetable-rules.test.js',
     'test/timetable-page.test.js',
     'test/timetable-mock.test.js',
+    'test/export-run.test.js',
     'test/admin-help.test.js',
     'test/admin.test.js',
 ]
@@ -326,6 +327,34 @@ CASES = [
     ('IDの無い行に、仮のIDを振らないようにする', [
         (A, "    TT.rows = ttFillIds(r.rows || []);", "    TT.rows = r.rows || [];"),
     ], 'IDの無い行に仮のIDを振っていません'),
+
+    # ── §7-4 の 10（手順11で作った書き出し）────────────────────
+    # 一時ファイルの消し忘れは**静かな事故**。Driveが散らかるだけでなく、
+    # 台帳の中身がそのまま残る（資料フォルダは全共有）
+    ('Excelの一時ファイルの削除を消す（finally を外す）', [
+        ('gas/Export.gs', "      try { DriveApp.getFileById(ss.getId()).setTrashed(true); }",
+            "      try { if (false) DriveApp.getFileById(ss.getId()).setTrashed(true); }"),
+    ], '一時ファイルが残っています'),
+
+    # 失敗した道でだけ消し忘れる、という形もある（成功の道だけ見ていると通る）
+    ('取得に失敗したときだけ、一時ファイルを消さないようにする', [
+        ('gas/Export.gs', """      logError_('exportXlsx_:fetch', e2);
+      return { ok: false,""",
+            """      logError_('exportXlsx_:fetch', e2);
+      ss = null;
+      return { ok: false,"""),
+    ], '失敗したときに一時ファイルが残っています'),
+
+    # 消せなかったことを黙って流すと、Driveに中身が残ったままになる
+    ('片づけに失敗したことを、黙って流すようにする', [
+        ('gas/Export.gs', "        if (out) out.leftover = true;", "        if (false) out.leftover = true;"),
+    ], '消し漏れを伝えていません'),
+
+    # Drive に置いたリンクを返すと、資料フォルダ経由で誰でも開ける（§6-2）
+    ('書き出しで、DriveのURLを返すようにする', [
+        ('gas/Export.gs', "      leftover: false,\n    };",
+            "      leftover: false,\n      url: ss.getUrl(),\n    };"),
+    ], 'Drive のURLを返しています'),
 ]
 
 
