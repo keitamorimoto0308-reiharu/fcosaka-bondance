@@ -4388,8 +4388,13 @@ function ttEvHtml(r, li, lay, R){
   var top = Math.round((s - R.from) * TT_PPM);
   var isMark = !(r.min > 0);
   var hh = isMark ? 18 : Math.max(Math.round((e - s) * TT_PPM), 18);
-  // 低い枠に2行を詰めると、下の行が枠から出る。短いものは1行にする
-  var slim = !isMark && hh < 40;
+  /*
+   * 低い枠に2行を詰めると、下の行が枠から出る。短いものは1行にする。
+   * **0分の目印（高さ18px）も1行にする。**
+   * 2行のままだと時刻が枠から切れて見えず、
+   * 「営業終了」の時刻が分からない紙になる（撮影して発覚）。
+   */
+  var slim = isMark || hh < 40;
   var cols = lay.cols || 1, col = lay.col || 0;
   var left = (col / cols * 100), width = (100 / cols);
   // サーバーが「読み取れない」と言った行は、消さずに印を付けて出す。

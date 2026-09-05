@@ -259,13 +259,18 @@ describe('② タイムスケジュールの画面：検証役3体が見つけ�
       '予定がキーボードから押せません');
   });
 
-  test('0分の予定にも、時刻を出す', () => {
-    // 「営業終了」の時刻が出ないと、配る紙として使えない
+  test('0分の予定にも、時刻が見える（枠から切れない）', () => {
+    /*
+     * 時刻を出していても、**枠（18px）に2行を詰めると下の行が切れて見えない**。
+     * 撮影して初めて分かった。1行に詰める側に入れる。
+     */
     const s = SRC.indexOf('function ttEvHtml(');
     const e = SRC.indexOf(String.fromCharCode(10) + '}' + String.fromCharCode(10), s);
     const body = SRC.slice(s, e);
-    assert.ok(!/isMark \? '' : '<div class="tt-grip">/.test(body) || body.indexOf('isMark ? r.start') >= 0,
+    assert.ok(body.indexOf('var when = isMark ? r.start') >= 0,
       '0分の予定に時刻を出していません');
+    assert.ok(body.indexOf('var slim = isMark || hh < 40;') >= 0,
+      '0分の予定を1行にしていません（時刻が枠から切れます）');
   });
 });
 
@@ -406,7 +411,7 @@ describe('② タイムスケジュールの画面：見た目で死ぬところ
   test('短い予定は1行に詰める（枠からはみ出して次の予定を隠さない）', () => {
     // 2026-09-05、10分の予定が最低高さまで引き伸ばされて次の予定に覆われた。
     // HTMLもJSも正しいのに**目で見るまで気づけない**形だった
-    assert.ok(SRC.indexOf('var slim = !isMark && hh < 40;') >= 0,
+    assert.ok(SRC.indexOf('var slim = isMark || hh < 40;') >= 0,
       '短い予定を1行にしていません。枠からはみ出して次の予定に重なります');
   });
 });
