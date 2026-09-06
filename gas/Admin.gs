@@ -1772,6 +1772,9 @@ function adminDispatch_(payload) {
     // 書き出しは①②で共通（gas/Export.gs）。**adminOnly には入れない**
     case 'adminTimetableExport':    return adminTimetableExport_(auth);
     case 'adminSchedExport':        return adminSchedExport_(auth);
+    // Excelの取り込み。①は全員が触れるので **adminOnly には入れない**
+    case 'adminSchedImportRead':   return adminSchedImportRead_(auth, payload);
+    case 'adminSchedImportApply':  return adminSchedImportApply_(auth, payload);
     case 'adminConfirmSave':  return adminConfirmSave_(auth, payload);
     case 'adminMailTemplate':      return adminMailTemplate_(auth, payload);
     case 'adminMailTemplateSave':  return adminMailTemplateSave_(auth, payload);
