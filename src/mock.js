@@ -552,6 +552,128 @@ function ttCall(name, auth, payload) {
   return r === undefined || r === null ? r : JSON.parse(JSON.stringify(r));
 }
 
+/**
+ * ① Excel の取り込みは、**本番の gas/SchedImport.gs をそのまま動かす**。
+ *
+ * ①の保存は模擬に写しを持っているが（上の SCHED）、取り込みは写しを持たない。
+ * 2026-09-04、写しを持っていたせいで「模擬の保存が100%落ちる」に
+ * 誰も気づけなかった。同じことを繰り返さない。
+ *
+ * シートの代役は src/gasbox.js（テストと同じもの）。
+ * DB.sched との行き来は siSyncIn / siSyncOut が持つ。
+ */
+const SI = (() => {
+  const G = require('./gasbox.js');
+  const norm = t => t.split('\r\n').join('\n');
+  const rd = f => norm(fs.readFileSync(path.join(ROOT, 'gas', f), 'utf8'));
+  const adminSrc = rd('Admin.gs');
+  const setupSrc = rd('Setup.gs');
+
+  const HEAD = ['種類', '日付', '終了日', '領域', '担当会社', '担当者', 'タスク名', '詳細',
+                'ステータス', '備考', '完了日', '並び順', '起票者', '起票日',
+                '更新者', '更新日時', 'ID'];
+  const sheets = {
+    '制作スケジュール': G.makeSheet(HEAD, []),
+    '関係者': G.makeSheet(
+      ['氏名', '所属', '部署', 'メール', 'フォーム表示', '管理ページ利用', '役割', '通知'],
+      PEOPLE.map(x => [x.name, x.org, x.dept, x.email,
+                       x.formVisible ? 'する' : 'しない', x.canLogin ? 'する' : 'しない',
+                       x.role, x.notify ? 'ON' : 'OFF'])),
+    '設定': G.makeSheet(['項目', '値', '説明'], []),
+  };
+
+  /** 模擬では xlsx を変換できないので、差し込まれた行を返す（模擬だけの入口） */
+  let seeded = [];
+
+  const box = {
+    Array, Object, String, Number, JSON, RegExp, Math, isFinite, Boolean, Date,
+    console: { error() {}, log() {} },
+    Utilities: G.makeUtilities(),
+    ScriptApp: { getOAuthToken: () => 'mock-token' },
+    UrlFetchApp: { fetch: () => { throw new Error('模擬ではDriveに触りません'); } },
+    DriveApp: { getFileById: () => ({ setTrashed: () => {} }) },
+    SpreadsheetApp: { flush() {}, openById: () => { throw new Error('模擬では開きません'); } },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
+    LOCK_WAIT_MS: 30000,
+    SHEET: { SCHED: '制作スケジュール', PEOPLE: '関係者', CONFIG: '設定', TODO: '確認事項',
+             HISTORY: '変更履歴' },
+    sheet_: name => {
+      if (!sheets[name]) sheets[name] = G.makeSheet([], []);
+      return sheets[name];
+    },
+    appendHistory: (operator, receiptId, item, before, after, reason) => {
+      DB.history.unshift({ at: nowText(), who: operator, id: receiptId,
+                           item, before, after, reason });
+    },
+    configNumber: () => null,
+    logError_: () => {},
+    // 模擬だけ：読んだ結果を差し込む（本番のGASにこの経路は無い）
+    __seed: rows => { seeded = rows || []; },
+    __seeded: () => seeded,
+  };
+  vm.createContext(box);
+  vm.runInContext([
+    G.cutFunction(adminSrc, 'asText_'), G.cutFunction(adminSrc, 'safeCellText_'),
+    G.cutFunction(adminSrc, 'normalizeDue_'), G.cutFunction(setupSrc, 'findConfigRow_'),
+  ].join(String.fromCharCode(10)), box);
+  vm.runInContext(rd('Stamp.gs'), box);
+  vm.runInContext(rd('Sched.gs'), box);
+  vm.runInContext(rd('SchedImport.gs'), box);
+  return { box, sheets, HEAD };
+})();
+
+/** DB.sched → 箱のシート */
+function siSyncIn() {
+  const g = SI.sheets['制作スケジュール'].grid;
+  g.length = 1;
+  DB.sched.forEach((r, i) => {
+    if (!r.id) r.id = schedNewIdMock();
+    g.push([r.kind || '', r.date || '', r.endDate || '', r.area || '',
+            (r.companies || []).join(', '), (r.people || []).join(', '),
+            r.title || '', r.detail || '', r.status || '', r.memo || '',
+            r.doneDate || '', i + 1, r.author || '', r.createdAt || '',
+            r.updatedBy || '', r.updatedAt || '', r.id]);
+  });
+}
+
+/** 箱のシート → DB.sched */
+function siSyncOut() {
+  DB.sched = SI.sheets['制作スケジュール'].grid.slice(1)
+    .filter(l => String(l[6] || '').trim())
+    .map(l => ({
+      kind: l[0], date: l[1], endDate: l[2], area: l[3],
+      companies: String(l[4] || '').split(',').map(x => x.trim()).filter(Boolean),
+      people: String(l[5] || '').split(',').map(x => x.trim()).filter(Boolean),
+      title: l[6], detail: l[7], status: l[8], memo: l[9], doneDate: l[10],
+      author: l[12], createdAt: l[13], updatedBy: l[14], updatedAt: l[15], id: l[16],
+    }));
+}
+
+/**
+ * 箱の中の関数を呼ぶ。返りは素の値に写す（VMのオブジェクトは別物）。
+ *
+ * **書いたときだけ書き戻す。**読むだけの呼び出しでも書き戻していたら、
+ * 断った経路でも DB.sched の形が変わってしまい、
+ * 「断ったら何も変わらない」という約束を形の上で破っていた（検査が捕まえた）。
+ */
+function siCall(expr, vars, writes) {
+  siSyncIn();
+  Object.keys(vars || {}).forEach(k => { SI.box[k] = vars[k]; });
+  const r = vm.runInContext(expr, SI.box);
+  const out = (r === undefined || r === null) ? r : JSON.parse(JSON.stringify(r));
+  if (writes && out && out.ok) siSyncOut();
+  return out;
+}
+
+/** タブの上に出す「最後に誰がいつ」 */
+function siStamps() {
+  siSyncIn();
+  return JSON.parse(JSON.stringify(vm.runInContext(
+    '({ edit: lastActionGet_(SCHED_EDIT_KEY_),'
+    + ' import: lastActionGet_(SCHED_IMPORT_KEY_),'
+    + ' export: lastActionGet_(SCHED_EXPORT_KEY_) })', SI.box)));
+}
+
 /** 行を見分ける印。本番の schedNewId_ と同じ 8桁 */
 const schedNewIdMock = () => crypto.randomBytes(4).toString('hex');
 
@@ -1362,6 +1484,8 @@ function handle(payload) {
         })(),
         // 本番はサーバーの日付を返す。端末の時計を見ない（§3-1）
         today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo
+        // タブの上に出す「最後に誰がいつ」（design_sched_import.md §5）
+        stamps: siStamps(),
       };
     }
 
@@ -1470,6 +1594,34 @@ function handle(payload) {
       const r = ttCall('adminTimetableSave_', other, { ticket: got.ticket, rows });
       return { ok: true, version: r.version, by: other.person };
     }
+
+    // ── ① Excelの取り込み。**adminOnly には入れない**（全員が触れる）
+    //    照合と検証は**本番の gas/SchedImport.gs**がそのまま動く（写しを持たない）
+    case 'adminSchedImportRead': {
+      // 模擬では xlsx を変換できないので、差し込まれた行を「読んだ結果」にする。
+      // **拡張子と大きさの検査は本番のものを通す**（画面の accept だけに頼らない）
+      const why = siCall('schedImportReject_(__b64, __name)',
+                         { __b64: payload.base64 || '', __name: payload.fileName || '' });
+      if (why) return { ok: false, message: why };
+      const plan = siCall('schedImportPlan_(__rows, schedPeople_())',
+                          { __rows: SI.box.__seeded() });
+      return { ok: true, items: plan.items, counts: plan.counts, missing: plan.missing,
+               leftover: false,
+               message: SI.box.__seeded().length ? '' : 'Excelに行がありませんでした。' };
+    }
+
+    case 'adminSchedImportApply':
+      return siCall('adminSchedImportApply_(__auth, __payload)',
+                    { __auth: { person: auth.person }, __payload: { rows: payload.rows } },
+                    true);   // これだけが書く
+
+    /*
+     * **模擬だけの入口。本番のGASにこの経路は無い**（`?probe=` と同じ扱い）。
+     * xlsx の変換は Drive でしか動かないので、「読んだ結果」を差し込めるようにする。
+     */
+    case 'mockSchedImportSeed':
+      SI.box.__seed(payload.rows || []);
+      return { ok: true, rows: (payload.rows || []).length };
 
     case 'adminTodos':
       return { ok: true, rows: DB.todos.map((t, i) => Object.assign({ row: i + 2 }, t)) };
