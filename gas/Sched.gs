@@ -502,10 +502,48 @@ function schedFindRow_(sh, row, id) {
 }
 
 /** 全行を返す。絞り込みはしない（40〜80行なので画面側で足りる） */
+/**
+ * ID列が空の行に、IDを付ける。**読むときに、その場で。**
+ *
+ * ■ なぜ要るか
+ *   人はスプレッドシートに直接行を貼る（それを許す仕様にしてある）。
+ *   貼った行のID列は空のままだが、**画面は ID で行を見分けている**ので、
+ *   空だと `schFind('')` が「IDの無い最初の行」を返し続ける。
+ *   どの行を押しても同じタスクが開く（2026-09-07、54行を貼って実際に起きた）。
+ *   保存も、IDなしの行は「行番号」だけが頼りになり、
+ *   他人が1行消した瞬間に別のタスクを上書きする道が開く。
+ *
+ * ■ なぜ「読むとき」か
+ *   人にひと手間かけさせない。setup() を押し直す必要も無くす。
+ *   ここを通らずに台帳を見る道は無いので、取りこぼさない。
+ *
+ * ■ 記録は汚さない
+ *   これは人の編集ではない。変更履歴にも「最終編集」にも残さない。
+ *   残すと「誰も触っていないのに編集したことになっている」が起きる。
+ *
+ * ■ タスク名の無い行は飛ばす
+ *   人がシートの下のほうに残した空行に、IDだけが並ぶのを防ぐ。
+ */
+function schedFillIds_(S, idx) {
+  var col = idx['ID'] + 1;
+  var wrote = false;
+  for (var i = 0; i < S.rows.length; i++) {
+    var r = S.rows[i];
+    if (asText_(r[idx['ID']]).trim()) continue;
+    if (!asText_(r[idx['タスク名']]).trim()) continue;   // 空行には付けない
+    var id = schedNewId_();
+    r[idx['ID']] = id;                                   // 読み出す側にも反映する
+    S.sheet.getRange(i + 2, col).setValue(id);
+    wrote = true;
+  }
+  if (wrote) SpreadsheetApp.flush();
+}
+
 function adminSched_(auth) {
   var S = schedRows_();
   var idx = {};
   S.headers.forEach(function (h, i) { idx[h] = i; });
+  schedFillIds_(S, idx);
 
   var out = [];
   for (var i = 0; i < S.rows.length; i++) {

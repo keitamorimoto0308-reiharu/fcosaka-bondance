@@ -20,10 +20,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _guard import guard  # noqa: E402
 R = pathlib.Path(__file__).resolve().parent.parent
 TARGET = 'test/purge.test.js'
+# 投入（gas/Seed.gs）は削除と対の道具。同じ鍵で守られているか、ここで見る
+TARGET2 = 'test/seed.test.js'
 
 
 def run():
-    r = subprocess.run(['node', '--test', TARGET], cwd=R, capture_output=True,
+    r = subprocess.run(['node', '--test', TARGET, TARGET2], cwd=R, capture_output=True,
                        text=True, encoding='utf-8', errors='replace', shell=True)
     return r.returncode == 0, (r.stdout or '') + (r.stderr or '')
 
@@ -214,6 +216,29 @@ CASES = [
         ('src/mock.js', "          message: 'この操作は、「設定」タブの「テストデータの一括削除を許可」が'",
          "          message: 'この操作は、「設定」タブの「テストデータの削除」が'"),
     ], '設定タブに無い名前を言っています'),
+
+    # ── 投入（gas/Seed.gs）。削除と対で守る ──────────────
+    # 消せない状態でテストデータを入れられると、本番に残り続ける
+    ('スイッチがOFFでも、テストデータを入れられるようにする', [
+        ('gas/Seed.gs', "  if (sw !== 'ON') {", '  if (false) {'),
+    ], 'OFFなのに入れました'),
+
+    # 本物と混ざると、一括削除で本物まで消える
+    ('本物の応募があっても、テストデータを足せるようにする', [
+        ('gas/Seed.gs', '    if (real.length) {', '    if (false) {'),
+    ], '本物があるのに入れました'),
+
+    # 件数の読み取りが甘いと、打ち間違いが黙って通る
+    ('件数が読み取れなくても、既定で入れるようにする', [
+        ('gas/Seed.gs',
+         "  if (!isFinite(want) || want < 1) throw new Error('件数が読み取れません。');",
+         '  if (!isFinite(want) || want < 1) want = rows.length;'),
+    ], '件数が読み取れません'),
+
+    # デモの中身が本物に見えると、うっかり本物として扱われる
+    ('テストデータの企業名から、テストの印を外す', [
+        ('gas/Seed.gs', "companyName: '【テスト】みどり食堂'", "companyName: 'みどり食堂'"),
+    ], '企業名がテストと分かりません'),
 ]
 
 

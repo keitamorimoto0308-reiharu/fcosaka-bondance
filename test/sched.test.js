@@ -1515,3 +1515,75 @@ describe('① ステータスは選んで変える／領域は前回を覚える
     assert.ok(h.indexOf('SCH_STATUS_KEY') < 0, 'ステータスまで覚えようとしています');
   });
 });
+
+/*
+ * 人がシートに直接貼った行は、ID列が空のまま台帳に入る。
+ * 画面は ID で行を見分けるので、**空のままだと押した行と違う行が開く**
+ * （2026-09-07、けいたが54行を貼って実際に起きた。
+ *  schFind('') が、IDの無い最初の行を返し続けていた）。
+ */
+describe('① IDの無い行に、IDを付ける', () => {
+
+  test('IDが空の行を読むと、その場でIDが付く', () => {
+    const b = makeBox({ rows: [
+      ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', '看板A', '',
+       '未着手', '', '', '', '', '', '', '', ''],
+      ['タスク', '2026-09-21', '', '制作', 'FC大阪', '小谷', '看板B', '',
+       '未着手', '', '', '', '', '', '', '', ''],
+    ] });
+    const r = load(b, '小谷');
+
+    assert.strictEqual(r.rows.length, 2);
+    assert.ok(r.rows[0].id, '1行目にIDが付いていません');
+    assert.ok(r.rows[1].id, '2行目にIDが付いていません');
+    assert.notStrictEqual(r.rows[0].id, r.rows[1].id, '同じIDが2行に付きました');
+    assert.match(r.rows[0].id, /^[0-9a-zA-Z]{8}$/, 'IDの形が違います');
+  });
+
+  test('付けたIDは、シートにも書かれる（次に読んでも同じ）', () => {
+    const b = makeBox({ rows: [
+      ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', '看板A', '',
+       '未着手', '', '', '', '', '', '', '', ''],
+    ] });
+    const first = load(b, '小谷').rows[0].id;
+    // **空同士の一致は確認にならない。**先に「付いていること」を見る
+    assert.ok(first, 'IDが付いていません');
+    const onSheet = b.sheets['制作スケジュール'].grid[1][16];
+    assert.strictEqual(onSheet, first, 'シートにIDが書かれていません');
+
+    const again = load(b, '小谷').rows[0].id;
+    assert.strictEqual(again, first, '読むたびにIDが変わります');
+  });
+
+  test('すでにIDがある行は、書き換えない', () => {
+    const b = makeBox({ rows: [
+      ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', '看板A', '',
+       '未着手', '', '', '', '', '', '', '', 'aaaa1111'],
+    ] });
+    const r = load(b, '小谷');
+    assert.strictEqual(r.rows[0].id, 'aaaa1111', '既存のIDを書き換えました');
+  });
+
+  test('IDを付けても、変更履歴と「最終編集」は汚さない', () => {
+    /*
+     * これは人の編集ではない。記録に残すと
+     * 「誰も触っていないのに編集したことになっている」が起きる。
+     */
+    const b = makeBox({ rows: [
+      ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', '看板A', '',
+       '未着手', '', '', '', '', '', '', '', ''],
+    ] });
+    const r = load(b, '小谷');
+    assert.strictEqual(b.history.length, 0, '変更履歴に残っています');
+    assert.strictEqual(r.stamps.edit.at, 0, '最終編集が記録されています');
+  });
+
+  test('タスク名の無い行には、IDを付けない（空行を拾わない）', () => {
+    const b = makeBox({ rows: [
+      ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ] });
+    load(b, '小谷');
+    assert.strictEqual(b.sheets['制作スケジュール'].grid[1][16], '',
+      '空行にIDを付けました');
+  });
+});
