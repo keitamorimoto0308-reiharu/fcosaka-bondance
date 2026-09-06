@@ -251,6 +251,18 @@ function schedPeople_() {
  * **通らないものは理由を添えて断る。**黙って既定値に落とさない
  * （「単価が空欄なら0円」で無料受注が起きた件と同じ轍）。
  */
+/**
+ * 選べないものが来たときの断り文。**選択肢をそのまま並べる。**
+ *
+ * 画面では選ぶだけなので起きないが、Excel の取り込みでは人が手で書く。
+ * 「領域が正しくありません」だけを返していたので、
+ * 「会場」と書いた人は、何に直せばいいのか画面のどこからも知れなかった。
+ */
+function schedBadChoice_(label, given, list) {
+  return label + '「' + asText_(given) + '」は使えません。'
+       + list.join('・') + ' のどれかにしてください。';
+}
+
 function validateSchedRow_(item, people) {
   people = people || { byName: Object.create(null) };
 
@@ -270,7 +282,9 @@ function validateSchedRow_(item, people) {
   if (kindT.message) return kindT;
   var kind = kindT.value || 'タスク';
   if (SCHED_KINDS_.indexOf(kind) < 0) {
-    return { message: '種類が正しくありません。' };
+    // **何なら正しいのかを書く。**「正しくありません」だけでは、
+    // Excel を直す人は何に直せばいいのか分からない（検証役 2026-09-07）
+    return { message: schedBadChoice_('種類', kind, SCHED_KINDS_) };
   }
 
   var areaT = schedText_(item.area, '領域');
@@ -279,7 +293,7 @@ function validateSchedRow_(item, people) {
   // 「正しくありません」では、選び忘れなのか値が変なのか分からない
   if (!area) return { message: '領域をお選びください。' };
   if (SCHED_AREAS_.indexOf(area) < 0) {
-    return { message: '領域が正しくありません。' };
+    return { message: schedBadChoice_('領域', area, SCHED_AREAS_) };
   }
 
   // 文字と数だけを受ける。**先に長さを見ると配列で制限を回避できる**ので、
@@ -333,7 +347,7 @@ function validateSchedRow_(item, people) {
   if (kind === 'タスク') {
     status = asText_(item.status).trim() || '未着手';
     if (SCHED_STATUSES_.indexOf(status) < 0) {
-      return { message: 'ステータスが正しくありません。' };
+      return { message: schedBadChoice_('ステータス', status, SCHED_STATUSES_) };
     }
   }
 

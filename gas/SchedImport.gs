@@ -128,6 +128,22 @@ function schedImportRows_(ss) {
     return { message: '「タスク名」の列が見つかりませんでした。'
            + '「Excelで保存」で書き出したものを直してお使いください。' };
   }
+  /*
+   * **ID列が無ければ断る。**
+   *
+   * ID は「台帳のどの行か」を指す唯一の手がかり。無いまま取り込むと
+   * 全行が「新しい行」として足され、**同じ工程表が2セット並ぶ**。
+   * しかも下見は赤ゼロで「追加◯件」と出るので、押すまで気づけない。
+   *
+   * 2MB超の断り文が「いらない列を消してからお試しください」と案内している以上、
+   * ID列を消す人は必ず出る（検証役 2026-09-07）。
+   */
+  if (headers.indexOf('ID') < 0) {
+    return { message: '「ID」の列が見つかりませんでした。'
+           + 'ID列は、いまある行を見分けるための番号です。'
+           + 'これが無いと、すべての行が新しい行として足されます。'
+           + '「Excelで保存」で書き出したものを直してお使いください。' };
+  }
 
   var rows = [];
   for (var i = 1; i < values.length; i++) {
@@ -272,6 +288,13 @@ function schedImportToItem_(r) {
  */
 function schedImportFieldOf_(message) {
   var m = String(message || '');
+  /*
+   * 「期間には開始日が必要です。」は**日付**のこと。
+   * この言い換えを知らなかったので、日付が空なのに
+   * **タスク名のセルが赤くなっていた**（検証役 2026-09-07）。
+   * 直す場所と、赤いところが違うと、人は直しようがない。
+   */
+  if (m.indexOf('開始日') >= 0) return '日付';
   var names = ['タスク名', '終了日', '日付', '領域', '種類', '担当会社', '担当者',
                'ステータス', '詳細', '備考'];
   for (var i = 0; i < names.length; i++) {
@@ -448,20 +471,43 @@ function adminSchedImportApply_(auth, payload) {
     var now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
 
     var added = 0, updated = 0;
+    var undo = [];        // 書き換えた行の「前」と「後」。変更履歴に1件ずつ残す
     plan.items.forEach(function (x) {
       if (x.action === 'same') return;          // 触らない（更新者も塗り替えない）
       var line = schedImportLine_(x, idx, S, auth, today, now);
       if (x.action === 'add') { sh.appendRow(line); added++; return; }
       // 更新。行はIDで引き直す（下見のあとに並びが変わっていても大丈夫）
       var at = schedImportFindRow_(sh, x.id);
-      if (at) { sh.getRange(at, 1, 1, SCHED_HEADERS_.length).setValues([line]); updated++; }
+      if (!at) return;
+      /*
+       * **書き換える行は、前と後の全文を残す。**
+       *
+       * 設計§7 は「読み込み中に他人が直していても見ない」と決めた理由に
+       * 「更新は変更履歴に全文が残るので、あとから追える」を挙げているのに、
+       * 取り込みだけ要約1行しか残していなかった（検証役 2026-09-07）。
+       * 古い Excel を取り込むと、他人の直しが黙って巻き戻るのに、
+       * 何が消えたのかを知る手立てが無い状態だった。
+       *
+       * 足すのは**更新のときだけ**。追加は前が無いので要約で足りるし、
+       * 全行ぶん残すと HISTORY_CELL_MAX に当たる。
+       */
+      var was = sh.getRange(at, 1, 1, SCHED_HEADERS_.length).getValues()[0];
+      sh.getRange(at, 1, 1, SCHED_HEADERS_.length).setValues([line]);
+      updated++;
+      undo.push({ before: JSON.stringify(schedRowObject_(was)),
+                  after: JSON.stringify(schedRowObject_(line)) });
     });
     SpreadsheetApp.flush();
 
+    // 書き換えた行は1件ずつ残す（戻せるのはこれだけ）
+    undo.forEach(function (u) {
+      appendHistory((auth && auth.person) || '', '（スケジュール）', '取り込みで更新',
+                    u.before, u.after, '');
+    });
+
     /*
-     * **変更履歴は1行だけ。**行ごとの全文は残さない
-     * （HISTORY_CELL_MAX = 5000 で切られる。②で同じ判断をした）。
-     * 戻すのはスプレッドシートの版の履歴。
+     * まとめの1行。**何件だったか**はこちらで見る。
+     * 戻すのはスプレッドシートの版の履歴か、上の1件ずつの記録。
      */
     if (added || updated) {
       appendHistory((auth && auth.person) || '', '（スケジュール）', '取り込み',

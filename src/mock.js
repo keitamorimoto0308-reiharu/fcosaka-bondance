@@ -1545,7 +1545,14 @@ function handle(payload) {
        * 「ログインしていても、編集していなければ記録に残さない」がけいた確定の仕様。
        * 更新者・更新日時を除いて比べる（本番の schedRowObject_ と同じ考え）。
        */
-      const bare = o => JSON.stringify(Object.assign({}, o, { updatedBy: '', updatedAt: '' }));
+      // 比べる欄を**並べて書く**。Object.assign して JSON にすると、
+      // 鍵の並びが違うだけで「変わった」になる（実際にそうなった）
+      const bare = o => JSON.stringify([
+        o.kind || '', o.date || '', o.endDate || '', o.area || '',
+        (o.companies || []).join(', '), (o.people || []).join(', '),
+        o.title || '', o.detail || '', o.status || '', o.memo || '',
+        o.doneDate || '',
+      ]);
       if (bare(prev) === bare(next)) return { ok: true, added: false, unchanged: true };
       DB.sched[found.i] = next;
       siStampSet(SI.box.SCHED_EDIT_KEY_, auth.person);

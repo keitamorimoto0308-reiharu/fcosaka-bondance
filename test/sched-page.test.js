@@ -130,11 +130,21 @@ describe('① 画面：最後に誰がいつ（§5-4）', () => {
       '記録が無いものも出しています（まだ取り込んでいなければ出しません）');
   });
 
-  test('編集・取り込み・書き出しの3つを出す', () => {
-    const b = body('function schRenderStamps(');
-    ['最終編集', '取り込み', '書き出し'].forEach(word => {
+  test('編集・取り込み・書き出しの3つを、誰が何をしたかの言い方で出す', () => {
+    /*
+     * 「最終編集：山田 ／ 取り込み：佐藤」では、
+     * 佐藤さんが取り込んだのか、佐藤さんの行が取り込まれたのか読めない。
+     * 「◯◯さんが △時に □した」の形にそろえた（検証役 2026-09-07）。
+     */
+    const b = noComment(body('function schRenderStamps('));
+    ['編集', 'Excelから取り込み', 'Excelで保存'].forEach(word => {
       assert.ok(b.indexOf(word) >= 0, '「' + word + '」が出ていません');
     });
+    assert.match(b, /さんが .*に/, '「誰が・いつ・何をした」の形になっていません');
+    // 並びは 書き出し → 取り込み → 編集（人がやった順に読める）
+    assert.ok(b.indexOf("st['export']") < b.indexOf("st['import']")
+              && b.indexOf("st['import']") < b.indexOf('st.edit'),
+      '時系列の並びになっていません');
   });
 });
 
@@ -247,5 +257,73 @@ describe('① 画面：検証役の指摘（2026-09-07）', () => {
     const clickAt = f.indexOf("$('#schFile').click()");
     assert.ok(clearAt > 0, '押したときに選択を空に戻していません');
     assert.ok(clickAt > clearAt, '空に戻すより先に開いています');
+  });
+});
+
+describe('① 画面：直し方が分かるか（2026-09-07）', () => {
+
+  test('下見の行を開いたら、なぜ赤いのかをパネルに出す', () => {
+    // 以前は表のセルの吹き出しだけ。触る画面では合わせられない
+    assert.ok(SRC.indexOf('id="schWhy"') >= 0, '理由を出す場所がありません');
+    assert.match(noComment(body('function schImpWhy')), /p\.why/,
+      '理由の文をパネルに出していません');
+    assert.match(SRC, /schOpen\(schImpRowForEdit\(x\)\);\s*\n\s*schImpWhy\(x\);/,
+      '行を開いたときに理由を出していません');
+  });
+
+  test('IDだけが問題の行には「この画面では直せない」と書く', () => {
+    /*
+     * 編集パネルにID欄は無い（置くと人が番号を打ち直せてしまう）。
+     * 直せないものに「押すと直せます」と言い続けていた。
+     */
+    const f = noComment(body('function schImpWhy'));
+    assert.match(f, /この画面では直せません/, '直せないことを言っていません');
+    assert.match(f, /ID列を空にして/, 'どうすればいいかが書かれていません');
+  });
+
+  test('下見のボタンは「この行を直す」（台帳に保存しない）', () => {
+    assert.match(SRC, /\$\('#schSave'\)\.textContent = impMode \? 'この行を直す'/,
+      'ボタンの名前が、押した結果を表していません');
+    assert.match(SRC, /\$\('#schPanelTitle'\)\.textContent = impMode/,
+      'パネルの見出しが「タスクを編集」のままです');
+  });
+
+  test('「Excelで消しても台帳からは消えない」を、件数がゼロでも出す', () => {
+    // 「そのまま残します」だけでは、Excelの行を残すのか台帳の行を残すのか読めない
+    const f = noComment(body('function schImpRender'));
+    const i = f.indexOf('Excelで行を消しても、台帳からは消えません');
+    assert.ok(i > 0, '「消えません」の案内がありません');
+    // c.missing の中ではなく、外に置く（0件でも出す）
+    assert.ok(f.slice(0, i).lastIndexOf('c.missing') < f.slice(0, i).lastIndexOf('sch-imp-sum'),
+      '件数があるときだけ出しています');
+  });
+
+  test('書き換える行があるときは、押す前に確認する', () => {
+    // 「削除する」には確認があるのに、上書きには無かった
+    const f = noComment(body('function schImpGo'));
+    assert.match(f, /c\.update && !confirm\(/, '書き換える前に止めていません');
+    assert.match(f, /書き換えます/, '何が起きるかを書いていません');
+  });
+
+  test('取り込みの通信の失敗は、netFail を通す', () => {
+    // 入室が切れると、赤いトーストに __session_ended__ が生で出ていた
+    ['function schImpPick', 'function schImpApplyEdit', 'function schImpGo',
+     'function loadSched'].forEach(name => {
+      const f = body(name);
+      assert.ok(f.indexOf('toast(String(e && e.message || e), true)') < 0,
+        name + ' が、通信の失敗を生のまま出しています');
+    });
+  });
+
+  test('「見かた」に、書き出す→直す→取り込む の順番が書いてある', () => {
+    const i = SRC.indexOf("sched: ['制作スケジュール表の見かた'");
+    assert.ok(i > 0, '見かたが見つかりません');
+    const how = SRC.slice(i, SRC.indexOf("list: ['出店者一覧の見かた'"));
+    assert.match(how, /先に.*「Excelで保存」/, '順番が書かれていません');
+    assert.match(how, /「Excelから取り込む」で戻します/, '戻す手順が書かれていません');
+    assert.match(how, /ID列は消さないでください/, 'ID列のことが書かれていません');
+    assert.match(how, /ID列まで一緒にコピー/, '行を増やすときの注意がありません');
+    assert.match(how, /Excelで消しても、台帳からは消えません/,
+      '「消しても消えない」が書かれていません');
   });
 });

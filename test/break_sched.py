@@ -554,6 +554,45 @@ CASES = [
             "      return { ok: false, message: got.message };"),
     ], '断ったときは、消し漏れが黙って捨てられています'),
 
+    # ID列が無いと、台帳にある行が全部「追加」になって二重になる
+    ('ID列が無くても読めるようにする', [
+        (I, "  if (headers.indexOf('ID') < 0) {", "  if (false) {"),
+    ], 'ID列が無いのに読めています'),
+
+    # 「正しくありません」だけでは、Excelを直す人は何に直せばいいか分からない
+    ('選べない値の断り文から、選択肢を消す', [
+        (S, "  return label + '「' + asText_(given) + '」は使えません。'\n"
+            "       + list.join('・') + ' のどれかにしてください。';",
+            "  return label + 'が正しくありません。';"),
+    ], 'どの値が駄目なのかが書かれていません'),
+
+    # 直す場所と赤いところが違うと、人は直しようがない
+    ('開始日の言い換えを、知らないようにする', [
+        (I, "  if (m.indexOf('開始日') >= 0) return '日付';", "  if (false) return '日付';"),
+    ], '開始日が空なのに、日付のセルが赤くなりません'),
+
+    # 取り込みで巻き戻された中身を、あとから追えなくなる
+    ('取り込みの更新で、前の中身を残さないようにする', [
+        (I, "      undo.push({ before: JSON.stringify(schedRowObject_(was)),",
+            "      if (false) undo.push({ before: JSON.stringify(schedRowObject_(was)),"),
+    ], '書き換えた行の全文が残っていません'),
+
+    # 理由が出ないと、「押すと直せます」と言われて開いたパネルが無言になる
+    ('下見を開いても、理由を出さないようにする', [
+        (A, "    schImpWhy(x);", "    if (false) schImpWhy(x);"),
+    ], '行を開いたときに理由を出していません'),
+
+    # 上書きの前に止めないと、他人の直しが黙って消える
+    ('書き換える前の確認をやめる', [
+        (A, "  if (c.update && !confirm(", "  if (false && !confirm("),
+    ], '書き換える前に止めていません'),
+
+    # 入室切れの合図を、そのまま赤いトーストに出してしまう
+    ('取り込みの通信の失敗を、生のまま出すようにする', [
+        (A, "      }, function(e){ netFail(e, 'Excelを読めませんでした'); });",
+            "      }, function(e){ toast(String(e && e.message || e), true); });"),
+    ], 'が、通信の失敗を生のまま出しています'),
+
     # 判定を画面に写すと、サーバーと規則がズレる
     ('直したあとの見直しを、画面でやるようにする', [
         (A, "  api('adminSchedImportRead', { rows: rows }).then(function(r){",

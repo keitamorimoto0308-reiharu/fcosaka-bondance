@@ -210,8 +210,9 @@ describe('取り込み：xlsx を読む（§3-1・§3-4）', () => {
 
   test('知らない列は無視する（人がメモ用の列を足していてもよい）', () => {
     const b = makeBox({ xlsx: [
-      ['タスク名', 'わたしのメモ', '領域'],
-      ['看板の入稿', 'あとで確認', '制作'],
+      // ID列は必ず要る（無いと全行が「追加」になり、台帳が二重になる）
+      ['タスク名', 'わたしのメモ', '領域', 'ID'],
+      ['看板の入稿', 'あとで確認', '制作', ''],
     ] });
     const r = readFile(b, SOME);
     assert.strictEqual(r.ok, true, JSON.stringify(r));
@@ -667,5 +668,77 @@ describe('検証役の指摘：読み取り側の守り', () => {
     assert.strictEqual(r.ok, false);
     assert.strictEqual(r.leftover, true,
                        '断ったときは、消し漏れが黙って捨てられています');
+  });
+});
+
+describe('検証役の指摘：直し方が分かるように', () => {
+  test('ID列が無いファイルは断る（全行が「追加」になって台帳が二重になる）', () => {
+    /*
+     * 2MB超の断り文が「いらない列を消してからお試しください」と案内しているので、
+     * ID列を消す人は実際に出る。そのまま通すと、台帳にすでにある行が
+     * 全部「追加」として入り、同じ工程表が2セット並ぶ。
+     */
+    const b = makeBox({ xlsx: [
+      ['種類', '日付', '領域', 'タスク名', 'ステータス'],
+      ['タスク', '2026-09-20', '制作', '看板の入稿', '未着手'],
+    ], ledger: [LEDGER_TASK] });
+    const r = readFile(b, 'UEsDBA==');
+    assert.strictEqual(r.ok, false, 'ID列が無いのに読めています');
+    assert.match(r.message, /ID/);
+    assert.match(r.message, /Excelで保存/, '直し方が書かれていません');
+  });
+
+  test('領域が違うときは、何なら正しいのかを書く', () => {
+    const b = makeBox({ ledger: [] });
+    const p = plan(b, [xrowObj({ 種類: 'タスク', 日付: '2026-10-01', 領域: '会場',
+                                 タスク名: 'なにか', ステータス: '未着手' })]);
+    const why = p.items[0].problems.map(x => x.why).join(' ');
+    assert.match(why, /会場/, 'どの値が駄目なのかが書かれていません：' + why);
+    assert.match(why, /全体/, '正しい選択肢が書かれていません：' + why);
+    assert.match(why, /運営/, '選択肢が途中で切れています：' + why);
+  });
+
+  test('種類とステータスも、同じように選択肢を書く', () => {
+    const b = makeBox({ ledger: [] });
+    const k = plan(b, [xrowObj({ 種類: 'よてい', 日付: '2026-10-01', 領域: '制作',
+                                 タスク名: 'なにか' })]);
+    assert.match(k.items[0].problems.map(x => x.why).join(' '), /マイルストーン/);
+
+    const s = plan(b, [xrowObj({ 種類: 'タスク', 日付: '2026-10-01', 領域: '制作',
+                                 タスク名: 'なにか', ステータス: 'やってる' })]);
+    const why = s.items[0].problems.map(x => x.why).join(' ');
+    assert.match(why, /やってる/, 'どの値が駄目なのかが書かれていません');
+    assert.match(why, /見送り/, '正しい選択肢が書かれていません：' + why);
+  });
+
+  test('開始日が空の期間は、日付のセルを赤くする（タスク名ではない）', () => {
+    const b = makeBox({ ledger: [] });
+    const p = plan(b, [xrowObj({ 種類: '期間', 日付: '', 終了日: '2026-10-01',
+                                 領域: '制作', タスク名: '開始日が空の期間' })]);
+    const pr = p.items[0].problems.filter(x => /開始日/.test(x.why))[0];
+    assert.ok(pr, '「期間には開始日が必要です」が出ていません');
+    /*
+     * 落ちたときの文は**固定にする**。`pr.field` を混ぜると、
+     * 欄が空文字のときに「赤くする欄が「」に…」となって、
+     * test/break_sched.py が目印として拾えない（この案件で繰り返した形）。
+     */
+    assert.strictEqual(pr.field, '日付',
+                       '開始日が空なのに、日付のセルが赤くなりません');
+  });
+
+  test('取り込みで書き換えた行は、変更履歴に全文が残る', () => {
+    /*
+     * 設計§7 は「同時に直されても見ない」理由に
+     * 「更新は変更履歴に全文が残るので、あとから追える」を挙げている。
+     * ところが取り込みは要約1行しか残していなかった（設計と実装の食い違い）。
+     */
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    apply(b, [{ ID: 'aaaa1111', 種類: 'タスク', 日付: '2026-09-25', 領域: '制作',
+                担当会社: 'FC大阪', 担当者: '小谷', タスク名: '看板の入稿',
+                ステータス: '進行中' }]);
+    const upd = b.history.filter(h => /取り込み/.test(h.item) && h.before);
+    assert.strictEqual(upd.length, 1, '書き換えた行の全文が残っていません');
+    assert.match(upd[0].before, /看板の入稿/);
+    assert.match(upd[0].after, /進行中/, '書き換えたあとの中身が残っていません');
   });
 });

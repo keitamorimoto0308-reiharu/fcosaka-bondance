@@ -165,3 +165,62 @@ describe('① Excelの取り込み：模擬サーバーで通しに動かす', (
     assert.strictEqual(got.stamps.edit.at, 0, '編集していないのに記録があります');
   });
 });
+
+/*
+ * 模擬でも、編集と書き出しの記録が立つこと。
+ *
+ * 取り込みだけが本番の .gs を動かしていて、保存・削除・書き出しは
+ * 模擬の写しだったので、**画面で触っても記録が一度も残らなかった**
+ * （検証役 2026-09-07）。人が触って確かめられる唯一の場所なので、
+ * ここが本番とずれていると、記録の不具合は誰にも見つけられない。
+ */
+describe('① 記録は、編集・書き出しでも立つ（模擬）', () => {
+  let M, tok;
+
+  beforeEach(() => {
+    M = fresh();
+    tok = login(M, 'admin', '山田 太郎');
+  });
+
+  test('編集して保存すると、最終編集が記録される', () => {
+    const row = M.handle({ action: 'adminSched', token: tok }).rows[0];
+    const r = M.handle({ action: 'adminSchedSave', token: tok,
+      row: row.row, id: row.id,
+      item: { kind: row.kind, date: row.date, endDate: row.endDate, area: row.area,
+              companies: row.companies, people: row.people,
+              title: row.title + '（直した）', detail: row.detail,
+              status: row.status, memo: row.memo } });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+
+    const got = M.handle({ action: 'adminSched', token: tok });
+    assert.strictEqual(got.stamps.edit.person, '山田 太郎',
+      '編集したのに、最終編集が記録されていません');
+    assert.ok(got.stamps.edit.at > 0);
+  });
+
+  test('中身が変わっていなければ、記録しない', () => {
+    /*
+     * けいた確定の仕様：「ログインしていても、編集していなければ記録しない」。
+     * 同じ内容で保存し直しただけで名前が載ると、記録が信用できなくなる。
+     */
+    const row = M.handle({ action: 'adminSched', token: tok }).rows[0];
+    const r = M.handle({ action: 'adminSchedSave', token: tok,
+      row: row.row, id: row.id,
+      item: { kind: row.kind, date: row.date, endDate: row.endDate, area: row.area,
+              companies: row.companies, people: row.people, title: row.title,
+              detail: row.detail, status: row.status, memo: row.memo } });
+    assert.strictEqual(r.unchanged, true, '同じ内容なのに書き換えています');
+
+    const got = M.handle({ action: 'adminSched', token: tok });
+    assert.strictEqual(got.stamps.edit.at, 0,
+      '何も変えていないのに、編集したことになっています');
+  });
+
+  test('書き出すと、書き出しが記録される', () => {
+    const out = M.handle({ action: 'adminSchedExport', token: tok });
+    assert.strictEqual(out.ok, true, JSON.stringify(out));
+    const got = M.handle({ action: 'adminSched', token: tok });
+    assert.strictEqual(got.stamps['export'].person, '山田 太郎',
+      '書き出したのに、記録されていません');
+  });
+});

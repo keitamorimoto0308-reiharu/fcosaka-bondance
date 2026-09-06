@@ -714,6 +714,13 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-imp h3{font-size:14px;margin:0 0 6px}
 .sch-imp .sch-imp-sum{font-size:12.5px;color:var(--muted);margin:0 0 4px}
 .sch-imp .sch-imp-warn{font-size:12.5px;color:var(--error);font-weight:700;margin:0 0 10px}
+/* 下見の行を開いたとき、パネルの上に出す「なぜ赤いのか」。
+   色は既にある変数だけで作る（未定義の var() は宣言ごと無効になる） */
+.sch-imp-why{border:1px solid var(--error);border-radius:6px;padding:10px 12px;
+  margin:0 0 14px;font-size:12.5px;line-height:1.7}
+.sch-imp-why b{color:var(--error)}
+.sch-imp-why ul{margin:6px 0 0;padding-left:1.2em}
+.sch-imp-why p{margin:8px 0 0}
 .sch-imp-wrap{overflow:auto;max-height:52vh;border:1px solid var(--border);border-radius:6px}
 .sch-imp-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
 .sch-imp-table th{position:sticky;top:0;background:#fff;z-index:1;
@@ -3726,25 +3733,42 @@ function schWriteFilters(){
 var IMP = { items: [], counts: null, missing: [], editing: null, fileName: '',
             busy: false, seq: 0 };
 
-/** タブの上の1行。**無いものは出さない**（§5-4） */
+/**
+ * タブの上の1行。**無いものは出さない**（§5-4）。
+ *
+ * 言い方を「誰が・いつ・何をした」にそろえた。
+ * 以前は「最終編集：山田 9/7 15:42 ／ 取り込み：佐藤 9/7 15:44」で、
+ * 佐藤さんが取り込んだのか、佐藤さんの行が取り込まれたのか読めなかった。
+ * 並びも**書き出し→取り込み→編集**の時系列にして、
+ * 「誰かが書き出して、直して、戻した」という流れとして読めるようにする。
+ */
 function schRenderStamps(){
   var st = SCH.stamps || {};
-  var say = function(label, x){
+  var say = function(x, did){
     if (!x || !x.at) return '';          // まだ無いものは出さない
-    return label + '：' + (x.person || '（不明）') + ' ' + schWhen(x.at);
+    return (x.person || '（不明）') + 'さんが ' + schWhen(x.at) + ' に' + did;
   };
-  var parts = [say('最終編集', st.edit), say('取り込み', st['import']),
-               say('書き出し', st['export'])].filter(function(t){ return t; });
+  var parts = [say(st['export'], 'Excelで保存'),
+               say(st['import'], 'Excelから取り込み'),
+               say(st.edit, '編集')].filter(function(t){ return t; });
   var el = $('#schStamps');
-  el.textContent = parts.join(' ／ ');
+  el.textContent = parts.length ? 'この表：' + parts.join(' ／ ') : '';
   el.hidden = !parts.length;
 }
 
-/** ミリ秒を「9/7 15:42」にする。今日なら時刻だけでもよいが、日を出すほうが迷わない */
+/**
+ * ミリ秒を「2026/9/7 15:42」にする。
+ *
+ * **年まで出す。**「9/7 15:42」だと、去年の記録でも今年に見える。
+ * 時刻は端末の時計で描くので、時差のある場所では
+ * 同じ画面の「更新日時」（サーバーが日本時間で作った文字列）とずれる。
+ * ずれても「いつ頃か」は伝わるし、ここは確認用の1行なので、それでよい。
+ */
 function schWhen(ms){
   var d = new Date(Number(ms) || 0);
   var p = function(n){ return (n < 10 ? '0' : '') + n; };
-  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate()
+       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
 /** 下見に出す列。**台帳の並びのまま**（人がExcelで見ているものと同じ順） */
@@ -3764,7 +3788,7 @@ function schImpRender(){
 
   var head = '<tr><th>行</th>'
     + IMP_COLS.map(function(h){ return '<th>' + esc(h) + '</th>'; }).join('')
-    + '<th>どうなるか</th></tr>';
+    + '<th>取り込むとどうなるか</th></tr>';
 
   var rows = IMP.items.map(function(x, i){
     // どの欄に問題があるかを引けるようにする（色を付ける列を決める）
@@ -3782,28 +3806,51 @@ function schImpRender(){
       return '<td' + (bad ? ' class="sch-imp-bad" title="' + esc(bad) + '"' : '')
         + '>' + esc(v) + '</td>';
     }).join('');
-    var label = x.action === 'add' ? '追加' : x.action === 'update' ? '更新'
-              : x.action === 'same' ? '変わらない' : '直してください';
+    var label = x.action === 'add' ? '足す' : x.action === 'update' ? '書き換える'
+              : x.action === 'same' ? '変わらない' : '取り込めません';
     return '<tr data-imp="' + i + '"' + (x.action === 'bad' ? ' class="sch-imp-row-bad"' : '')
       + '><td class="sch-imp-act">' + (x.excelRow || '') + '</td>' + cells
       + '<td class="sch-imp-act">' + label + '</td></tr>';
   }).join('');
 
+  /*
+   * 件数は「取り込めるもの」と「直すもの」を**分けて**出す。
+   * 以前は「8行　追加0件／更新0件／変わらない0件」と出ていて、
+   * 8行なのに合計0という読めない表示だった（赤い行が数に入っていなかった）。
+   */
+  var idBad = IMP.items.filter(function(x){
+    return x.action === 'bad'
+      && (x.problems || []).length
+      && (x.problems || []).every(function(p){ return p.field === 'ID'; });
+  }).length;
+
   box.innerHTML = '<h3>' + esc(IMP.fileName || 'Excel') + ' を読みました</h3>'
     + '<p class="sch-imp-sum">' + IMP.items.length + '行　'
-    + '追加 ' + c.add + '件 ／ 更新 ' + c.update + '件 ／ 変わらない ' + c.same + '件</p>'
+    + '取り込めます ' + (c.add + c.update + c.same) + '件'
+    + '（足す ' + c.add + '・書き換える ' + c.update + '・変わらない ' + c.same + '）'
+    + (c.bad ? ' ／ <b>直すもの ' + c.bad + '件</b>' : '') + '</p>'
+    // 「消さない」は、件数がゼロでも必ず言う。**逆に読まれると事故になる**
+    + '<p class="sch-imp-sum"><b>Excelで行を消しても、台帳からは消えません。</b>'
     + (c.missing
-        ? '<p class="sch-imp-sum">Excelに無い行が ' + c.missing + '件 あります（そのまま残します）</p>'
+        ? 'Excelに無い行が ' + c.missing + '件 ありますが、台帳にはそのまま残ります。'
         : '')
+    + '消したい行は、取り込んだあとに画面から1件ずつ消してください。</p>'
     + (c.bad
-        ? '<p class="sch-imp-warn">' + c.bad + '行に問題があります。'
-          + 'その行を押すと直せます。直すと取り込めます。</p>'
+        ? '<p class="sch-imp-warn">' + c.bad + '行は取り込めません。'
+          + 'その行を押すと、理由と直し方が出ます。'
+          + (idBad
+              ? '<br>うち ' + idBad + '行は<b>Excelに戻って直す必要があります</b>'
+                + '（ID列を空にしてください）。'
+              : '')
+          + '</p>'
         : '')
     + '<div class="sch-imp-wrap"><table class="sch-imp-table"><thead>' + head
     + '</thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="pbtns"><span class="sp"></span>'
     + '<button class="ghost" id="schImpCancel">やめる</button>'
-    + '<button class="print" id="schImpGo">取り込む</button></div>';
+    // ボタンの名前で、押したら何が起きるかが分かるようにする
+    + '<button class="print" id="schImpGo">台帳に書き込む（足す ' + c.add
+    + '・書き換える ' + c.update + '）</button></div>';
   box.hidden = false;
 
   // **赤があるあいだと、送っている最中は押せない**
@@ -3848,7 +3895,7 @@ function schImpPick(file){
           toast('Driveに「[取り込み中] …」というファイルが残りました。'
               + '中身が入っているので、見つけて削除してください。', true);
         }
-      }, function(e){ toast(String(e && e.message || e), true); });
+      }, function(e){ netFail(e, 'Excelを読めませんでした'); });
   };
   fr.onerror = function(){ toast('ファイルを読めませんでした', true); };
   fr.readAsDataURL(file);
@@ -3870,13 +3917,27 @@ function schImpApplyEdit(item){
     toast(r.counts && r.counts.bad
       ? '直りました。あと ' + r.counts.bad + '行 です'
       : '直りました。取り込めます');
-  }, function(e){ toast(String(e && e.message || e), true); });
+  }, function(e){ netFail(e, '見直せませんでした'); });
 }
 
 function schImpGo(){
-  if (!IMP.items.length) return;
+  if (!IMP.items.length || IMP.busy) return;
   var c = IMP.counts || {};
   if (c.bad){ toast('直していない行があります', true); return; }
+  /*
+   * **書き換える前に止める。**「更新◯件」は、いま台帳にある行を
+   * 上書きするということ。下見にはExcel側の値しか出ていないので、
+   * 何を上書きするのかは画面から見えない（書き出してから取り込むまでに
+   * 他の人が直していたら、その直しは黙って消える）。
+   * 「削除する」には確認があるのに、こちらには無かった（検証役 2026-09-07）。
+   */
+  if (c.update && !confirm(
+      '台帳に書き込みます。\\n\\n'
+    + '・新しく ' + c.add + '件 ふえます\\n'
+    + '・いまある ' + c.update + '件を、Excelの内容で書き換えます\\n'
+    + '　（書き換える前の中身は、変更履歴に残ります）\\n'
+    + (c.missing ? '・Excelに無い ' + c.missing + '件は、そのまま残ります\\n' : '')
+    + '\\nよろしいですか？')) return;
   var rows = IMP.items.map(function(x){ return x.raw; });
   // 送信中は IMP に持つ。描き直されてもボタンは押せないまま
   IMP.busy = true;
@@ -3895,8 +3956,39 @@ function schImpGo(){
   }, function(e){
     IMP.busy = false;
     try { $('#schImpGo').disabled = false; } catch(e2){}
-    toast(String(e && e.message || e), true);
+    netFail(e, '取り込めませんでした');
   });
+}
+
+/**
+ * 下見の行を開いたとき、**なぜ赤いのかをパネルの上に出す。**
+ *
+ * 以前は表のセルの吹き出し（title）だけだった。
+ * 触る画面ではカーソルを合わせられないし、①は全員が触る画面なので、
+ * 「押すと直せます」と言われて開いたパネルが無言だった（検証役 2026-09-07）。
+ *
+ * IDの2つ（同じIDが2つ／台帳から消えている）は、**このパネルでは直せない**。
+ * ID欄を置いていないからで、置くと人が番号を打ち直せてしまう。
+ * 直せないものに「直せます」と言わず、**どうすればいいかを書く。**
+ */
+function schImpWhy(x){
+  var box = $('#schWhy');
+  var ps = (x && x.problems) || [];
+  if (!ps.length){ box.hidden = true; box.innerHTML = ''; return; }
+
+  var idOnly = ps.length === ps.filter(function(p){ return p.field === 'ID'; }).length;
+  box.innerHTML = '<b>' + (idOnly
+      ? 'この行は、この画面では直せません'
+      : 'この行はこのままでは取り込めません') + '</b>'
+    + '<ul>' + ps.map(function(p){ return '<li>' + esc(p.why) + '</li>'; }).join('') + '</ul>'
+    + (idOnly
+        ? '<p>Excelに戻って、いちばん右の<b>ID列を空にして</b>から、'
+          + 'もう一度取り込んでください。'
+          + '（ID列は、いまある行を見分けるための番号です。'
+          + '行をコピーすると番号まで一緒にコピーされます）</p>'
+        : '<p>直したら「この行を直す」を押してください。'
+          + 'この時点では、台帳にはまだ書き込まれません。</p>');
+  box.hidden = false;
 }
 
 /** 下見の行を、①の編集パネルが読める形にする */
@@ -3928,7 +4020,7 @@ function loadSched(){
     renderDashTerms();
     // 要対応にも合流させているので、集計が先に来ていれば描き直す
     if (S.summary) renderAlerts();
-  }, function(e){ toast(String(e && e.message || e), true); });
+  }, function(e){ netFail(e, '制作スケジュールを読めませんでした'); });
 }
 
 /** 「終わったもの」の定義（仕様§1-11）。**未着手・進行中・確認中・停滞中は隠さない** */
@@ -4244,6 +4336,11 @@ function schOpen(row, week){
   var impMode = (IMP.editing !== null && IMP.editing !== undefined);
   $('#schDel').hidden = isNew || impMode;
   $('#schMetaBox').hidden = isNew || impMode;
+  // ボタンの名前は、押した結果を表す。下見では台帳に保存しない
+  $('#schPanelTitle').textContent = impMode
+    ? '取り込む行を直す' : (isNew ? 'タスクを追加' : 'タスクを編集');
+  $('#schSave').textContent = impMode ? 'この行を直す' : '保存する';
+  if (!impMode){ $('#schWhy').hidden = true; $('#schWhy').innerHTML = ''; }
   if (!isNew && !impMode){
     $('#schMeta').textContent =
       (row.author ? row.author + ' さんが ' + (row.createdAt || '') + ' に追加' : '')
@@ -4257,7 +4354,9 @@ function schOpen(row, week){
 }
 function schClose(){
   // 取り込みの下見を直している途中で閉じたら、モードも解く
-  IMP.editing = null; $('#schDrawer').classList.remove('on'); SCH.editing = null; }
+  IMP.editing = null; $('#schDrawer').classList.remove('on'); SCH.editing = null;
+  try { $('#schWhy').hidden = true; $('#schWhy').innerHTML = ''; } catch(e){}
+}
 
 /** 種類によって、見せる欄を変える（期間だけ終了日、タスクだけステータス） */
 function schKindChanged(){
@@ -4319,7 +4418,7 @@ function schSave(){
       toast(r.added ? '追加しました' : '保存しました');
       if (item.status === '完了' && !wasDone) schEfushi();
       loadSched();
-    }, function(e){ toast(String(e && e.message || e), true); });
+    }, function(e){ netFail(e, '保存できませんでした'); });
 }
 
 function schDelete(){
@@ -4332,7 +4431,7 @@ function schDelete(){
     schClose();
     toast('削除しました（変更履歴に残っています）');
     loadSched();
-  }, function(e){ toast(String(e && e.message || e), true); });
+  }, function(e){ netFail(e, '削除できませんでした'); });
 }
 
 /**
@@ -4382,7 +4481,7 @@ function schSetStatus(row, next){
     if (!r || !r.ok){ toast((r && r.message) || '変更できませんでした', true); return; }
     if (next === '完了' && !wasDone) schEfushi();
     loadSched();
-  }, function(e){ toast(String(e && e.message || e), true); });
+  }, function(e){ netFail(e, 'ステータスを変えられませんでした'); });
 }
 
 function bindSched(){
@@ -4413,6 +4512,7 @@ function bindSched(){
     if (!x) return;
     IMP.editing = i;
     schOpen(schImpRowForEdit(x));
+    schImpWhy(x);
   });
   $('#schClose').addEventListener('click', schClose);
   $('#schSave').addEventListener('click', schSave);
@@ -5592,6 +5692,27 @@ const HOWTO = {
                   + '戻すには手で入れ直すことになります。'],
     ['担当の丸い印', '会社の頭文字です。Ⓞ＝FC大阪、Ⓤ＝UPDATER、Ⓛ＝LOP。'
                   + '**点線の丸**は、会社だけ決まっていて担当者が未定のものです。'],
+    /*
+     * Excel の話が1行も無かった。**順番が分からないと台帳が二重になる。**
+     * 自分で新しく作った表を取り込むと、ID列が無いので既存の行が全部
+     * 「追加」として入る（いまはID列が無ければ断るようにしたが、
+     * それでも「なぜ断られたか」が分からないと直せない・検証役 2026-09-07）。
+     */
+    ['Excelで直すとき', 'かならず**先に「Excelで保存」**を押して、'
+                    + '出てきたファイルを直してください。'
+                    + '直したら「Excelから取り込む」で戻します。'
+                    + '**いちばん右のID列は消さないでください。**'
+                    + 'いまある行を見分けるための番号です。'],
+    ['行を増やすとき', 'Excelで行をコピーすると、**ID列まで一緒にコピーされます。**'
+                    + '増やした行は、ID列を空にしてください。'
+                    + '空になっていれば、新しい行として足されます。'],
+    ['Excelで消しても、台帳からは消えません', '取り込みでできるのは'
+                    + '「足す」と「書き換える」だけです。'
+                    + '消したい行は、取り込んだあとに'
+                    + 'この画面から1件ずつ消してください。'],
+    ['取り込めない行が出たら', 'その行を押すと、**理由と直し方**が出ます。'
+                    + 'ほとんどはこの画面で直せますが、'
+                    + 'ID がおかしい行だけは、Excelに戻ってID列を空にする必要があります。'],
   ]],
   list: ['出店者一覧の見かた', [
     // 「メール送信タブから」と書いてあるのに、一般権限にはそのタブが無かった。
@@ -6363,6 +6484,10 @@ function html() {
       <button class="x" id="schClose" aria-label="閉じる">×</button>
     </div>
     <div class="body">
+      <!-- 取り込みの下見を直すときだけ出す。**なぜ赤いのかを、ここに書く。**
+           以前は表のセルにカーソルを合わせたときしか理由が出ず、
+           パネルは無言だった（触る画面では、そもそも合わせられない） -->
+      <div class="sch-imp-why" id="schWhy" hidden></div>
       <div class="grp">
         <div class="editrow"><label for="schKind">種類</label><select id="schKind"></select></div>
         <div class="editrow"><label for="schDate">日付</label>
