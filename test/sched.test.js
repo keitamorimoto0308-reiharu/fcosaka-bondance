@@ -105,6 +105,9 @@ function makeSheet(headers, rows) {
 function makeBox(opts) {
   opts = opts || {};
   const admin = read('gas/Admin.gs');
+  // 設定シートの読み書きと「最後に誰がいつ」は gas/Stamp.gs にある（②と共有・2026-09-07）
+  const stamp = read('gas/Stamp.gs');
+  const setup = read('gas/Setup.gs');
   const sched = read('gas/Sched.gs');
   const today = opts.today || '2026-09-10';
 
@@ -177,6 +180,8 @@ function makeBox(opts) {
     cutFunction(admin, 'normalizeDue_'),
   ].join('\n'), box);
 
+  vm.runInContext(cutFunction(setup, 'findConfigRow_'), box);
+  vm.runInContext(stamp, box);
   vm.runInContext(sched, box);
   return { box, sheets, history, today };
 }
@@ -226,6 +231,43 @@ function del2(b, row, id, person) {
 }
 
 const TASK = { kind: 'タスク', date: '2026-09-20', area: '制作', title: '看板の入稿' };
+
+describe('① 制作スケジュール表：中身が変わらない保存（2026-09-07）', () => {
+
+  test('中身が変わらない保存では、更新者と更新日時を書き換えない', () => {
+    /*
+     * **窓を開いて何も直さずに閉じただけで「小谷が編集」と残っていた。**
+     * 変更履歴のほうは「変わっていなければ残さない」と正しく判断しているのに、
+     * 行のスタンプだけが毎回押されていた（けいた指摘・2026-09-07）。
+     */
+    const b = makeBox({});
+    save(b, { row: 0, item: TASK }, '小谷');
+    const before = rowAt(b, 2);
+    save(b, { row: 2, item: TASK }, '山本');          // 中身は同じ、別の人が保存
+    const after = rowAt(b, 2);
+    assert.strictEqual(after['更新者'], before['更新者'],
+      '中身が同じなのに更新者が書き換わりました');
+    assert.strictEqual(after['更新日時'], before['更新日時'],
+      '中身が同じなのに更新日時が書き換わりました');
+  });
+
+  test('中身が変われば、更新者と更新日時は書き換わる', () => {
+    // 「書き換えない」だけを見ると、**何をしても書き換えない実装**でも通ってしまう
+    const b = makeBox({});
+    save(b, { row: 0, item: TASK }, '小谷');
+    save(b, { row: 2, item: Object.assign({}, TASK, { title: '看板の再入稿' }) }, '山本');
+    assert.strictEqual(rowAt(b, 2)['更新者'], '山本',
+      '中身が変わったのに更新者が書き換わりません');
+  });
+
+  test('中身が変わらなければ、変更履歴にも足さない', () => {
+    const b = makeBox({});
+    save(b, { row: 0, item: TASK }, '小谷');
+    const n = b.history.length;
+    save(b, { row: 2, item: TASK }, '山本');
+    assert.strictEqual(b.history.length, n, '変わっていないのに変更履歴が増えました');
+  });
+});
 
 describe('① 制作スケジュール表：追加と読み出し', () => {
 

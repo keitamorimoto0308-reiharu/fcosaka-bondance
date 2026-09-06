@@ -49,6 +49,8 @@ function makeBox(opts) {
   const admin = read('gas/Admin.gs');
   const auth = read('gas/Auth.gs');
   const setup = read('gas/Setup.gs');
+  // 設定シートの読み書きと「最後に誰がいつ」は gas/Stamp.gs にある（①と共有・2026-09-07）
+  const stamp = read('gas/Stamp.gs');
   const src = read('gas/Timetable.gs');
 
   const configRows = [['タイムスケジュール版', opts.version === undefined ? 0 : opts.version, '']];
@@ -107,6 +109,7 @@ function makeBox(opts) {
     cutFunction(setup, 'findConfigRow_'),
   ].join(String.fromCharCode(10)), box);
 
+  vm.runInContext(stamp, box);
   vm.runInContext(src, box);
 
   return {

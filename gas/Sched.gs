@@ -81,6 +81,27 @@ var SCHED_LIST_MAX   = 20;   // 担当会社・担当者の件数の上限
 var SCHED_WARN_DEFAULT_ = 3;
 
 /**
+ * 「最後に誰がいつ」の置き場所（設計書 design_sched_import.md §5）。
+ *
+ * **設定タブ（SETTING_KEYS_）には出さない。**人が触るものではないし、
+ * 触られると記録が嘘になる。行が無ければ書くときに足すので、
+ * `setup()` を押し直す必要もない。中身は gas/Stamp.gs（②と共有）。
+ */
+var SCHED_EDIT_KEY_   = '制作スケジュール最終編集';
+var SCHED_IMPORT_KEY_ = '制作スケジュール最終取り込み';
+var SCHED_EXPORT_KEY_ = '制作スケジュール最終書き出し';
+
+/**
+ * 編集のスタンプを押す。**実際に中身が変わったときだけ呼ぶ。**
+ *
+ * けいた指摘（2026-09-07）：「ログインしてても編集してなかったら記録せず」。
+ * 開いただけ・窓を開いて閉じただけでは呼ばない。
+ */
+function schedStampEdit_(auth) {
+  lastActionSet_(SCHED_EDIT_KEY_, (auth && auth.person) || '', new Date().getTime());
+}
+
+/**
  * 「まもなく期日」と出す日数。設定シートで変えられる（§4-4）。
  *
  * **空欄・読めない値のときは既定の3に落とす。**
@@ -559,6 +580,8 @@ function adminSchedExport_(auth) {
     widths: [90, 110, 110, 80, 140, 140, 300, 340, 90, 220, 110, 70, 100, 100, 100, 130, 90],
   }]);
   if (out.ok && !body.length) out.message = '0件でした（見出しだけの表を書き出しました）。';
+  // 書き出せたときだけ記録する（押しただけ・失敗したときは記録しない）
+  if (out.ok) lastActionSet_(SCHED_EXPORT_KEY_, (auth && auth.person) || '', new Date().getTime());
   return out;
 }
 
@@ -621,6 +644,7 @@ function adminSchedSave_(auth, payload) {
       sh.appendRow(line);
       SpreadsheetApp.flush();
       appendHistory(auth.person, '（スケジュール）', '追加', '', item.title, '');
+      schedStampEdit_(auth);
       return { ok: true, added: true };
     }
 
@@ -628,23 +652,30 @@ function adminSchedSave_(auth, payload) {
     line[12] = safeCellText_(asText_(before[12]));  // 起票者も変えない
     line[13] = schedDate_(before[13]);              // 起票日も変えない
     line[16] = asText_(before[16]).trim() || schedNewId_();   // IDは引き継ぐ
-    sh.getRange(row, 1, 1, SCHED_HEADERS_.length).setValues([line]);
-    SpreadsheetApp.flush();
 
     /*
+     * **中身が変わっていなければ、そもそも書かない。**
+     *
+     * 以前は無条件に行を書き直していたので、**窓を開いて何も直さずに閉じただけで、
+     * 更新者と更新日時が今の値に上書きされていた**。
+     * 変更履歴のほうは「変わっていなければ残さない」と正しく判断しているのに、
+     * 行のスタンプだけが毎回押されている状態だった（けいた指摘・2026-09-07）。
+     *
+     * `schedRowObject_` は更新者・更新日時を除いて比べるので、これで中身だけを見られる。
+     *
      * **更新も変更履歴に残す。**
      * 削除は全文を残すのに、上書きは痕跡ゼロだった（検証役2体が指摘・2026-09-04）。
      * 全員が編集できる画面では、他人にタスク名や期日を書き換えられたとき、
      * 削除より復元しにくい状態になっていた。
-     *
-     * 変わっていないときは残さない。ステータスのチップを押すたびに増えると、
-     * 本当の変更が埋もれる（警報を増やしすぎない、と同じ考え方）。
      */
     var beforeText = JSON.stringify(schedRowObject_(before));
     var afterText = JSON.stringify(schedRowObject_(line));
-    if (beforeText !== afterText) {
-      appendHistory(auth.person, '（スケジュール）', '更新', beforeText, afterText, '');
-    }
+    if (beforeText === afterText) return { ok: true, added: false, unchanged: true };
+
+    sh.getRange(row, 1, 1, SCHED_HEADERS_.length).setValues([line]);
+    SpreadsheetApp.flush();
+    appendHistory(auth.person, '（スケジュール）', '更新', beforeText, afterText, '');
+    schedStampEdit_(auth);
     return { ok: true, added: false };
   } finally {
     lock.releaseLock();
@@ -688,6 +719,7 @@ function adminSchedDelete_(auth, payload) {
     SpreadsheetApp.flush();
     appendHistory(auth.person, '（スケジュール）', '削除',
                   JSON.stringify(full), '', '');
+    schedStampEdit_(auth);
     return { ok: true, title: full['タスク名'] };
   } finally {
     lock.releaseLock();

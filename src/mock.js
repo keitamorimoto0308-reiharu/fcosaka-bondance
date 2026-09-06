@@ -449,6 +449,8 @@ const TT = (() => {
   const norm = t => t.split('\r\n').join('\n');
   const G = require('./gasbox.js');
   const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Timetable.gs'), 'utf8'));
+  // 設定シートの読み書きと「最後に誰がいつ」は gas/Stamp.gs にある（①と共有・2026-09-07）
+  const stampSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Stamp.gs'), 'utf8'));
   const adminSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8'));
   const authSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Auth.gs'), 'utf8'));
   const setupSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Setup.gs'), 'utf8'));
@@ -530,6 +532,7 @@ const TT = (() => {
                    G.cutFunction(authSrc, 'safeEquals_'),
                    G.cutFunction(setupSrc, 'findConfigRow_')]
                   .join(String.fromCharCode(10)), box);
+  vm.runInContext(stampSrc, box);
   vm.runInContext(src, box);
   return { box, sheets, cache };
 })();

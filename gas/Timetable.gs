@@ -149,26 +149,13 @@ function ttSheet_() {
   return sheet_(SHEET.TIMETABLE);
 }
 
-/**
- * 設定シートの1行を、**読み取りキャッシュを通さずに**読む。
+/*
+ * 設定シートの1行の読み書き（configRaw_ / setConfigValue_）と、
+ * 「最後に誰がいつ」（lastActionGet_ / lastActionSet_）は **gas/Stamp.gs にある**。
  *
- * `getConfig()` は1回の実行内でキャッシュする（gas/Config.gs）。
- * 版番号は保存のたびに変わるので、キャッシュ越しに読むと
- * **保存した直後に古い版が返る**。ぶつかりの検出そのものが壊れる。
+ * 2026-09-07、①制作スケジュールも同じものを必要としたので、そちらへ移して共有にした。
+ * 写しを2つ書くと、片方だけ直したときに気づけない。
  */
-function ttConfigRaw_(key) {
-  var sh = sheet_(SHEET.CONFIG);
-  var row = findConfigRow_(sh, key);
-  if (!row) return '';
-  return sh.getRange(row, 2).getValue();
-}
-
-function ttSetConfig_(key, value) {
-  var sh = sheet_(SHEET.CONFIG);
-  var row = findConfigRow_(sh, key);
-  if (row) { sh.getRange(row, 2).setValue(value); return; }
-  sh.appendRow([key, value, '（システムが使います。手で変えないでください）']);
-}
 
 /**
  * いまの版番号。**読めなければ 0 に落とす。**
@@ -178,29 +165,14 @@ function ttSetConfig_(key, value) {
  * 0 に落ちても、次の保存で 1 になって普通に動きだす。
  */
 function ttVersion_() {
-  var n = Number(ttHalfWidth_(ttConfigRaw_(TT_VERSION_KEY_)));
+  var n = Number(ttHalfWidth_(configRaw_(TT_VERSION_KEY_)));
   if (!isFinite(n) || n < 0 || n !== Math.floor(n)) return 0;
   return n;
 }
 
-/** 誰がいつ保存したか。`小谷|1760000000000` の形で持つ */
-function ttLastBy_() {
-  // 書くときに safeCellText_ を通しているので、= で始まる氏名には ' が付く。
-  // 帯に「'山田」と出さないよう、読むときに落とす
-  var raw = asText_(ttConfigRaw_(TT_LASTBY_KEY_)).replace(/^'/, '');
-  var i = raw.lastIndexOf('|');
-  if (i < 0) return { person: '', at: 0 };
-  var at = Number(raw.slice(i + 1));
-  return { person: raw.slice(0, i), at: isFinite(at) ? at : 0 };
-}
-
-function ttSetLastBy_(person, at) {
-  ttSetConfig_(TT_LASTBY_KEY_, safeCellText_(String(person || '') + '|' + at));
-}
-
 /** 進行表が指す日。設定に無ければ空で返す（勝手な日付を作らない） */
 function ttDay_() {
-  return asText_(ttConfigRaw_(TT_DAY_KEY_)).trim().slice(0, 10);
+  return asText_(configRaw_(TT_DAY_KEY_)).trim().slice(0, 10);
 }
 
 // ───────────────────────────────────────────────── 引換券（§3-2）
@@ -758,8 +730,8 @@ function adminTimetableSave_(auth, payload) {
 
     ttWriteRows_(rows);
     var next = version + 1;
-    ttSetConfig_(TT_VERSION_KEY_, next);
-    ttSetLastBy_((auth && auth.person) || '', new Date().getTime());
+    setConfigValue_(TT_VERSION_KEY_, next);
+    lastActionSet_(TT_LASTBY_KEY_, (auth && auth.person) || '', new Date().getTime());
     SpreadsheetApp.flush();
 
     /*
@@ -788,7 +760,7 @@ function adminTimetableSave_(auth, payload) {
  * 返さないと、画面は読み直すために別の往復が要る。
  */
 function ttConflict_(version) {
-  var last = ttLastBy_();
+  var last = lastActionGet_(TT_LASTBY_KEY_);
   var agoSec = last.at ? Math.max(Math.round((new Date().getTime() - last.at) / 1000), 0) : 0;
   return {
     ok: false, error: 'conflict',
