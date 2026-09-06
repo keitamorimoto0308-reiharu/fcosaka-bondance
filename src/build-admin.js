@@ -793,6 +793,15 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   border-radius:6px;padding:11px 14px;margin:0 0 14px;font-size:12.5px;cursor:pointer}
 .tt-warn b{display:block;margin-bottom:3px;font-size:13px}
 
+/* 表示の大きさのレバー。狭い画面では折り返す */
+.tt-zoom{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:0 0 8px;font-size:11.5px;color:var(--muted)}
+.tt-zoom label{font-weight:700;color:var(--ink)}
+.tt-zoom input[type=range]{width:180px;max-width:40vw;accent-color:var(--brand-deep)}
+.tt-zoom .tt-zoom-v{min-width:96px;font-variant-numeric:tabular-nums}
+/* ＋−は指でも押せる大きさにする。11pxのボタンは狙えない */
+.tt-zoom button{padding:4px 10px;font-size:12px;min-width:34px}
+
 .tt-wrap{background:#fff;border:1px solid var(--border);border-radius:8px;
   overflow:auto;max-height:70vh;position:relative}
 .tt-head{display:grid;position:sticky;top:0;z-index:3;background:#fff;
@@ -860,18 +869,48 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   padding:0;cursor:pointer;text-decoration:underline}
 .tt-pop .err{color:var(--error);font-size:11.5px;margin:0 0 8px}
 
-/* 印刷して配る（§6-1）。画面では出さない */
+/* 印刷して配る（§6-1）。画面では出さない。
+   **画面と同じ形にする**（表組みをやめた・2026-09-07）。
+   時間軸に置くので、予定の長さと空き時間が紙の上でも見える */
 .tt-paper{display:none}
 .tt-paper h2{font-size:13pt;margin:0 0 2mm}
-.tt-paper .day{font-size:9pt;margin:0 0 4mm;color:#000}
-.tt-paper table{width:100%;border-collapse:collapse}
-.tt-paper th,.tt-paper td{border:1px solid #999;padding:2mm 2.5mm;
-  font-size:9pt;vertical-align:top;text-align:left}
-.tt-paper th{background:#EEE;font-size:8.5pt}
-.tt-paper td.at{white-space:nowrap;font-weight:700;width:16mm}
-.tt-paper .cast{display:block;font-size:8pt;color:#333}
-.tt-paper .len{color:#555;font-size:8pt}
-.tt-paper .memo{display:block;font-size:8pt;color:#333}
+.tt-paper .day{font-size:9pt;margin:0 0 3mm;color:#000}
+.tt-p{border:0.3mm solid #333}
+.tt-p-head{display:grid;border-bottom:0.3mm solid #333}
+.tt-p-h{padding:1.2mm 1.5mm;font-size:8.5pt;font-weight:700;text-align:center;
+  border-left:0.2mm solid #999;background:#EEE}
+.tt-p-h:first-child{border-left:0}
+.tt-p-body{display:grid;position:relative;padding:2mm 0 3mm}
+.tt-p-times{position:relative}
+.tt-p-times span{position:absolute;right:1.2mm;font-size:7.5pt;color:#333;
+  transform:translateY(-50%)}
+/* 1時間ごとの罫。無いと、予定の無い時間帯で位置の見当がつかない */
+.tt-p-lane{--tt-p-hour:18mm;position:relative;border-left:0.2mm solid #999;
+  background-image:repeating-linear-gradient(to bottom,
+    #CCC 0 0.2mm, transparent 0.2mm var(--tt-p-hour))}
+.tt-p-ev{position:absolute;border:0.3mm solid #333;border-radius:1mm;
+  padding:0.8mm 1.2mm;font-size:7.5pt;line-height:1.3;overflow:hidden}
+/* レーンごとに色を変える。刷り分けても、白黒でも濃さで見分けられる */
+.tt-p-ev.lane0{background:#FDECEC;border-color:#B23B3B}
+.tt-p-ev.lane1{background:#E8F3EC;border-color:#2E7D5B}
+.tt-p-ev.lane2{background:#F6EFE2;border-color:#8A6D3B}
+.tt-p-ev b{display:block;font-weight:700;font-size:8pt}
+.tt-p-when{display:block;font-size:7pt;color:#333}
+.tt-p-cast{display:block;font-size:7pt;color:#333}
+.tt-p-memo{display:block;font-size:7pt;color:#333}
+.tt-p-ref{font-size:7pt;color:#333}
+/* 半分の幅に置かれることがあるので、長い題名は折り返す。
+   1行に詰める形はやめた（字が切れて読めない紙になる） */
+.tt-p-ev b{overflow-wrap:anywhere}
+/* 0分の目印は、線1本と字だけ。枠を描くと「長さのある予定」に見える */
+/* 0分の目印は、線1本と字だけ。枠を描くと「長さのある予定」に見える。
+   高さは TT_P_MARK_MM ぶんあるので、字が消えない */
+.tt-p-ev.mark{border:0;border-top:0.5mm solid #000;border-radius:0;background:none;
+  padding:0.4mm 1.2mm;display:flex;gap:1.5mm;align-items:baseline;white-space:nowrap}
+.tt-p-ev.mark b{font-size:7.5pt}
+/* 枠に入りきらなかった備考。**切らずに、ここへ番号で送る** */
+.tt-p-notes{margin:3mm 0 0;font-size:7.5pt;line-height:1.5}
+.tt-p-notes b{display:block;font-size:8pt;margin:0 0 1mm}
 
 /* 詳細は、枠に余裕があるときだけ出す（URLは①と同じ関数でリンクにする・§7-1） */
 .tt-ev .memo{display:block;font-size:10px;color:var(--muted);
@@ -4638,6 +4677,31 @@ var TT = { rows: [], lanes: [], casts: [], version: 0, ticket: '', day: '',
 var TT_PPM = 1.8;
 var TT_SNAP = 5;       // 5分刻み。1分刻みにすると、指では狙えない
 
+/*
+ * 表示の大きさ（レバー）。
+ *
+ * 1分あたりの高さを、人が触って決められるようにする。
+ * 全体をパッと見るときと、その時間だけ大きく見るときで、要る大きさが違う
+ * （2026-09-07 けいた指示）。
+ *
+ * 下限は 0.6（12時間が 432px ＝ 画面1枚に収まる）。
+ * それより小さくすると、10分の予定が 6px になり、
+ * 最低高さ 18px まで引き伸ばされて**時間の長さが嘘になる**。
+ * 上限は 6.0（1時間が 360px）。これ以上は、押す相手を探すほうが大変になる。
+ */
+/** 予定の枠の、これ以上は低くしない高さ(px)。描く側と重なり判定で同じ数を使う */
+var TT_EV_MIN_PX = 18;
+var TT_PPM_MIN = 0.6;
+var TT_PPM_MAX = 6.0;
+var TT_ZOOM_KEY = 'tt.ppm';
+
+/** いまの1分あたりの高さ。決めていなければ既定値 */
+function ttPpm(){
+  var v = Number(TT.ppm);
+  if (!isFinite(v) || v <= 0) return TT_PPM;
+  return Math.min(Math.max(v, TT_PPM_MIN), TT_PPM_MAX);
+}
+
 /** 表示する時間の幅。予定に合わせて広がる（既定は 08:00〜20:00） */
 function ttRange(){
   var from = 8 * 60, to = 20 * 60;
@@ -4759,6 +4823,55 @@ function loadTimetable(){
   }, function(e){ toast(String(e && e.message || e), true); });
 }
 
+/**
+ * 表示の大きさを変える。
+ *
+ * **いま画面の真ん中にある時刻を、変えたあとも真ん中に置く。**
+ * これをしないと、レバーを動かすたびに見ていた場所が飛ぶ。
+ * 「その時間だけ大きく見たい」という用途では、飛んだ時点で使い物にならない。
+ *
+ * @param {number} next 新しい1分あたりの高さ
+ */
+function ttSetPpm(next){
+  var wrap = $('#ttWrap');
+  var R = ttRange();
+  var before = ttPpm();
+  // 枠の真ん中に見えている時刻（分）。中身が無いときは上端でよい
+  var pad = 10;                                   // .tt-body の上の余白
+  var mid = wrap ? (wrap.scrollTop + wrap.clientHeight / 2 - pad) / before + R.from
+                 : R.from;
+
+  TT.ppm = Math.min(Math.max(Number(next) || TT_PPM, TT_PPM_MIN), TT_PPM_MAX);
+  try { localStorage.setItem(TT_ZOOM_KEY, String(TT.ppm)); } catch(e){}
+  renderTT();
+  ttRenderZoom();
+
+  if (wrap){
+    var y = (mid - R.from) * ttPpm() + pad - wrap.clientHeight / 2;
+    wrap.scrollTop = Math.max(0, Math.round(y));
+  }
+}
+
+/** レバーの位置と、いまの倍率の表示をそろえる */
+function ttRenderZoom(){
+  var el = $('#ttZoom'); if (!el) return;
+  el.min = String(Math.round(TT_PPM_MIN * 100));
+  el.max = String(Math.round(TT_PPM_MAX * 100));
+  el.value = String(Math.round(ttPpm() * 100));
+  // 「1時間の高さ」で言う。1分あたりの px は人には見当がつかない
+  $('#ttZoomV').textContent = '1時間 = ' + Math.round(60 * ttPpm()) + 'px';
+}
+
+/** 端から端まで、画面の高さに収める（全体をパッと見る） */
+function ttZoomFit(){
+  var wrap = $('#ttWrap'); if (!wrap) return;
+  var R = ttRange();
+  var span = Math.max(R.to - R.from, 1);
+  // 上下の余白（24px）と、目盛りが枠から出ない分を引く
+  ttSetPpm((wrap.clientHeight - 24) / span);
+  wrap.scrollTop = 0;
+}
+
 function ttRenderHead(){
   // **レーン名は画面に直書きしない。**サーバーが返した配列から組む（§7-5）
   /*
@@ -4778,12 +4891,19 @@ function ttRenderHead(){
 function renderTT(){
   if (!TT.loaded) return;
   var R = ttRange();
-  var h = Math.round((R.to - R.from) * TT_PPM);
-  var lay = ttLayout(TT.rows);
+  var h = Math.round((R.to - R.from) * ttPpm());
+  /*
+   * **見た目の重なりを渡す。**
+   * 縮めると、10分の予定も最低の高さ(18px)まで引き伸ばされて
+   * 次の予定に覆いかぶさる。時刻だけで重なりを見ていると、
+   * あとから描かれたほうが前のものを隠して**予定が消える**
+   * （2026-09-07、レバーを付けて実際に消えた）。
+   */
+  var lay = ttLayout(TT.rows, TT_EV_MIN_PX / ttPpm());
 
   var times = '<div class="tt-times" style="height:' + h + 'px">';
   for (var m = R.from; m <= R.to; m += 60){
-    times += '<span style="top:' + Math.round((m - R.from) * TT_PPM) + 'px">'
+    times += '<span style="top:' + Math.round((m - R.from) * ttPpm()) + 'px">'
            + ttHhmm(m) + '</span>';
   }
   times += '</div>';
@@ -4793,7 +4913,7 @@ function renderTT(){
       .map(function(r){ return ttEvHtml(r, li, lay[r.id] || {col:0,cols:1}, R); })
       .join('');
     return '<div class="tt-lane" data-lane="' + esc(lane) + '" data-li="' + li + '" '
-         + 'style="height:' + h + 'px;--tt-hour:' + Math.round(60 * TT_PPM) + 'px">'
+         + 'style="height:' + h + 'px;--tt-hour:' + Math.round(60 * ttPpm()) + 'px">'
          + evs + '</div>';
   }).join('');
 
@@ -4814,9 +4934,10 @@ function ttEvHtml(r, li, lay, R){
          + '<b>' + esc(r.title) + '</b><span class="t">時刻を読み取れません</span></div>';
   }
   var e = ttEnd(r);
-  var top = Math.round((s - R.from) * TT_PPM);
+  var top = Math.round((s - R.from) * ttPpm());
   var isMark = !(r.min > 0);
-  var hh = isMark ? 18 : Math.max(Math.round((e - s) * TT_PPM), 18);
+  var hh = isMark ? TT_EV_MIN_PX
+         : Math.max(Math.round((e - s) * ttPpm()), TT_EV_MIN_PX);
   /*
    * 低い枠に2行を詰めると、下の行が枠から出る。短いものは1行にする。
    * **0分の目印（高さ18px）も1行にする。**
@@ -4953,7 +5074,7 @@ function ttScrollTo(hhmm){
   var R = ttRange();
   var wrap = $('#ttWrap');
   if (!wrap) return;
-  var y = (at - R.from) * TT_PPM - wrap.clientHeight / 3;
+  var y = (at - R.from) * ttPpm() - wrap.clientHeight / 3;
   wrap.scrollTop = Math.max(y, 0);
 }
 
@@ -5112,7 +5233,7 @@ function ttOnDown(e){
   if (!lane) return;
   var R = ttRange();
   var rect = lane.getBoundingClientRect();
-  var at = ttSnap(R.from + (e.clientY - rect.top) / TT_PPM);
+  var at = ttSnap(R.from + (e.clientY - rect.top) / ttPpm());
   // 詳細の中のリンクは、そのまま開かせる（①の schList と同じ作法）
   if (e.target.closest('a')) return;
   var evEl = e.target.closest('.tt-ev');
@@ -5144,7 +5265,7 @@ function ttOnMove(e){
   var dy = e.clientY - d.y0;
   if (!d.moved && Math.abs(dy) < 4 && Math.abs(e.clientX - d.x0) < 4) return;
   d.moved = true;
-  d.deltaMin = ttSnap(dy / TT_PPM);
+  d.deltaMin = ttSnap(dy / ttPpm());
   if (d.mode === 'create') ttGhost(d.host, d.start0, Math.max(d.deltaMin, TT_SNAP));
   else if (d.mode === 'move') ttGhost(ttLaneElAt(e.clientX) || d.el.parentNode,
                                       d.start0 + d.deltaMin, d.len0);
@@ -5210,8 +5331,8 @@ function ttGhost(host, start, len){
   var R = ttRange();
   var g = document.createElement('div');
   g.className = 'tt-ghost';
-  g.style.top = Math.round((start - R.from) * TT_PPM) + 'px';
-  g.style.height = Math.max(Math.round(len * TT_PPM), 12) + 'px';
+  g.style.top = Math.round((start - R.from) * ttPpm()) + 'px';
+  g.style.height = Math.max(Math.round(len * ttPpm()), 12) + 'px';
   g.style.left = '2px'; g.style.right = '2px';
   host.appendChild(g);
   TT.ghost = g;
@@ -5497,42 +5618,183 @@ function ttOverlapMenu(which){
  *
  * ■ 出演者はタイトルの下に小さく
  */
-function ttBuildPrint(){
-  var lanes = TT.lanes;
-  // 予定が始まる時刻を、重複なく並べる
-  var times = [];
+/**
+ * 紙に出す時間の幅。**8:00〜21:00 で固定**（2026-09-07 けいた指示）。
+ *
+ * 固定にするのは、何枚刷っても同じ位置に同じ時刻が来るようにするため。
+ * 前の版と重ねて見たり、壁に並べて貼ったりできる。
+ *
+ * ただし**その外に予定があるときは広げる。**
+ * 固定を守って予定を切り落とすと、紙の上から予定が消える。
+ * 「載っていない＝無い」と読まれるので、これは事故になる。
+ */
+/** 紙の枠の、これ以上は低くしない高さ(mm)。字が読める下限 */
+/*
+ * 枠の下限(mm)。**題名と時刻の2行が入る高さ**にする。
+ * 6mm では時刻の行が枠から切れて、
+ * 「いつ終わるのか分からない紙」になった（刷る形にして発覚）。
+ */
+var TT_P_EV_MIN_MM = 8;
+/**
+ * 0分の目印の高さ(mm)。
+ * **0にしてはいけない。**枠は overflow:hidden なので、
+ * 高さ0にすると線だけが残って**文字が丸ごと消える**
+ * （2026-09-07、刷る形にして実際に消えた。『営業終了 17:30』が
+ *  紙から無くなるので、これは事故になる）。
+ */
+var TT_P_MARK_MM = 3.6;
+
+function ttPrintRange(){
+  var from = 8 * 60, to = 21 * 60;
   TT.rows.forEach(function(r){
-    var m = ttMinutes(r.start);
-    if (m === null) return;
-    if (times.indexOf(m) < 0) times.push(m);
+    var s = ttMinutes(r.start); if (s === null) return;
+    var e = ttEnd(r);
+    if (s < from) from = Math.floor(s / 60) * 60;
+    if (e > to) to = Math.ceil(e / 60) * 60;
   });
-  times.sort(function(a, b){ return a - b; });
+  return { from: Math.max(from, 0), to: Math.min(to, 1440) };
+}
 
-  var head = '<tr><th>時刻</th>'
-    + lanes.map(function(l){ return '<th>' + esc(l) + '</th>'; }).join('') + '</tr>';
+/**
+ * 紙の1分あたりの高さ（mm）。A4縦の刷り面に、幅ぜんぶを収める。
+ *
+ * A4縦は 297mm、余白が上下10mmずつ、見出しと脚注でおよそ 40mm。
+ * 残り 237mm に (to - from) 分を割り当てる。
+ * 13時間なら 0.30mm/分（1時間＝18mm）。
+ */
+function ttPrintMm(R){
+  var span = Math.max(R.to - R.from, 60);
+  return Math.min(237 / span, 0.6);
+}
 
-  var body = times.map(function(m){
-    var cells = lanes.map(function(lane){
-      var here = TT.rows.filter(function(r){
-        return r.lane === lane && ttMinutes(r.start) === m;
-      });
-      if (!here.length) return '<td></td>';
-      return '<td>' + here.map(function(r){
-        return '<b>' + esc(r.title) + '</b>'
-          + (r.locked ? ' 鍵' : '')
-          + (r.min > 0 ? ' <span class="len">（' + r.min + '分）</span>' : '')
-          + ((r.casts && r.casts.length)
-              ? '<span class="cast">' + esc(r.casts.join('・')) + '</span>' : '')
-          + (r.detail ? '<span class="memo">' + esc(r.detail) + '</span>' : '');
-      }).join('<br>') + '</td>';
-    }).join('');
-    return '<tr><td class="at">' + ttHhmm(m) + '</td>' + cells + '</tr>';
+/**
+ * 印刷用に組み立てる。**画面と同じ形にする**（2026-09-07 けいた指示）。
+ *
+ * 表組みをやめた理由：
+ *   表は「予定が始まる時刻」の行しか作らないので、
+ *   1分の予定も120分の予定も同じ高さの1行になり、**長さが伝わらない**。
+ *   空いている時間も見えない。備考は狭いセルに押し込まれて切れていた。
+ *
+ * 代わりに、画面と同じく**時間軸に置く**：
+ *   ・時刻は 8:00〜21:00 で固定（外に予定があれば広げる）
+ *   ・レーンの幅は等分で固定
+ *   ・入れた予定だけが、その時刻・その長さで乗る
+ *   ・レーンごとに色を変える
+ *
+ * 備考の扱い：
+ *   枠に収まらないものは**切らずに、下の「備考」へ番号で送る**。
+ *   紙は直せないので、黙って切れているのがいちばん困る（撮影して発覚）。
+ */
+function ttBuildPrint(){
+  var R = ttPrintRange();
+  var mm = ttPrintMm(R);
+  var h = (R.to - R.from) * mm;
+  /*
+   * 紙でも、字が読める下限（TT_P_EV_MIN_MM）まで枠を伸ばす。
+   * その伸びたぶんも「場所の取り合い」に入れないと、
+   * 短い予定の上に次の予定が乗って、**紙の上で予定が読めなくなる**
+   * （画面で直したのと同じ形。刷ってから気づくと直せない）。
+   */
+  var lay = ttLayout(TT.rows, TT_P_EV_MIN_MM / mm);
+  var notes = [];                       // 枠に入りきらなかった備考
+
+  var head = '<div class="tt-p-h">時刻</div>'
+    + TT.lanes.map(function(l){ return '<div class="tt-p-h">' + esc(l) + '</div>'; }).join('');
+
+  var times = '<div class="tt-p-times" style="height:' + h.toFixed(2) + 'mm">';
+  for (var m = R.from; m <= R.to; m += 60){
+    times += '<span style="top:' + ((m - R.from) * mm).toFixed(2) + 'mm">'
+           + ttHhmm(m) + '</span>';
+  }
+  times += '</div>';
+
+  var lanes = TT.lanes.map(function(lane, li){
+    var evs = TT.rows.filter(function(r){ return r.lane === lane; })
+      .map(function(r){
+        var s = ttMinutes(r.start);
+        if (s === null) return '';       // 読めない行は紙に出さない（画面で直す）
+        var e = ttEnd(r);
+        var isMark = !(r.min > 0);
+        var top = (s - R.from) * mm;
+        // 0分の目印は線1本。短い予定にも、字が読める下限を置く
+        var hh = isMark ? TT_P_MARK_MM
+               : Math.max((e - s) * mm, TT_P_EV_MIN_MM);
+        var L = lay[r.id] || { col: 0, cols: 1 };
+        var cols = L.cols || 1, col = L.col || 0;
+
+        var when = ttHhmm(s) + (isMark ? '' : '–' + ttHhmm(e));
+        /*
+         * **枠に入る分だけを中に出し、残りは下へ送る。**
+         *
+         * 高さは時間の長さで決まるので、短い予定には数行しか入らない。
+         * 入らないものを枠に置くと、overflow:hidden で**黙って切れる**。
+         * 紙は直せないので、切れているのがいちばん困る
+         * （備考が途中で切れた紙を、けいたが撮影して発覚）。
+         *
+         * 目安（7〜8ptで1行およそ3mm、上下の余白で1.6mm）：
+         *   8mm  … 題名＋時刻
+         *   11.5mm … ＋出演者
+         *   15mm  … ＋短い備考
+         */
+        var over = [];                    // 枠に入らなかったもの
+        var cast = '';
+        if (r.casts && r.casts.length){
+          if (!isMark && hh >= 11.5){
+            cast = '<span class="tt-p-cast">' + esc(r.casts.join('・')) + '</span>';
+          } else {
+            over.push('出演：' + r.casts.join('・'));
+          }
+        }
+        var memo = '';
+        if (r.detail){
+          if (!isMark && hh >= 15 && r.detail.length <= 34){
+            memo = '<span class="tt-p-memo">' + esc(r.detail) + '</span>';
+          } else {
+            over.push(r.detail);
+          }
+        }
+        /*
+    * **番号は、時刻と同じ行に置く。**
+    * 別の行にすると、それ自体が枠から切れて見えなくなり、
+    * 下に備考が載っているのに**誰も辿り着けない**（刷って発覚）。
+    */
+        var ref = '';
+        if (over.length){
+          notes.push({ n: notes.length + 1, lane: lane, when: when,
+                       title: r.title, detail: over.join('　／　') });
+          ref = ' <span class="tt-p-ref">※' + notes.length + '</span>';
+        }
+
+        return '<div class="tt-p-ev lane' + li + (isMark ? ' mark' : '')
+             + '"'
+             + ' style="top:' + top.toFixed(2) + 'mm;height:' + hh.toFixed(2) + 'mm;'
+             + 'left:' + (col / cols * 100).toFixed(2) + '%;'
+             + 'width:' + (100 / cols).toFixed(2) + '%">'
+             + '<b>' + esc(r.title) + '</b>'
+             + '<span class="tt-p-when">' + esc(when) + ref + '</span>'
+             + cast + memo + '</div>';
+      }).join('');
+    return '<div class="tt-p-lane lane' + li + '" style="height:' + h.toFixed(2) + 'mm;'
+         + '--tt-p-hour:' + (60 * mm).toFixed(2) + 'mm">' + evs + '</div>';
   }).join('');
+
+  var cols = '13mm repeat(' + Math.max(TT.lanes.length, 1) + ', 1fr)';
+  var foot = notes.length
+    ? '<div class="tt-p-notes"><b>備考</b>'
+      + notes.map(function(x){
+          return '<div>※' + x.n + '　' + esc(x.when) + '　' + esc(x.title)
+               + '（' + esc(x.lane) + '）　' + esc(x.detail) + '</div>';
+        }).join('') + '</div>'
+    : '';
 
   $('#ttPaper').innerHTML = '<h2>当日の進行表</h2>'
     + '<p class="day">' + esc(TT.day || '') + '　'
     + esc((S.summary && S.summary.eventName) || '') + '</p>'
-    + '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+    + '<div class="tt-p"><div class="tt-p-head" style="grid-template-columns:' + cols + '">'
+    + head + '</div>'
+    + '<div class="tt-p-body" style="grid-template-columns:' + cols + '">'
+    + times + lanes + '</div></div>'
+    + foot;
 }
 
 /**
@@ -5614,6 +5876,25 @@ function bindTimetable(){
   $('#ttUndo').addEventListener('click', ttUndoOne);
   $('#ttReload').addEventListener('click', loadTimetable);
   $('#ttPrint').addEventListener('click', ttPrint);
+
+  /*
+   * 表示の大きさ。前に選んだ値を覚えておく（その人の端末の中だけ）。
+   * 覚えないと、読み込み直すたびに標準へ戻り、
+   * 「その時間だけ大きく見る」が毎回やり直しになる。
+   */
+  try {
+    var saved = Number(localStorage.getItem(TT_ZOOM_KEY));
+    if (isFinite(saved) && saved > 0) TT.ppm = saved;
+  } catch(e){}
+  ttRenderZoom();
+  $('#ttZoom').addEventListener('input', function(e){
+    ttSetPpm(Number(e.target.value) / 100);
+  });
+  // レバーを触れない場面もある（キーボードだけ、指が太い、狭い画面）
+  $('#ttZoomIn').addEventListener('click', function(){ ttSetPpm(ttPpm() * 1.25); });
+  $('#ttZoomOut').addEventListener('click', function(){ ttSetPpm(ttPpm() / 1.25); });
+  $('#ttZoomFit').addEventListener('click', ttZoomFit);
+  $('#ttZoomReset').addEventListener('click', function(){ ttSetPpm(TT_PPM); });
   $('#ttExcel').addEventListener('click', function(){
     downloadXlsx('adminTimetableExport', '進行表');
   });
@@ -6088,6 +6369,18 @@ function html() {
         <button class="ghost" id="ttPrint">印刷する（A4縦）</button>
         <button class="ghost" id="ttExcel">Excelで保存</button>
         <button class="print" id="ttSave">保存する</button>
+      </div>
+      <!-- 表示の大きさ。全体をパッと見たいときと、その時間だけ大きく見たいときがある。
+           数字ではなくレバーにするのは、「どのくらい変わるか」を触りながら決めるため -->
+      <div class="tt-zoom">
+        <label for="ttZoom">表示の大きさ</label>
+        <button class="ghost" id="ttZoomOut" aria-label="小さくする">−</button>
+        <input type="range" id="ttZoom" min="60" max="600" step="10"
+               aria-label="表示の大きさ">
+        <button class="ghost" id="ttZoomIn" aria-label="大きくする">＋</button>
+        <span class="tt-zoom-v" id="ttZoomV"></span>
+        <button class="ghost" id="ttZoomFit">全体を見る</button>
+        <button class="ghost" id="ttZoomReset">標準</button>
       </div>
       <div class="tt-wrap" id="ttWrap">
         <div class="tt-head" id="ttHead"></div>

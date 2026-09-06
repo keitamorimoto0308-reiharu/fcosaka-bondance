@@ -415,3 +415,149 @@ describe('② タイムスケジュールの画面：見た目で死ぬところ
       '短い予定を1行にしていません。枠からはみ出して次の予定に重なります');
   });
 });
+
+/** コメントを外す。直した理由を書くと、そこに昔の書き方が残るため */
+function noComment(s) {
+  return s.split(String.fromCharCode(10))
+    .map(l => l.replace(/^\s*\/\/.*$/, '').replace(/^\s*\*.*$/, ''))
+    .join(String.fromCharCode(10));
+}
+
+describe('② 画面：表示の大きさ（2026-09-07）', () => {
+
+  test('レバーがある（全体を見る／その時間だけ大きく見る）', () => {
+    assert.ok(SRC.indexOf('id="ttZoom"') >= 0, '表示の大きさのレバーがありません');
+    assert.match(SRC, /id="ttZoom"[^>]*type="range"|type="range"[^>]*id="ttZoom"/,
+      'レバー（range）になっていません');
+    ['ttZoomFit', 'ttZoomReset', 'ttZoomIn', 'ttZoomOut'].forEach(id => {
+      assert.ok(SRC.indexOf('id="' + id + '"') >= 0, id + ' がありません');
+    });
+  });
+
+  test('1分あたりの高さは、決め打ちではなく ttPpm() から取る', () => {
+    /*
+     * どこか1か所でも定数のままだと、そこだけ拡大に付いてこない。
+     * 目盛りと予定の位置がずれ、**11時の予定が10時の線の上に出る**。
+     */
+    /*
+     * `TT_PPM` そのものを禁じてはいけない。既定値と上下限の宣言、
+     * ttPpm() の中の丸め込みは、あって当然のもの。
+     * 見たいのは**位置を計算しているところ**だけなので、
+     * 宣言と丸め込みの行を除いてから数える。
+     */
+    const b = noComment(ttBlock());
+    const bad = b.split(String.fromCharCode(10)).filter(l =>
+      l.indexOf('TT_PPM') >= 0
+      && !/var TT_PPM/.test(l)          // 宣言
+      && !/TT_PPM_MIN|TT_PPM_MAX/.test(l)  // 上下限で丸める
+      && !/return TT_PPM;/.test(l));    // 決めていないときの既定値
+    assert.deepStrictEqual(bad.map(l => l.trim()), [],
+      '②の画面に、拡大に付いてこない TT_PPM の使い方があります');
+  });
+
+  test('大きさを変えても、見ていた時刻が動かない', () => {
+    // これが無いと、レバーを動かすたびに見ていた場所が飛ぶ
+    /*
+     * **「scrollTop という字があるか」では足りない。**
+     * 0 を入れるだけでも字は残るので素通りする
+     * （引き継ぎ書§5「位置だけを見る検査は if (false) で囲まれても素通りする」）。
+     * 計算の形そのものを見る。
+     */
+    const f = noComment(SRC.slice(SRC.indexOf('function ttSetPpm'),
+                                  SRC.indexOf('function ttRenderZoom')));
+    assert.match(f, /var mid = wrap \?/, '真ん中の時刻を取っていません');
+    assert.match(f, /var y = \(mid - R\.from\) \* ttPpm\(\)/,
+      '新しい大きさで置き直していません');
+    assert.match(f, /wrap\.scrollTop = Math\.max\(0, Math\.round\(y\)\);/,
+      '見ていた場所を保っていません');
+  });
+
+  test('縮めたときの「見た目の重なり」を、規則に渡している', () => {
+    /*
+     * 最低の高さ(18px)まで引き伸ばされたぶんを渡さないと、
+     * 短い予定が次の予定に覆われて**画面から消える**。
+     */
+    const b = noComment(ttBlock());
+    assert.match(b, /ttLayout\(TT\.rows, TT_EV_MIN_PX \/ ttPpm\(\)\)/,
+      '見た目の重なりを渡していません（縮めると予定が消えます）');
+  });
+
+  test('最低の高さは、描く側と重なり判定で同じ数を使う', () => {
+    // 数字が2か所にあると、片方だけ直したときにまた消える
+    const b = noComment(ttBlock());
+    assert.ok(b.indexOf('), 18)') < 0, '最低の高さを直接書いています');
+    assert.ok(b.indexOf('TT_EV_MIN_PX') > 0, '共通の名前を使っていません');
+  });
+});
+
+describe('② 印刷：画面と同じ形にする（2026-09-07）', () => {
+
+  const printBlock = () => noComment(
+    SRC.slice(SRC.indexOf('function ttPrintRange'), SRC.indexOf('function ttPrint(')));
+
+  test('表組みをやめて、時間軸に置く', () => {
+    /*
+     * 表は「予定が始まる時刻」の行しか作らないので、
+     * 1分の予定も120分の予定も同じ高さになり、長さが伝わらない。
+     */
+    const f = printBlock();
+    assert.ok(f.indexOf('<table') < 0, 'まだ表組みで刷っています');
+    assert.match(f, /tt-p-lane/, 'レーンを置いていません');
+    assert.match(f, /top:/, '時刻の位置に置いていません');
+  });
+
+  test('時間の幅は 8:00〜21:00 で固定する', () => {
+    const f = noComment(SRC.slice(SRC.indexOf('function ttPrintRange'),
+                                  SRC.indexOf('function ttPrintMm')));
+    assert.match(f, /var from = 8 \* 60, to = 21 \* 60;/,
+      '8:00〜21:00 で固定していません');
+  });
+
+  test('その外に予定があれば、広げる（紙から予定を消さない）', () => {
+    // 固定を守って切り落とすと、「載っていない＝無い」と読まれる
+    const f = noComment(SRC.slice(SRC.indexOf('function ttPrintRange'),
+                                  SRC.indexOf('function ttPrintMm')));
+    assert.match(f, /if \(s < from\)/, '早い予定に合わせて広げていません');
+    assert.match(f, /if \(e > to\)/, '遅い予定に合わせて広げていません');
+  });
+
+  test('レーンごとに色を分ける', () => {
+    ['tt-p-ev.lane0', 'tt-p-ev.lane1', 'tt-p-ev.lane2'].forEach(sel => {
+      assert.ok(SRC.indexOf('.' + sel + '{') >= 0, sel + ' の色がありません');
+    });
+  });
+
+  test('0分の目印にも高さを持たせる（文字が消えないように）', () => {
+    /*
+     * 枠は overflow:hidden なので、高さ0にすると
+     * 線だけが残って「営業終了 17:30」の字が丸ごと消える。
+     */
+    const f = printBlock();
+    assert.ok(f.indexOf('isMark ? 0 :') < 0, '目印の高さが0のままです（字が消えます）');
+    assert.match(f, /isMark \? TT_P_MARK_MM/, '目印の高さを持たせていません');
+  });
+
+  test('枠に入らない備考と出演者は、切らずに下へ送る', () => {
+    const f = printBlock();
+    // 見張りの形そのものを見る。if (false) で囲まれても字は残るため
+    assert.match(f, /if \(over\.length\)\{/, '入らなかったものを下に送っていません');
+    assert.match(f, /notes\.push/, '下に送る先がありません');
+    assert.match(f, /over\.push/, '出演者を送る道がありません');
+    assert.ok(SRC.indexOf('tt-p-notes') >= 0, '下の「備考」の場所がありません');
+  });
+
+  test('脚注の番号は、時刻と同じ行に置く', () => {
+    /*
+     * 別の行に置くと、その行ごと枠から切れて、
+     * 下に備考が載っているのに誰も辿り着けない。
+     */
+    const f = printBlock();
+    assert.match(f, /esc\(when\) \+ ref/, '番号が時刻と同じ行にありません');
+  });
+
+  test('紙でも、見た目の重なりを規則に渡す', () => {
+    const f = printBlock();
+    assert.match(f, /ttLayout\(TT\.rows, TT_P_EV_MIN_MM \/ mm\)/,
+      '紙で短い予定が次の予定に隠れます');
+  });
+});

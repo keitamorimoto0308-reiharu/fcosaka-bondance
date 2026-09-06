@@ -408,3 +408,111 @@ describe('②の規則：画面に埋め込める形になっているか', () =
     });
   });
 });
+
+/*
+ * 表示を縮めたとき、短い予定が次の予定に隠れる。
+ *
+ * 画面には「これ以上は低くしない」高さ（18px）がある。時刻どおりに置くと
+ * 10分の予定は 1分あたり0.67pxでは 6.7px にしかならず、18px まで
+ * 引き伸ばされる。**紙の上では10分でも、画面では27分ぶんの場所を占める。**
+ * 重なりの判定は時刻だけで見ていたので、この「見た目の重なり」は
+ * 検出されず、あとから描かれたほうが前のものを覆い隠していた
+ * （2026-09-07、表示の大きさを変えられるようにして、実際に消えた）。
+ */
+describe('表示を縮めたときの重なり（見た目の重なり）', () => {
+
+  test('最低の高さを渡すと、時刻が離れていても重なりとして扱う', () => {
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 10, title: 'オープニング' },
+      { id: 'b', lane: '全体', start: '11:10', min: 30, title: '和太鼓' },
+    ];
+    // 時刻の上では重なっていない（11:00-11:10 と 11:10-11:40）
+    const asIs = call('ttLayout', rows);
+    assert.strictEqual(asIs.a.cols, 1, '時刻の上では重なっていません');
+
+    // 画面で27分ぶんの高さになるなら、重なりとして扱う
+    const zoomed = call('ttLayout', rows, 27);
+    assert.strictEqual(zoomed.a.cols, 2, '見た目の重なりを見ていません');
+    assert.strictEqual(zoomed.b.cols, 2);
+    assert.notStrictEqual(zoomed.a.col, zoomed.b.col, '同じ場所に重ねています');
+  });
+
+  test('最低の高さを渡しても、離れているものは重ねない', () => {
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 10, title: 'A' },
+      { id: 'b', lane: '全体', start: '13:00', min: 30, title: 'B' },
+    ];
+    const r = call('ttLayout', rows, 27);
+    assert.strictEqual(r.a.cols, 1, '離れているのに重ねました');
+    assert.strictEqual(r.b.cols, 1);
+  });
+
+  test('最低の高さは、本来の長さより短ければ効かない', () => {
+    // 120分の予定に「最低27分」を足しても、長さは120分のまま
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 120, title: 'A' },
+      { id: 'b', lane: '全体', start: '13:10', min: 30, title: 'B' },
+    ];
+    const r = call('ttLayout', rows, 27);
+    assert.strictEqual(r.a.cols, 1, '長い予定を無用に重ねました');
+  });
+
+  test('0分の目印は、縮めても帯にしない', () => {
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 0, title: '目印' },
+      { id: 'b', lane: '全体', start: '11:05', min: 30, title: 'B' },
+    ];
+    const r = call('ttLayout', rows, 27);
+    assert.strictEqual(r.b.cols, 1, '目印を帯として重ねました');
+  });
+
+  test('渡さなければ、これまでと同じ（時刻だけで見る）', () => {
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 10, title: 'A' },
+      { id: 'b', lane: '全体', start: '11:10', min: 30, title: 'B' },
+    ];
+    assert.strictEqual(call('ttLayout', rows).a.cols, 1);
+    assert.strictEqual(call('ttLayout', rows, 0).a.cols, 1);
+  });
+});
+
+describe('見た目の重なりと、本当の重なりを分ける', () => {
+
+  test('縮めて場所を分けても、「重なっています」の印は付けない', () => {
+    /*
+     * 場所の取り合い（どこに描くか）と、重なりの警告（人に直してほしい）は
+     * 別のもの。ここを一緒にすると、**縮めただけで嘘の警告が出る**
+     * （2026-09-07、レバーを付けて実際に黄色い枠が出た）。
+     */
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 10, title: 'オープニング' },
+      { id: 'b', lane: '全体', start: '11:10', min: 30, title: '和太鼓' },
+    ];
+    const r = call('ttLayout', rows, 27);
+    assert.strictEqual(r.a.cols, 2, '場所を分けていません');
+    assert.strictEqual(r.a.overlap, false, '重なっていないのに警告が出ます');
+    assert.strictEqual(r.b.overlap, false, '重なっていないのに警告が出ます');
+  });
+
+  test('本当に重なっているものには、縮めても印が付く', () => {
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 30, title: 'A' },
+      { id: 'b', lane: '全体', start: '11:10', min: 30, title: 'B' },
+    ];
+    const r = call('ttLayout', rows, 27);
+    assert.strictEqual(r.a.overlap, true, '本当の重なりを見落としています');
+    assert.strictEqual(r.b.overlap, true);
+  });
+
+  test('3つ並ぶうち、本当に重なる2つだけに印が付く', () => {
+    const rows = [
+      { id: 'a', lane: '全体', start: '11:00', min: 30, title: 'A' },
+      { id: 'b', lane: '全体', start: '11:10', min: 30, title: 'B' },
+      { id: 'c', lane: '全体', start: '11:45', min: 10, title: 'C' },
+    ];
+    const r = call('ttLayout', rows, 27);
+    assert.strictEqual(r.a.overlap, true);
+    assert.strictEqual(r.b.overlap, true);
+    assert.strictEqual(r.c.overlap, false, '重なっていないCにも印が付きました');
+  });
+});

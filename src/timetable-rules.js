@@ -221,10 +221,24 @@ function ttMove(rows, id, lane, start, lanes) {
  *
  * @return {Object} id → { col, cols, overlap }
  */
-function ttLayout(rows) {
+function ttLayout(rows, minMin) {
   var out = {};
   var byLane = {};
   var i, r;
+  /*
+   * `minMin` … 画面で「これ以上は低くしない」高さを、分に直したもの。
+   *
+   * 表示を縮めると、10分の予定も最低の高さ（18px）まで引き伸ばされる。
+   * **紙の上では10分でも、画面では27分ぶんの場所を占める。**
+   * 時刻だけで重なりを見ていると、この「見た目の重なり」は見つからず、
+   * あとから描かれたほうが前のものを覆い隠す
+   * （2026-09-07、表示の大きさを変えられるようにして、実際に消えた）。
+   *
+   * 渡さなければ、これまでどおり時刻だけで見る（紙・書き出しはこちら）。
+   */
+  var pad = Number(minMin);
+  if (!isFinite(pad) || pad < 0) pad = 0;
+
   for (i = 0; i < (rows || []).length; i++) {
     r = rows[i];
     out[r.id] = { col: 0, cols: 1, overlap: false };
@@ -233,7 +247,15 @@ function ttLayout(rows) {
     var e = ttEnd(r);
     if (e === null || e <= s) continue;        // 0分の目印は帯にしない
     if (!byLane[r.lane]) byLane[r.lane] = [];
-    byLane[r.lane].push({ id: r.id, s: s, e: e });
+    /*
+     * 場所の取り合いは「見た目の終わり」（e2）で見る。
+     * **「重なっています」の印は、本来の終わり（e）だけで見る。**
+     *
+     * ここを一緒にすると、縮めただけで嘘の警告が出る。
+     * 場所を分けるのは描くための都合、警告は人に直してほしいという合図で、
+     * 別のもの（2026-09-07、レバーを付けて実際に黄色い枠が出た）。
+     */
+    byLane[r.lane].push({ id: r.id, s: s, e: Math.max(e, s + pad), realE: e });
   }
 
   for (var lane in byLane) {
@@ -260,7 +282,14 @@ function ttLayout(rows) {
         for (var c = 0; c < cluster.length; c++) {
           out[cluster[c].id].col = c;
           out[cluster[c].id].cols = cluster.length;
-          out[cluster[c].id].overlap = cluster.length > 1;
+          // 印は、**本来の時刻で本当に重なっている相手がいるとき**だけ
+          var mine = cluster[c], hit = false;
+          for (var d = 0; d < cluster.length; d++) {
+            if (d === c) continue;
+            var other = cluster[d];
+            if (mine.s < other.realE && other.s < mine.realE) { hit = true; break; }
+          }
+          out[mine.id].overlap = hit;
         }
       }
       cluster = item ? [item] : [];

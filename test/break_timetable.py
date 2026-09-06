@@ -355,6 +355,74 @@ CASES = [
         ('gas/Export.gs', "      leftover: false,\n    };",
             "      leftover: false,\n      url: ss.getUrl(),\n    };"),
     ], 'Drive のURLを返しています'),
+
+    # ── 表示の大きさ（2026-09-07 けいた指示）────────────────
+    # 縮めると、最低の高さまで引き伸ばされた短い予定が
+    # 次の予定に覆われて**画面から消える**
+    ('縮めたときの「見た目の重なり」を、規則に渡さないようにする', [
+        (A, '  var lay = ttLayout(TT.rows, TT_EV_MIN_PX / ttPpm());',
+            '  var lay = ttLayout(TT.rows);'),
+    ], '見た目の重なりを渡していません'),
+
+    # 場所を分けることと、重なりの警告は別のもの。
+    # 一緒にすると、縮めただけで嘘の警告が出る
+    ('場所を分けたら、重なりの警告も出すようにする', [
+        (U, '          out[mine.id].overlap = hit;',
+            '          out[mine.id].overlap = cluster.length > 1;'),
+    ], '重なっていないのに警告が出ます'),
+
+    # 拡大に付いてこない箇所が1つでもあると、目盛りと予定がずれる
+    ('目盛りだけ、決め打ちの高さに戻す', [
+        (A, "    times += '<span style=\"top:' + Math.round((m - R.from) * ttPpm()) + 'px\">'",
+            "    times += '<span style=\"top:' + Math.round((m - R.from) * TT_PPM) + 'px\">'"),
+    ], '拡大に付いてこない TT_PPM の使い方があります'),
+
+    # 見ていた場所が飛ぶと、「その時間だけ大きく見る」が使い物にならない
+    ('大きさを変えたとき、見ていた時刻を保たないようにする', [
+        (A, '    wrap.scrollTop = Math.max(0, Math.round(y));',
+            '    wrap.scrollTop = 0;'),
+    ], '見ていた場所を保っていません'),
+
+    # ── 印刷（2026-09-07 けいた指示）──────────────────────
+    # 表組みは、1分の予定も120分の予定も同じ高さの1行にする
+    ('印刷を、表組みに戻す', [
+        (A, "             + '<span class=\"tt-p-when\">' + esc(when) + ref + '</span>'",
+            "             + '<table><span class=\"tt-p-when\">' + esc(when) + ref + '</span>'"),
+    ], 'まだ表組みで刷っています'),
+
+    # 固定を守って切り落とすと、紙から予定が消える
+    ('8:00〜21:00 の外にある予定を、切り落とすようにする', [
+        (A, '    if (s < from) from = Math.floor(s / 60) * 60;\n'
+            '    if (e > to) to = Math.ceil(e / 60) * 60;\n'
+            '  });\n'
+            '  return { from: Math.max(from, 0), to: Math.min(to, 1440) };',
+            '  });\n'
+            '  return { from: Math.max(from, 0), to: Math.min(to, 1440) };'),
+    ], '早い予定に合わせて広げていません'),
+
+    # 高さ0の枠は overflow:hidden で字ごと消える
+    ('0分の目印の高さを、0に戻す', [
+        (A, '        var hh = isMark ? TT_P_MARK_MM\n'
+            '               : Math.max((e - s) * mm, TT_P_EV_MIN_MM);',
+            '        var hh = isMark ? 0 : Math.max((e - s) * mm, TT_P_EV_MIN_MM);'),
+    ], '目印の高さが0のままです'),
+
+    # 紙は直せない。切れているのがいちばん困る
+    ('枠に入らない備考を、下に送らないようにする', [
+        (A, '        if (over.length){', '        if (false){'),
+    ], '入らなかったものを下に送っていません'),
+
+    # 番号が枠から切れると、下に備考があっても誰も辿り着けない
+    ('脚注の番号を、時刻とは別の行に置く', [
+        (A, "             + '<span class=\"tt-p-when\">' + esc(when) + ref + '</span>'",
+            "             + '<span class=\"tt-p-when\">' + esc(when) + '</span>' + ref"),
+    ], '番号が時刻と同じ行にありません'),
+
+    # 紙でも、短い予定が次の予定に隠れる
+    ('紙で、見た目の重なりを渡さないようにする', [
+        (A, '  var lay = ttLayout(TT.rows, TT_P_EV_MIN_MM / mm);',
+            '  var lay = ttLayout(TT.rows);'),
+    ], '紙で短い予定が次の予定に隠れます'),
 ]
 
 
