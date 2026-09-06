@@ -26,6 +26,15 @@ const SHOTS = [
   { name: 'sched-efushi', role: 'admin', tab: 'sched', w: 1400, h: 900,
     after: 'schEfushi();' },
   // ステータスの選択肢。resize で閉じる作りなので、撮影の直前に開き直す
+  // Excelの取り込みの下見。**模擬だけの入口**で「読んだ結果」を差し込んでから撮る
+  { name: 'sched-import', role: 'admin', tab: 'sched', w: 1400, h: 1100,
+    after: "api('mockSchedImportSeed',{rows:["
+         + "{__row:2,'種類':'タスク','日付':'2026-10-01','領域':'制作','タスク名':'横断幕の入稿'},"
+         + "{__row:3,'種類':'タスク','日付':'2026-10-02','領域':'制作','タスク名':'のぼりの手配','担当者':'田中'},"
+         + "{__row:4,'種類':'タスク','日付':'あとで','領域':'制作','タスク名':'日付が読めない行'}"
+         + "]}).then(function(){return api('adminSchedImportRead',{base64:'ZHVtbXk=',fileName:'kougyou.xlsx'});})"
+         + ".then(function(r){IMP.items=r.items;IMP.counts=r.counts;IMP.missing=r.missing;"
+         + "IMP.fileName='kougyou.xlsx';schImpRender();});" },
   { name: 'sched-status', role: 'admin', tab: 'sched', w: 1400, h: 900,
     after: "var b=document.querySelector('.sch-status[data-sid]'); if(b){b.click();}" },
   // ② タイムスケジュール

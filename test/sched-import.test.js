@@ -490,3 +490,45 @@ describe('取り込み：記録（§3-7・§5-2）', () => {
     assert.match(JSON.stringify(r.items[0].problems), /領域/, JSON.stringify(r.items));
   });
 });
+
+describe('取り込み：直したあとの下見を作り直す（画面から）', () => {
+
+  /** 画面から：ファイルではなく、いま持っている行を送る */
+  function replan(b, rows, person) {
+    b.box.__auth = { person: person || '小谷' };
+    b.box.__payload = { rows: rows };
+    return JSON.parse(JSON.stringify(
+      vm.runInContext('adminSchedImportRead_(__auth, __payload)', b.box) || null));
+  }
+
+  test('行を送ると、ファイルを読まずに下見を作り直す', () => {
+    /*
+     * 画面で赤い行を直したあと、**同じ規則で見直す**必要がある。
+     * 画面側で判定を写すと、サーバーとズレる（この案件が繰り返し避けてきた形）。
+     */
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    const r = replan(b, [{ __row: 2, 種類: 'タスク', 日付: '2026-10-01', 領域: '制作',
+                           タスク名: '横断幕の入稿', ID: '' }]);
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.strictEqual(r.items[0].action, 'add');
+    assert.strictEqual(b.touched.upload, 0, 'ファイルを読みに行っています');
+  });
+
+  test('直せば、赤が消える（同じ行を送り直すと通る）', () => {
+    const b = makeBox({ ledger: [] });
+    const bad = replan(b, [{ __row: 2, 種類: 'タスク', 日付: '2026-10-01', 領域: '制作',
+                             タスク名: '', ID: '' }]);
+    assert.strictEqual(bad.items[0].action, 'bad');
+
+    const good = replan(b, [{ __row: 2, 種類: 'タスク', 日付: '2026-10-01', 領域: '制作',
+                              タスク名: '直した', ID: '' }]);
+    assert.strictEqual(good.items[0].action, 'add', '直しても赤のままです');
+    assert.strictEqual(good.counts.bad, 0);
+  });
+
+  test('行も base64 も無ければ、断る', () => {
+    const b = makeBox({ ledger: [] });
+    const r = replan(b, undefined);
+    assert.strictEqual(r.ok, false, JSON.stringify(r));
+  });
+});

@@ -707,6 +707,30 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-add{width:100%;background:none;border:1px dashed var(--border);border-radius:6px;
   padding:9px;font-size:12px;color:var(--muted);cursor:pointer;margin-top:6px}
 .sch-add:hover{border-color:var(--brand-deep);color:var(--brand-deep)}
+/* 取り込みの下見。名前は**全部 sch- で始める**（①の接頭辞をはみ出さない） */
+.sch-stamps{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+.sch-imp{background:#fff;border:1px solid var(--border);border-radius:8px;
+  padding:14px;margin:0 0 16px}
+.sch-imp h3{font-size:14px;margin:0 0 6px}
+.sch-imp .sch-imp-sum{font-size:12.5px;color:var(--muted);margin:0 0 4px}
+.sch-imp .sch-imp-warn{font-size:12.5px;color:var(--error);font-weight:700;margin:0 0 10px}
+.sch-imp-wrap{overflow:auto;max-height:52vh;border:1px solid var(--border);border-radius:6px}
+.sch-imp-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
+.sch-imp-table th{position:sticky;top:0;background:#fff;z-index:1;
+  border-bottom:1px solid var(--border);padding:7px 9px;text-align:left;font-size:11.5px}
+.sch-imp-table td{border-top:1px solid var(--border);padding:6px 9px;max-width:220px;
+  overflow:hidden;text-overflow:ellipsis}
+.sch-imp-table tr{cursor:pointer}
+.sch-imp-table tr:hover td{background:var(--subtle)}
+/* 問題のあるセル。カーソルを合わせると理由が出る */
+.sch-imp-bad{background:#FFF4F2;color:var(--error);font-weight:700}
+.sch-imp-row-bad td:first-child{border-left:3px solid var(--error)}
+.sch-imp-act{font-size:11px;color:var(--muted)}
+.sch-imp .pbtns{display:flex;gap:8px;align-items:center;margin-top:12px}
+.sch-imp .pbtns .sp{margin-left:auto}
+/* 赤があるあいだは押せない。**押せないものは、押せないように見せる** */
+.sch-imp .pbtns button[disabled]{opacity:.45;cursor:default}
+
 .sch-empty{background:#fff;border:1px solid var(--border);border-radius:6px;
   padding:26px;text-align:center;color:var(--muted);font-size:13px}
 
@@ -3678,6 +3702,174 @@ function schWriteFilters(){
   try { localStorage.setItem(SCH_KEY, JSON.stringify(SCH_F)); } catch(e){}
 }
 
+/**
+ * Excel の取り込み（design_sched_import.md）。
+ *
+ * **Excel は正ではない。**正は台帳で、Excel は作業用の写し。
+ * だから画面で直した内容を Excel へ戻さないし、取り込みで台帳の行を消さない。
+ */
+var IMP = { items: [], counts: null, missing: [], editing: null, fileName: '' };
+
+/** タブの上の1行。**無いものは出さない**（§5-4） */
+function schRenderStamps(){
+  var st = SCH.stamps || {};
+  var say = function(label, x){
+    if (!x || !x.at) return '';          // まだ無いものは出さない
+    return label + '：' + (x.person || '（不明）') + ' ' + schWhen(x.at);
+  };
+  var parts = [say('最終編集', st.edit), say('取り込み', st['import']),
+               say('書き出し', st['export'])].filter(function(t){ return t; });
+  var el = $('#schStamps');
+  el.textContent = parts.join(' ／ ');
+  el.hidden = !parts.length;
+}
+
+/** ミリ秒を「9/7 15:42」にする。今日なら時刻だけでもよいが、日を出すほうが迷わない */
+function schWhen(ms){
+  var d = new Date(Number(ms) || 0);
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/** 下見に出す列。**台帳の並びのまま**（人がExcelで見ているものと同じ順） */
+var IMP_COLS = ['種類', '日付', '終了日', '領域', '担当会社', '担当者',
+                'タスク名', '詳細', 'ステータス', '備考', 'ID'];
+
+/**
+ * 下見を出す。
+ *
+ * **赤が1つでもあるあいだ、「取り込む」は押せない。**
+ * 問題のあるセルだけ色を変え、カーソルを合わせると理由が出る。
+ */
+function schImpRender(){
+  var box = $('#schImp');
+  if (!IMP.items.length){ box.hidden = true; return; }
+  var c = IMP.counts || { add: 0, update: 0, same: 0, bad: 0, missing: 0 };
+
+  var head = '<tr><th>行</th>'
+    + IMP_COLS.map(function(h){ return '<th>' + esc(h) + '</th>'; }).join('')
+    + '<th>どうなるか</th></tr>';
+
+  var rows = IMP.items.map(function(x, i){
+    // どの欄に問題があるかを引けるようにする（色を付ける列を決める）
+    var why = {};
+    (x.problems || []).forEach(function(pr){
+      why[pr.field || '*'] = (why[pr.field || '*'] || '') + pr.why + ' ';
+    });
+    var cells = IMP_COLS.map(function(h){
+      var v = (x.raw && x.raw[h] !== undefined) ? x.raw[h] : '';
+      var bad = why[h] || (why['*'] && h === 'タスク名');
+      return '<td' + (bad ? ' class="sch-imp-bad" title="' + esc(String(bad).trim()) + '"' : '')
+        + '>' + esc(v) + '</td>';
+    }).join('');
+    var label = x.action === 'add' ? '追加' : x.action === 'update' ? '更新'
+              : x.action === 'same' ? '変わらない' : '直してください';
+    return '<tr data-imp="' + i + '"' + (x.action === 'bad' ? ' class="sch-imp-row-bad"' : '')
+      + '><td class="sch-imp-act">' + (x.excelRow || '') + '</td>' + cells
+      + '<td class="sch-imp-act">' + label + '</td></tr>';
+  }).join('');
+
+  box.innerHTML = '<h3>' + esc(IMP.fileName || 'Excel') + ' を読みました</h3>'
+    + '<p class="sch-imp-sum">' + IMP.items.length + '行　'
+    + '追加 ' + c.add + '件 ／ 更新 ' + c.update + '件 ／ 変わらない ' + c.same + '件</p>'
+    + (c.missing
+        ? '<p class="sch-imp-sum">Excelに無い行が ' + c.missing + '件 あります（そのまま残します）</p>'
+        : '')
+    + (c.bad
+        ? '<p class="sch-imp-warn">' + c.bad + '行に問題があります。'
+          + 'その行を押すと直せます。直すと取り込めます。</p>'
+        : '')
+    + '<div class="sch-imp-wrap"><table class="sch-imp-table"><thead>' + head
+    + '</thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div class="pbtns"><span class="sp"></span>'
+    + '<button class="ghost" id="schImpCancel">やめる</button>'
+    + '<button class="print" id="schImpGo">取り込む</button></div>';
+  box.hidden = false;
+
+  // **赤があるあいだは押せない**
+  $('#schImpGo').disabled = !!c.bad;
+  $('#schImpCancel').addEventListener('click', schImpClose);
+  $('#schImpGo').addEventListener('click', schImpGo);
+}
+
+function schImpClose(){
+  IMP.items = []; IMP.counts = null; IMP.missing = []; IMP.fileName = '';
+  $('#schImp').hidden = true;
+  try { $('#schFile').value = ''; } catch(e){}
+}
+
+/** ファイルを選んだら、下見を取りに行く（台帳には書かない） */
+function schImpPick(file){
+  if (!file) return;
+  IMP.fileName = file.name || '';
+  var fr = new FileReader();
+  fr.onload = function(){
+    var b64 = String(fr.result || '');
+    var i = b64.indexOf(',');
+    toast('Excelを読んでいます…');
+    api('adminSchedImportRead', { base64: i >= 0 ? b64.slice(i + 1) : b64,
+                                  fileName: IMP.fileName })
+      .then(function(r){
+        if (!r || !r.ok){ toast((r && r.message) || '読み取れませんでした', true); return; }
+        IMP.items = r.items || []; IMP.counts = r.counts; IMP.missing = r.missing || [];
+        schImpRender();
+        if (r.message) toast(r.message);
+        // **消し漏れは黙って流さない。**Driveに台帳の中身が残っている
+        if (r.leftover){
+          toast('Driveに「[取り込み中] …」というファイルが残りました。'
+              + '中身が入っているので、見つけて削除してください。', true);
+        }
+      }, function(e){ toast(String(e && e.message || e), true); });
+  };
+  fr.onerror = function(){ toast('ファイルを読めませんでした', true); };
+  fr.readAsDataURL(file);
+}
+
+/**
+ * 直したあとの見直しは、**サーバーにさせる**。
+ * 画面で判定を写すと、サーバーと規則がズレる（この案件が繰り返し避けてきた形）。
+ */
+function schImpApplyEdit(item){
+  var rows = IMP.items.map(function(x){ return x.raw; });
+  api('adminSchedImportRead', { rows: rows }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '見直せませんでした', true); return; }
+    IMP.items = r.items || []; IMP.counts = r.counts; IMP.missing = r.missing || [];
+    schImpRender();
+  }, function(e){ toast(String(e && e.message || e), true); });
+}
+
+function schImpGo(){
+  if (!IMP.items.length) return;
+  var c = IMP.counts || {};
+  if (c.bad){ toast('直していない行があります', true); return; }
+  var rows = IMP.items.map(function(x){ return x.raw; });
+  $('#schImpGo').disabled = true;
+  api('adminSchedImportApply', { rows: rows }).then(function(r){
+    $('#schImpGo').disabled = false;
+    if (!r || !r.ok){
+      toast((r && r.message) || '取り込めませんでした', true);
+      if (r && r.items){ IMP.items = r.items; IMP.counts = r.counts; schImpRender(); }
+      return;
+    }
+    toast('取り込みました（追加' + r.added + '件 ／ 更新' + r.updated + '件）');
+    schImpClose();
+    loadSched();
+  }, function(e){ $('#schImpGo').disabled = false; toast(String(e && e.message || e), true); });
+}
+
+/** 下見の行を、①の編集パネルが読める形にする */
+function schImpRowForEdit(x){
+  var r = x.raw || {};
+  var list = function(v){
+    return String(v || '').split(',').map(function(t){ return t.trim(); })
+      .filter(function(t){ return t; });
+  };
+  return { kind: r['種類'] || 'タスク', date: r['日付'] || '', endDate: r['終了日'] || '',
+           area: r['領域'] || '', companies: list(r['担当会社']), people: list(r['担当者']),
+           title: r['タスク名'] || '', detail: r['詳細'] || '', status: r['ステータス'] || '',
+           memo: r['備考'] || '', id: r['ID'] || '', row: 0 };
+}
+
 function loadSched(){
   api('adminSched').then(function(r){
     if (!r || !r.ok){
@@ -3688,7 +3880,9 @@ function loadSched(){
     SCH.areas = r.areas || []; SCH.statuses = r.statuses || []; SCH.kinds = r.kinds || [];
     SCH.companies = r.companies || []; SCH.peopleByCompany = r.peopleByCompany || {};
     SCH.me = r.me || {}; SCH.today = r.today || ''; SCH.warnDays = r.warnDays || 3;
+    SCH.stamps = r.stamps || null;
     renderSched();
+    schRenderStamps();
     renderDashTerms();
     // 要対応にも合流させているので、集計が先に来ていれば描き直す
     if (S.summary) renderAlerts();
@@ -4010,7 +4204,9 @@ function schOpen(row, week){
   $('#schDrawer').classList.add('on');
   setTimeout(function(){ $('#schTitle').focus(); }, 40);
 }
-function schClose(){ $('#schDrawer').classList.remove('on'); SCH.editing = null; }
+function schClose(){
+  // 取り込みの下見を直している途中で閉じたら、モードも解く
+  IMP.editing = null; $('#schDrawer').classList.remove('on'); SCH.editing = null; }
 
 /** 種類によって、見せる欄を変える（期間だけ終了日、タスクだけステータス） */
 function schKindChanged(){
@@ -4043,6 +4239,27 @@ function schCollect(){
 function schSave(){
   var row = SCH.editing;
   var item = schCollect();
+
+  /*
+   * **取り込みの下見を直しているときは、台帳に保存しない。**
+   * 直しているのは「これから入れる予定の行」であって、台帳の行ではない。
+   * ここを分けないと、下見を見ているだけで台帳が書き換わる。
+   */
+  if (IMP.editing !== null && IMP.editing !== undefined){
+    var x = IMP.items[IMP.editing];
+    if (x){
+      x.raw = x.raw || {};
+      x.raw['種類'] = item.kind; x.raw['日付'] = item.date; x.raw['終了日'] = item.endDate;
+      x.raw['領域'] = item.area; x.raw['担当会社'] = (item.companies || []).join(', ');
+      x.raw['担当者'] = (item.people || []).join(', ');
+      x.raw['タスク名'] = item.title; x.raw['詳細'] = item.detail;
+      x.raw['ステータス'] = item.status; x.raw['備考'] = item.memo;
+    }
+    IMP.editing = null;
+    schClose();
+    schImpApplyEdit(x);       // **見直しはサーバーにさせる**
+    return;
+  }
   var wasDone = row && (row.status === '完了' || row.status === '見送り');
   api('adminSchedSave', { row: row ? row.row : 0, id: row ? row.id : undefined, item: item })
     .then(function(r){
@@ -4122,6 +4339,20 @@ function bindSched(){
   $('#schAdd').addEventListener('click', function(){ schOpen(null); });
   $('#schExcel').addEventListener('click', function(){
     downloadXlsx('adminSchedExport', '制作スケジュール');
+  });
+  $('#schImport').addEventListener('click', function(){ $('#schFile').click(); });
+  $('#schFile').addEventListener('change', function(e){
+    schImpPick(e.target.files && e.target.files[0]);
+  });
+  // 下見の行を押したら、**①でいま使っている編集パネル**を開く（新しく作らない）
+  $('#schImp').addEventListener('click', function(e){
+    var tr = e.target.closest('tr[data-imp]');
+    if (!tr) return;
+    var i = Number(tr.getAttribute('data-imp'));
+    var x = IMP.items[i];
+    if (!x) return;
+    IMP.editing = i;
+    schOpen(schImpRowForEdit(x));
   });
   $('#schClose').addEventListener('click', schClose);
   $('#schSave').addEventListener('click', schSave);
@@ -5598,6 +5829,12 @@ function html() {
     <section class="view" id="v-sched">
       ${howto('sched')}
       <div class="sch-terms" id="schTerms" hidden></div>
+      <!-- 最後に誰がいつ触ったか（けいた指示・2026-09-07）。
+           大きく目立たせない。一応確認できればよい -->
+      <p class="sch-stamps" id="schStamps" hidden></p>
+      <!-- Excelの取り込みの下見。台帳には、押すまで1文字も書かない -->
+      <div class="sch-imp" id="schImp" hidden></div>
+      <input type="file" id="schFile" accept=".xlsx" hidden>
       <div class="sch-bar">
         <button class="sch-chip" id="schMine" aria-pressed="false">自社の担当だけ</button>
         <button class="sch-chip" id="schStatus" aria-pressed="false">ステータスで絞る</button>
@@ -5606,6 +5843,7 @@ function html() {
         <button class="sch-chip" id="schDone" aria-pressed="false" hidden></button>
         <span class="sp"></span>
         <button class="ghost" id="schExcel">Excelで保存</button>
+        <button class="ghost" id="schImport">Excelから取り込む</button>
         <button class="btn" id="schAdd">＋ タスクを追加</button>
       </div>
       <div class="sch-bar" id="schStatusBox" hidden></div>

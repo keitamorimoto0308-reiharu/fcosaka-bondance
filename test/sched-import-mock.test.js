@@ -129,6 +129,26 @@ describe('① Excelの取り込み：模擬サーバーで通しに動かす', (
     assert.match(r.message, /xlsx|Excel/, r.message);
   });
 
+  test('直したあとの見直しを、模擬でもできる（行を送る経路）', () => {
+    /*
+     * **画面はこの経路しか使わない。**赤い行を直したあと、
+     * 同じ規則で見直すためにサーバーへ行を送る。
+     * 模擬にこの分岐が無かったので、画面から直しても赤が消えなかった
+     * （2026-09-07、実際に動かして発覚。テスト1156件は全部通っていた）。
+     */
+    const bad = M.handle({ action: 'adminSchedImportRead', token: tok, rows: [
+      xrow(2, { 種類: 'タスク', 日付: '2026-10-01', 領域: '制作', タスク名: '' }),
+    ] });
+    assert.strictEqual(bad.ok, true, JSON.stringify(bad));
+    assert.strictEqual(bad.counts.bad, 1);
+
+    const good = M.handle({ action: 'adminSchedImportRead', token: tok, rows: [
+      xrow(2, { 種類: 'タスク', 日付: '2026-10-01', 領域: '制作', タスク名: '直した' }),
+    ] });
+    assert.strictEqual(good.counts.bad, 0, '直しても赤のままです');
+    assert.strictEqual(good.items[0].action, 'add');
+  });
+
   test('取り込むと「最終取り込み」が記録され、タブの上に出せる', () => {
     M.handle({ action: 'adminSchedImportApply', token: tok, rows: [
       xrow(2, { 種類: 'タスク', 日付: '2026-10-01', 領域: '制作', タスク名: 'A' }),

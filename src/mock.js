@@ -1598,6 +1598,19 @@ function handle(payload) {
     // ── ① Excelの取り込み。**adminOnly には入れない**（全員が触れる）
     //    照合と検証は**本番の gas/SchedImport.gs**がそのまま動く（写しを持たない）
     case 'adminSchedImportRead': {
+      /*
+       * 入口は2つある（**本番と同じ分岐を持つ**）。
+       *   - rows … 画面が直したあとの見直し。ファイルは読まない
+       *   - base64 … 最初の1回
+       * 2026-09-07、この分岐を模擬に持っていなかったので、
+       * **画面から直しても赤が消えなかった**（テスト1156件は全部通っていた）。
+       */
+      if (Array.isArray(payload.rows)) {
+        const again = siCall('schedImportPlan_(__rows, schedPeople_())',
+                             { __rows: payload.rows });
+        return { ok: true, items: again.items, counts: again.counts,
+                 missing: again.missing, leftover: false, message: '' };
+      }
       // 模擬では xlsx を変換できないので、差し込まれた行を「読んだ結果」にする。
       // **拡張子と大きさの検査は本番のものを通す**（画面の accept だけに頼らない）
       const why = siCall('schedImportReject_(__b64, __name)',

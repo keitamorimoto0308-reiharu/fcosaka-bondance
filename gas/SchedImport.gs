@@ -469,8 +469,23 @@ function schedImportFindRow_(sh, id) {
   return 0;
 }
 
-/** 画面から：ファイルを読んで、下見を返す。**台帳には1文字も書かない** */
+/**
+ * 画面から：下見を返す。**台帳には1文字も書かない。**
+ *
+ * 入口は2つある：
+ *   - `base64` … ファイルを読む（最初の1回）
+ *   - `rows`   … 画面が持っている行を、**そのまま見直す**
+ *
+ * 後者が要るのは、画面で赤い行を直したあと**同じ規則で見直す**ため。
+ * 画面側に判定を写すと、サーバーとズレる（この案件が繰り返し避けてきた形）。
+ */
 function adminSchedImportRead_(auth, payload) {
+  // 直したあとの見直し。ファイルは読まない
+  if (payload && Array.isArray(payload.rows)) {
+    var again = schedImportPlan_(payload.rows, schedPeople_());
+    return { ok: true, items: again.items, counts: again.counts,
+             missing: again.missing, leftover: false, message: '' };
+  }
   var got = schedImportRead_(payload && payload.base64, payload && payload.fileName);
   if (!got.ok) return got;
   var plan = schedImportPlan_(got.rows, schedPeople_());
