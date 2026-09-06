@@ -587,6 +587,32 @@ function adminSched_(auth) {
  * Excel に書き出す（§6-2）。中身は gas/Export.gs（②と共通）。
  * 列は SCHED_HEADERS_ そのまま（人がシートを見るときの並びと同じ）。
  */
+/**
+ * 書き出した Excel の2枚目に出す、列ごとの書き方。
+ *
+ * **選択肢はここに直書きしない。**定数から組む。
+ * 写しを作ると、選択肢を足したときに片方だけ古くなる。
+ */
+function schedGuideOf_(h) {
+  if (h === '種類')      return SCHED_KINDS_.join('・') + ' のどれか。';
+  if (h === '領域')      return SCHED_AREAS_.join('・') + ' のどれか。空にできません。';
+  if (h === 'ステータス') return SCHED_STATUSES_.join('・') + ' のどれか。'
+                              + '種類が「タスク」のときだけ使います。';
+  if (h === '日付')      return '2026-09-08 の形。'
+                              + '「期間」は開始日、「マイルストーン」はその日。';
+  if (h === '終了日')    return '2026-09-08 の形。「期間」のときだけ入れます。';
+  if (h === '担当者')    return '「関係者」タブに登録されている人だけ。'
+                              + '複数ならカンマ区切り。'
+                              + 'そこにいない人は、担当者を空にして備考に書いてください。';
+  if (h === '担当会社')  return SCHED_COMPANIES_.join('・') + ' など。カンマ区切り。'
+                              + '担当者の所属は自動で足されます。';
+  if (h === 'タスク名')  return '必須。' + SCHED_TITLE_MAX + '文字まで。'
+                              + '何をするかが分かる言い方で。';
+  if (h === '詳細')      return SCHED_DETAIL_MAX + '文字まで。';
+  if (h === '備考')      return SCHED_MEMO_MAX + '文字まで。';
+  return '';
+}
+
 function adminSchedExport_(auth) {
   var S = schedRows_();
   var idx = {};
@@ -602,11 +628,43 @@ function adminSchedExport_(auth) {
     }));
   }
 
+  /*
+   * 2枚目に「読み方」を付ける。
+   *
+   * 書き出したファイルには17列すべてが入っているので、人は
+   * 完了日や起票者も直せると思って直す。ところが取り込みが見るのは
+   * SCHED_IMPORT_COMPARE_ の10列だけで、**残りは黙って捨てられる**
+   * （下見にも「変わらない」としか出ない・検証役 2026-09-07）。
+   *
+   * **1枚目に注意書きの行は入れない。**取り込みは1枚目の見出しの下を
+   * すべて中身として読むので、注意書きが1行のタスクになってしまう。
+   * 別のシートに置けば、取り込みは触らない（sheets[0] しか見ない）。
+   */
+  var guide = [];
+  SCHED_HEADERS_.forEach(function (h) {
+    if (h === 'ID') {
+      guide.push([h, '触らないでください',
+        'いまある行を見分けるための番号です。消すと、すべての行が'
+        + '新しい行として足されます。行をコピーしたときは、'
+        + '増やしたほうのID列を空にしてください。']);
+    } else if (SCHED_IMPORT_COMPARE_.indexOf(h) >= 0) {
+      guide.push([h, '直せます', schedGuideOf_(h)]);
+    } else {
+      guide.push([h, '直しても反映されません',
+        'システムが自動で入れる列です。取り込みでは読み飛ばします。']);
+    }
+  });
+
   var out = exportXlsx_('制作スケジュール', [{
     name: '制作スケジュール',
     headers: SCHED_HEADERS_.slice(),
     rows: body,
     widths: [90, 110, 110, 80, 140, 140, 300, 340, 90, 220, 110, 70, 100, 100, 100, 130, 90],
+  }, {
+    name: 'はじめにお読みください',
+    headers: ['列', '直していいか', '書き方'],
+    rows: guide,
+    widths: [110, 170, 560],
   }]);
   if (out.ok && !body.length) out.message = '0件でした（見出しだけの表を書き出しました）。';
   // 書き出せたときだけ記録する（押しただけ・失敗したときは記録しない）

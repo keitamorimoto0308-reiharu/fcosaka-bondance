@@ -954,14 +954,31 @@ function busy(on){ $('.busy').classList.toggle('on', !!on); }
  * **どのファイルがなぜ入らなかったかを知る唯一の場所**なので、
  * 3.2秒で消すと目を離した隙に読めなくなる。長めに出す。
  */
-function toast(msg, isErr){
+/**
+ * 画面の隅に短く出す。
+ *
+ * hold を渡すと**消えない**。待ち時間の案内に使う。
+ * Excelの読み込みや書き出しは Drive を通るので、実際には10秒前後かかる。
+ * 3.2秒で消える案内だと、消えた時点で「効かなかった」と思って
+ * もう一度押す人が出る（検証役 2026-09-07・実際に押した）。
+ * 終わったら、次の toast() が上書きするか、toastDone() で消す。
+ */
+function toast(msg, isErr, hold){
   var t = $('.toast');
   t.textContent = msg;
   t.classList.toggle('err', !!isErr);
   t.classList.add('on');
   clearTimeout(t._t);
+  if (hold) return;                       // 出しっぱなしにする
   t._t = setTimeout(function(){ t.classList.remove('on'); },
                     isErr || msg.length > 40 ? 9000 : 3200);
+}
+
+/** 出しっぱなしの案内を消す（待ちが終わったとき） */
+function toastDone(){
+  var t = $('.toast');
+  clearTimeout(t._t);
+  t.classList.remove('on');
 }
 
 /**
@@ -2306,6 +2323,16 @@ function showTab(name, keepHash){
    * 見えていない下見の行が黙って書き換わっていた（検証役 2026-09-07）。
    */
   if (name !== 'sched' && typeof schClose === 'function') schClose();
+  /*
+   * 下見を出したまま別のタブへ行って戻ると、**判定が古いまま残る。**
+   * その間に他の人がその行を消していても「更新1件」と出続け、
+   * 「取り込む」も押せる状態のままだった（押せばサーバーが正しく断るので
+   * 台帳は壊れないが、断られるまで気づけない・検証役 2026-09-07）。
+   * 戻ってきたら、サーバーに見直させる。
+   */
+  if (name === 'sched' && typeof IMP !== 'undefined' && IMP.items.length) {
+    schImpApplyEdit();
+  }
   if (name === 'map' && !S.spaces) loadSpaces();
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
@@ -3880,12 +3907,17 @@ function schImpPick(file){
   fr.onload = function(){
     var b64 = String(fr.result || '');
     var i = b64.indexOf(',');
-    toast('Excelを読んでいます。10秒ほどかかることがあります…');
+    // 消えない案内にする。3.2秒で消えていたので、消えた時点で
+    // 「効かなかった」と思ってもう一度押す人が出た
+    toast('Excelを読んでいます。10秒ほどかかることがあります…', false, true);
+    try { $('#schImport').disabled = true; } catch(e){}
     api('adminSchedImportRead', { base64: i >= 0 ? b64.slice(i + 1) : b64,
                                   fileName: name })
       .then(function(r){
+        try { $('#schImport').disabled = false; } catch(e){}
         if (seq !== IMP.seq) return;          // 古い返事は捨てる
         if (!r || !r.ok){ toast((r && r.message) || '読み取れませんでした', true); return; }
+        toastDone();
         IMP.fileName = name;
         IMP.items = r.items || []; IMP.counts = r.counts; IMP.missing = r.missing || [];
         schImpRender();
@@ -3895,7 +3927,10 @@ function schImpPick(file){
           toast('Driveに「[取り込み中] …」というファイルが残りました。'
               + '中身が入っているので、見つけて削除してください。', true);
         }
-      }, function(e){ netFail(e, 'Excelを読めませんでした'); });
+      }, function(e){
+        try { $('#schImport').disabled = false; } catch(e2){}
+        toastDone(); netFail(e, 'Excelを読めませんでした');
+      });
   };
   fr.onerror = function(){ toast('ファイルを読めませんでした', true); };
   fr.readAsDataURL(file);
@@ -5535,12 +5570,13 @@ function ttPrint(){
  * Base64 を Blob にして、その場で保存させる。
  */
 function downloadXlsx(action, label){
-  toast(label + 'を書き出しています…');
+  toast(label + 'を書き出しています。10秒ほどかかることがあります…', false, true);
   api(action).then(function(r){
     if (!r || !r.ok){
       toast((r && r.message) || (label + 'を書き出せませんでした'), true);
       return;
     }
+    toastDone();
     try {
       var bin = atob(r.base64);
       var buf = new Uint8Array(bin.length);
@@ -5567,7 +5603,8 @@ function downloadXlsx(action, label){
         + '中身が入っているので、見つけて削除してください。', false);
     }
     if (r.message) toast(r.message);
-  }, function(e){ toast(String(e && e.message || e), true); });
+    else toast(label + 'を書き出しました');
+  }, function(e){ toastDone(); netFail(e, label + 'を書き出せませんでした'); });
 }
 
 function bindTimetable(){

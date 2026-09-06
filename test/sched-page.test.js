@@ -327,3 +327,38 @@ describe('① 画面：直し方が分かるか（2026-09-07）', () => {
       '「消しても消えない」が書かれていません');
   });
 });
+
+describe('① 画面：待つあいだと、戻ってきたとき', () => {
+
+  test('待っているあいだの案内は、消えない', () => {
+    /*
+     * Excelの読み込みも書き出しも Drive を通るので10秒前後かかるのに、
+     * 案内は3.2秒で消えていた。消えた時点で「効かなかった」と思って
+     * もう一度押す人が出た（検証役 2026-09-07・実際に押した）。
+     */
+    assert.match(noComment(body('function schImpPick')),
+      /toast\('Excelを読んでいます[^']*', false, true\)/,
+      '待っているあいだの案内が消えます');
+    assert.match(noComment(body('function downloadXlsx')),
+      /を書き出しています[^']*', false, true\)/,
+      '書き出しの案内が消えます');
+    // 消しっぱなしにしないこと（終わったら片づける）
+    assert.ok(SRC.indexOf('function toastDone(') >= 0, '案内を消す手立てがありません');
+  });
+
+  test('読み込んでいるあいだは、取り込みボタンを押せない', () => {
+    const f = noComment(body('function schImpPick'));
+    assert.match(f, /\$\('#schImport'\)\.disabled = true/, '押せたままです');
+    assert.match(f, /\$\('#schImport'\)\.disabled = false/, '押せないままになります');
+  });
+
+  test('タブから戻ったら、下見を見直す', () => {
+    /*
+     * 下見を出したまま別のタブへ行って戻ると、判定が古いまま残る。
+     * その間に他の人がその行を消していても「更新1件」と出続けていた。
+     */
+    assert.match(SRC,
+      /if \(name === 'sched' && typeof IMP !== 'undefined' && IMP\.items\.length\) \{\s*\n\s*schImpApplyEdit\(\);/,
+      'タブに戻ったときに、下見を見直していません');
+  });
+});

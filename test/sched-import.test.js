@@ -742,3 +742,56 @@ describe('検証役の指摘：直し方が分かるように', () => {
     assert.match(upd[0].after, /進行中/, '書き換えたあとの中身が残っていません');
   });
 });
+
+describe('検証役の指摘：書き出したExcelに、読み方を付ける', () => {
+  test('2枚目に「はじめにお読みください」が付く', () => {
+    /*
+     * 17列すべてが並ぶだけの表だったので、完了日や起票者も直せると
+     * 思って直す人が出る。取り込みが見るのは10列だけで、残りは黙って捨てる。
+     * **1枚目に注意書きの行は入れない。**取り込みは見出しの下を
+     * すべて中身として読むので、注意書きが1行のタスクになってしまう。
+     */
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    let got = null;
+    b.box.exportXlsx_ = (name, sheets) => { got = sheets; return { ok: true }; };
+    b.box.__auth = { person: '小谷' };
+    vm.runInContext('adminSchedExport_(__auth)', b.box);
+
+    assert.strictEqual(got.length, 2, 'シートが2枚になっていません');
+    assert.strictEqual(got[0].name, '制作スケジュール');
+    assert.strictEqual(got[1].name, 'はじめにお読みください',
+      '2枚目が読み方になっていません');
+    // 1枚目は台帳そのまま。注意書きの行を混ぜない
+    assert.strictEqual(got[0].rows.length, 1, '1枚目に余計な行が入っています');
+    assert.strictEqual(got[0].rows[0][6], '看板の入稿');
+  });
+
+  test('読み方には、選択肢と「直していいか」が入る', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    let got = null;
+    b.box.exportXlsx_ = (name, sheets) => { got = sheets; return { ok: true }; };
+    b.box.__auth = { person: '小谷' };
+    vm.runInContext('adminSchedExport_(__auth)', b.box);
+
+    const by = {};
+    got[1].rows.forEach(r => { by[r[0]] = { can: r[1], how: r[2] }; });
+    assert.strictEqual(by['ID'].can, '触らないでください');
+    assert.match(by['ID'].how, /新しい行として足されます/);
+    assert.strictEqual(by['領域'].can, '直せます');
+    assert.match(by['領域'].how, /全体・会議・企画・営業・制作・運営/,
+      '選択肢が書かれていません');
+    assert.match(by['ステータス'].how, /未着手・進行中・確認中・完了・停滞中・見送り/);
+    assert.strictEqual(by['完了日'].can, '直しても反映されません');
+    assert.strictEqual(by['起票者'].can, '直しても反映されません');
+  });
+
+  test('読み方の選択肢は、定数から組む（写しを作らない）', () => {
+    // 選択肢を足したときに、片方だけ古くなるのを防ぐ
+    const src = read('gas/Sched.gs');
+    const s = src.indexOf('function schedGuideOf_');
+    const f = src.slice(s, src.indexOf('\n}\n', s));
+    ['SCHED_KINDS_', 'SCHED_AREAS_', 'SCHED_STATUSES_'].forEach(name => {
+      assert.ok(f.indexOf(name) >= 0, name + ' から組んでいません');
+    });
+  });
+});
