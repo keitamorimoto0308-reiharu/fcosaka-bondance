@@ -551,6 +551,21 @@ function adminSched_(auth) {
     me: { person: (auth && auth.person) || '',
           company: (auth && people.byName[auth.person]) || '' },
     today: schedToday_(),
+    /*
+     * 「最後に誰がいつ」（§5）。**ここを忘れていた。**
+     *
+     * 画面（src/build-admin.js の schRenderStamps）も模擬（src/mock.js の
+     * siStamps）も対応済みだったのに、本番の adminSched_ だけが返しておらず、
+     * 帯は `r.stamps || null` で黙って消えていた。
+     * 検査が模擬側しか見ていなかったので、1158件が緑のまま機能が死んでいた
+     * （検証役・2026-09-07）。src/mock.js の冒頭が戒めている
+     * 「写しを持っていたせいで気づけなかった」の、そのままの再発。
+     */
+    stamps: {
+      edit:   lastActionGet_(SCHED_EDIT_KEY_),
+      import: lastActionGet_(SCHED_IMPORT_KEY_),
+      export: lastActionGet_(SCHED_EXPORT_KEY_),
+    },
   };
 }
 

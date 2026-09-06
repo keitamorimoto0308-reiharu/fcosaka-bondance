@@ -19,6 +19,16 @@ const ROOT = path.resolve(__dirname, '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8').split('\r\n').join('\n');
 const SRC = read('src/build-admin.js');
 
+/**
+ * コメントを外す。**コードだけを見るため。**
+ * 「なぜ直したか」をコメントに書くと、直す前の書き方がそこに残る。
+ */
+function noComment(s) {
+  return s.split(String.fromCharCode(10))
+    .map(line => line.replace(/^\s*\/\/.*$/, '').replace(/^\s*\*.*$/, ''))
+    .join(String.fromCharCode(10));
+}
+
 /** 関数の中身を1つ切り出す */
 function body(name) {
   const s = SRC.indexOf(name);
@@ -83,10 +93,21 @@ describe('① 画面：直すのは既存の編集パネル（§1-3）', () => {
   });
 
   test('取り込みの編集では、台帳に保存しない', () => {
-    // 下見の行を直しただけで台帳が書き換わってはいけない
+    /*
+     * 下見の行を直しただけで台帳が書き換わってはいけない。
+     *
+     * **「IMP.editing という文字列があるか」では足りない。**
+     * `if (false)` で囲んでも本体に名前は残るので素通りする
+     * （引き継ぎ書§5「位置だけを見る検査は if (false) で囲まれても素通りする」）。
+     * **見張り自体の形**と、**それが台帳への保存より前にあること**を見る。
+     */
     const b = body('function schSave()');
-    assert.ok(b.indexOf('IMP.editing') >= 0,
+    assert.ok(/if \(IMP\.editing !== null/.test(b),
       '取り込みの編集と、台帳の保存を見分けていません');
+    const guard = b.indexOf('if (IMP.editing !== null');
+    const save = b.indexOf("api('adminSchedSave'");
+    assert.ok(guard >= 0 && save > guard,
+      '取り込みの見張りが、台帳への保存より後ろにあります（素通りします）');
   });
 
   test('直したあとは、サーバーに見直させる（判定を画面に写さない）', () => {
@@ -136,5 +157,95 @@ describe('① 画面：CSSの名前（①の接頭辞をはみ出さない）', 
     });
     assert.deepStrictEqual([...new Set(bad)], [],
       '取り込みのCSSに sch- で始まらない入口のクラスがあります: ' + bad.join(', '));
+  });
+});
+
+/*
+ * 検証役3体（2026-09-07）が「使っていて」見つけた穴。
+ * どれも画面にしか無い約束なので、ここで形を確かめる。
+ */
+describe('① 画面：検証役の指摘（2026-09-07）', () => {
+
+  test('送信中の印は IMP に持つ（描き直しで消えない）', () => {
+    /*
+     * 以前は schImpGo が button.disabled に直接立てていた。
+     * schImpRender は毎回ボタンを作り直して disabled を塗り替えるので、
+     * **送信中に下見が描き直されると押せる状態に戻り**、同じ行が二重に入った。
+     */
+    assert.match(SRC, /IMP\.busy\s*=\s*true/,
+      '送信中の印を IMP に持っていません');
+    assert.match(body('function schImpRender'), /disabled\s*=\s*!!c\.bad\s*\|\|\s*!!IMP\.busy/,
+      '描き直しのときに、送信中かどうかを見ていません');
+  });
+
+  test('遅れて返ってきた見直しで、下見を開き直さない', () => {
+    /*
+     * 取り込みが済んで下見を閉じたあとに古い返事が届き、
+     * 下見が勝手に復活して、もう一度「取り込む」を押せてしまった。
+     */
+    const f = body('function schImpApplyEdit');
+    assert.match(f, /var seq = \+\+IMP\.seq/, '見直しに番号を振っていません');
+    assert.match(f, /seq !== IMP\.seq/, '古い返事を捨てていません');
+    assert.match(body('function schImpClose'), /IMP\.seq\+\+/,
+      '閉じたときに番号を進めていません（閉じたあとの返事で復活します）');
+  });
+
+  test('読めたときだけ、ファイル名を差し替える', () => {
+    // 断られたファイルの名前が「◯◯を読みました」に出ていた
+    const f = body('function schImpPick');
+    const okAt = f.indexOf('IMP.fileName = name');
+    const guardAt = f.indexOf('if (!r || !r.ok)');
+    assert.ok(okAt > 0, 'ファイル名を読めたあとに入れていません');
+    assert.ok(guardAt > 0 && okAt > guardAt,
+      '断る判定より前にファイル名を入れています');
+  });
+
+  test('赤の理由は、文をそのまま出す（真偽値にしない）', () => {
+    /*
+     * 昔の書き方は真偽値を返すので、吹き出しに「true」とだけ出ていた。
+     *
+     * **コメントを外してから見る。**直した理由をコメントに書くと、
+     * そこに昔の書き方がそのまま残る。素で探すと「まだ直っていない」と
+     * 誤って言う（この案件で3度目の、同じ取り違え）。
+     */
+    const f = noComment(body('function schImpRender'));
+    assert.ok(f.indexOf("why['*'] && h ===") < 0,
+      '理由のところで真偽値を作っています（吹き出しに true と出ます）');
+    assert.match(f, /h === 'タスク名' \? \(why\['\*'\] \|\| ''\)/,
+      '理由の文をそのまま渡していません');
+  });
+
+  test('取り込みの下見を直すときは、削除ボタンを出さない', () => {
+    /*
+     * 下見の行は台帳の行ではないので、消すものがない。
+     * それでも「削除する」が出て、押すと
+     * 「元に戻すには変更履歴から…」というこわい確認まで出ていた。
+     */
+    assert.match(SRC, /\$\('#schDel'\)\.hidden = isNew \|\| impMode/,
+      '下見を直すときにも削除ボタンが出ます');
+    assert.match(SRC, /\$\('#schMetaBox'\)\.hidden = isNew \|\| impMode/,
+      '下見を直すときにも「追加・更新の記録」が出ます');
+  });
+
+  test('別のタブへ移ったら、編集パネルを閉じる', () => {
+    // 出店者一覧の上に「タスクを編集」が浮いたまま保存でき、
+    // 見えていない下見の行が黙って書き換わっていた
+    assert.match(SRC, /if \(name !== 'sched' && typeof schClose === 'function'\) schClose\(\)/,
+      'タブを移っても、①の編集パネルが閉じません');
+  });
+
+  test('取り込みボタンを押すたびに、選んだファイルを空に戻す', () => {
+    /*
+     * 同じ名前のファイルを選び直しても change が飛ばないのがブラウザの仕様。
+     * 「Excelで直して、同じファイルをもう一度読み込む」——説明どおりの
+     * 使い方で、ボタンが無反応になっていた。
+     */
+    const i = SRC.indexOf("$('#schImport').addEventListener");
+    assert.ok(i > 0, '取り込みボタンの結び付けがありません');
+    const f = SRC.slice(i, i + 700);
+    const clearAt = f.indexOf("$('#schFile').value = ''");
+    const clickAt = f.indexOf("$('#schFile').click()");
+    assert.ok(clearAt > 0, '押したときに選択を空に戻していません');
+    assert.ok(clickAt > clearAt, '空に戻すより先に開いています');
   });
 });

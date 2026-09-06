@@ -532,3 +532,140 @@ describe('取り込み：直したあとの下見を作り直す（画面から�
     assert.strictEqual(r.ok, false, JSON.stringify(r));
   });
 });
+
+/*
+ * ここから下は、検証役3体（2026-09-07）が見つけた【高】の穴。
+ * どれも「テストは全部緑なのに、本番でだけ壊れている」形だった。
+ */
+describe('検証役の指摘（2026-09-07）', () => {
+  /**
+   * 【高】記録の帯が本番で一度も出ない。
+   *
+   * 画面（src/build-admin.js）も模擬（src/mock.js）も stamps に対応済みだったのに、
+   * **本番の adminSched_ だけが返していなかった**。
+   * 検査も模擬側しか見ていなかったので、1158件が緑のまま機能が死んでいた。
+   * だからこの検査は、**本番の gas/Sched.gs を動かして**確かめる。
+   */
+  test('adminSched_ は、最終編集・取り込み・書き出しの記録を返す', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    b.box.__auth = { person: '小谷' };
+    const r = JSON.parse(JSON.stringify(
+      vm.runInContext('adminSched_(__auth)', b.box)));
+
+    assert.ok(r.stamps, 'stamps を返していません（画面の帯が出ません）');
+    ['edit', 'import', 'export'].forEach(k => {
+      assert.ok(r.stamps[k], k + ' がありません');
+      assert.strictEqual(typeof r.stamps[k].person, 'string');
+      assert.strictEqual(typeof r.stamps[k].at, 'number');
+    });
+  });
+
+  test('編集して保存すると、最終編集の記録が adminSched_ から返る', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    b.box.__auth = { person: '小谷' };
+    b.box.__payload = { row: 2, id: 'aaaa1111', item: {
+      kind: 'タスク', date: '2026-09-21', area: '制作', companies: ['FC大阪'],
+      people: ['小谷'], title: '看板の入稿', detail: '', status: '未着手', memo: '' } };
+    const saved = vm.runInContext('adminSchedSave_(__auth, __payload)', b.box);
+    assert.strictEqual(saved.ok, true, JSON.stringify(saved));
+
+    const r = JSON.parse(JSON.stringify(vm.runInContext('adminSched_(__auth)', b.box)));
+    assert.strictEqual(r.stamps.edit.person, '小谷',
+                       '編集したのに、最終編集が記録されていません');
+    assert.ok(r.stamps.edit.at > 0, '編集の時刻が記録されていません');
+  });
+
+  test('書き出すと、書き出しの記録が adminSched_ から返る', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    b.box.__auth = { person: '小谷' };
+    // xlsx を組むところ（gas/Export.gs）は test/export-run.test.js で見ている。
+    // ここで確かめたいのは「書き出せたら記録が残る」の一点だけ
+    b.box.exportXlsx_ = () => ({ ok: true, base64: '', fileName: 'x.xlsx' });
+    const out = vm.runInContext('adminSchedExport_(__auth)', b.box);
+    assert.strictEqual(out.ok, true, JSON.stringify(out));
+
+    const r = JSON.parse(JSON.stringify(vm.runInContext('adminSched_(__auth)', b.box)));
+    assert.strictEqual(r.stamps.export.person, '小谷',
+                       '書き出したのに、記録されていません');
+  });
+
+  /**
+   * 【高】台帳に同じIDの行が2つあると、関係ない行を上書きする。
+   *
+   * `ledger[lid] = …` は**後勝ち**、`schedImportFindRow_` は**先勝ち**。
+   * このずれで、直したい行は無傷のまま、別の行が丸ごと消えて
+   * 「更新1件・成功」が返っていた。変更履歴にも要約1行しか残らない。
+   *
+   * SCHED_HEADERS_ のコメントが書いている「甲がBを保存したつもりでCを
+   * 上書きし、ok:true が返っていた」事故の、ID経路での再発。
+   */
+  test('台帳に同じIDの行が2つあるときは、赤にして止める', () => {
+    const A = ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', '看板A', '',
+               '未着手', '', '', 1, '小谷', '2026-09-01', '', '', 'dup00001'];
+    const B = ['タスク', '2026-09-21', '', '制作', 'FC大阪', '小谷', '看板B', '',
+               '未着手', '', '', 2, '山本', '2026-09-02', '', '', 'dup00001'];
+    const b = makeBox({ ledger: [A, B] });
+
+    const p = plan(b, [xrowObj({ ID: 'dup00001', 種類: 'タスク', 日付: '2026-09-30',
+                                 領域: '制作', 担当会社: 'FC大阪', 担当者: '小谷',
+                                 タスク名: '看板B（日付だけ直した）',
+                                 ステータス: '未着手' })]);
+    assert.strictEqual(p.items[0].action, 'bad',
+                       '同じIDが2つあるのに、そのまま更新しようとしています');
+    const why = p.items[0].problems.map(x => x.why).join(' / ');
+    assert.match(why, /台帳に同じIDの行が2つあります/,
+                 '理由が「台帳のほうを直して」になっていません：' + why);
+  });
+
+  test('同じIDが2つあるまま取り込んでも、台帳は書き換わらない', () => {
+    const A = ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', '看板A', '',
+               '未着手', '', '', 1, '小谷', '2026-09-01', '', '', 'dup00001'];
+    const B = ['タスク', '2026-09-21', '', '制作', 'FC大阪', '小谷', '看板B', '',
+               '未着手', '', '', 2, '山本', '2026-09-02', '', '', 'dup00001'];
+    const b = makeBox({ ledger: [A, B] });
+
+    apply(b, [{ ID: 'dup00001', 種類: 'タスク', 日付: '2026-09-30', 領域: '制作',
+                担当会社: 'FC大阪', 担当者: '小谷', タスク名: 'すり替え',
+                ステータス: '未着手' }]);
+
+    assert.strictEqual(ledgerRow(b, 2)['タスク名'], '看板A',
+                       '関係のない行が書き換わりました');
+    assert.strictEqual(ledgerRow(b, 3)['タスク名'], '看板B',
+                       '行が書き換わりました');
+  });
+});
+
+/** Excel の1行ぶんを、列名つきの入れ物で作る（下見はこの形を受ける） */
+function xrowObj(o) {
+  const r = { __row: 2 };
+  SHEET_HEADERS.forEach(h => { r[h] = o[h] === undefined ? '' : o[h]; });
+  return r;
+}
+
+describe('検証役の指摘：読み取り側の守り', () => {
+  test('200行を超えるファイルは、読んだ時点で断る（直し終えてからではない）', () => {
+    const many = [];
+    for (let i = 0; i < 205; i++) {
+      many.push(xrow({ 種類: 'タスク', 日付: '2026-10-01', 領域: '制作',
+                       担当会社: 'FC大阪', 担当者: '小谷',
+                       タスク名: '行' + (i + 1), ステータス: '未着手' }));
+    }
+    const b = makeBox({ xlsx: [SHEET_HEADERS].concat(many) });
+    const r = readFile(b, 'UEsDBA==');
+    assert.strictEqual(r.ok, false, '205行が下見に出てしまいました');
+    assert.match(r.message, /200行までです/);
+    assert.match(r.message, /分けて/, 'どうすればいいかが書かれていません');
+    // 断っても一時ファイルは残さない
+    assert.deepStrictEqual(b.temps.map(t => t.trashed), [true]);
+  });
+
+  test('断る道でも、一時ファイルの消し漏れは呼び出し側に伝わる', () => {
+    // 「タスク名」の列が無い＝断る道。そのうえで片づけが失敗する
+    const b = makeBox({ xlsx: [['やること', '日付'], [['掃除', '2026-10-01']]],
+                        trashFails: true });
+    const r = readFile(b, 'UEsDBA==');
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.leftover, true,
+                       '断ったときは、消し漏れが黙って捨てられています');
+  });
+});

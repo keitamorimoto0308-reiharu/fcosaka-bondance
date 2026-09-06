@@ -2293,6 +2293,12 @@ function showTab(name, keepHash){
   if (name === 'tt') loadTimetable();
   // 窓を開けたまま別のタブへ移ると、その上に浮いたまま残る（検証役の指摘）
   if (name !== 'tt' && typeof ttClosePop === 'function') ttClosePop();
+  /*
+   * ①の編集パネルも同じ。②だけ閉じていて、こちらが残っていた。
+   * 出店者一覧の上に「タスクを編集」が浮いたまま保存でき、
+   * 見えていない下見の行が黙って書き換わっていた（検証役 2026-09-07）。
+   */
+  if (name !== 'sched' && typeof schClose === 'function') schClose();
   if (name === 'map' && !S.spaces) loadSpaces();
   if (name === 'day') renderDay();
   if (name === 'people' && !S.people) loadPeople();
@@ -3708,7 +3714,17 @@ function schWriteFilters(){
  * **Excel は正ではない。**正は台帳で、Excel は作業用の写し。
  * だから画面で直した内容を Excel へ戻さないし、取り込みで台帳の行を消さない。
  */
-var IMP = { items: [], counts: null, missing: [], editing: null, fileName: '' };
+/*
+ * busy … 取り込みを送っている最中。**描き直しで消えない場所に持つ。**
+ *        以前は schImpGo が button.disabled に直接立てていたので、
+ *        送信中に下見が描き直されるとボタンが押せる状態に戻り、
+ *        同じ行が二重に入った（検証役・2026-09-07）。
+ * seq  … 何度目の読み込み／見直しか。**遅れて返ってきた返事を捨てる**ための番号。
+ *        取り込みが済んで下見を閉じたあとに古い返事が届き、
+ *        下見が勝手に復活して、もう一度押せてしまっていた。
+ */
+var IMP = { items: [], counts: null, missing: [], editing: null, fileName: '',
+            busy: false, seq: 0 };
 
 /** タブの上の1行。**無いものは出さない**（§5-4） */
 function schRenderStamps(){
@@ -3758,8 +3774,12 @@ function schImpRender(){
     });
     var cells = IMP_COLS.map(function(h){
       var v = (x.raw && x.raw[h] !== undefined) ? x.raw[h] : '';
-      var bad = why[h] || (why['*'] && h === 'タスク名');
-      return '<td' + (bad ? ' class="sch-imp-bad" title="' + esc(String(bad).trim()) + '"' : '')
+      // **理由の文をそのまま出す。**
+      // 以前は why['*'] && h === 'タスク名' が真偽値を返したので、
+      // 吹き出しに「true」とだけ出て、何を直せばいいのか分からなかった
+      var bad = why[h] || (h === 'タスク名' ? (why['*'] || '') : '');
+      bad = String(bad || '').trim();
+      return '<td' + (bad ? ' class="sch-imp-bad" title="' + esc(bad) + '"' : '')
         + '>' + esc(v) + '</td>';
     }).join('');
     var label = x.action === 'add' ? '追加' : x.action === 'update' ? '更新'
@@ -3786,14 +3806,18 @@ function schImpRender(){
     + '<button class="print" id="schImpGo">取り込む</button></div>';
   box.hidden = false;
 
-  // **赤があるあいだは押せない**
-  $('#schImpGo').disabled = !!c.bad;
+  // **赤があるあいだと、送っている最中は押せない**
+  // busy を IMP に持たせているのは、ここで作り直しても消えないようにするため
+  $('#schImpGo').disabled = !!c.bad || !!IMP.busy;
   $('#schImpCancel').addEventListener('click', schImpClose);
   $('#schImpGo').addEventListener('click', schImpGo);
 }
 
 function schImpClose(){
   IMP.items = []; IMP.counts = null; IMP.missing = []; IMP.fileName = '';
+  IMP.busy = false;
+  // 閉じたあとに届く古い返事で、下見が復活しないようにする
+  IMP.seq++;
   $('#schImp').hidden = true;
   try { $('#schFile').value = ''; } catch(e){}
 }
@@ -3801,16 +3825,21 @@ function schImpClose(){
 /** ファイルを選んだら、下見を取りに行く（台帳には書かない） */
 function schImpPick(file){
   if (!file) return;
-  IMP.fileName = file.name || '';
+  // **読めたときだけ名前を差し替える。**先に入れていたので、
+  // 断られたファイルの名前が「◯◯を読みました」に出ていた
+  var name = file.name || '';
+  var seq = ++IMP.seq;
   var fr = new FileReader();
   fr.onload = function(){
     var b64 = String(fr.result || '');
     var i = b64.indexOf(',');
-    toast('Excelを読んでいます…');
+    toast('Excelを読んでいます。10秒ほどかかることがあります…');
     api('adminSchedImportRead', { base64: i >= 0 ? b64.slice(i + 1) : b64,
-                                  fileName: IMP.fileName })
+                                  fileName: name })
       .then(function(r){
+        if (seq !== IMP.seq) return;          // 古い返事は捨てる
         if (!r || !r.ok){ toast((r && r.message) || '読み取れませんでした', true); return; }
+        IMP.fileName = name;
         IMP.items = r.items || []; IMP.counts = r.counts; IMP.missing = r.missing || [];
         schImpRender();
         if (r.message) toast(r.message);
@@ -3831,10 +3860,16 @@ function schImpPick(file){
  */
 function schImpApplyEdit(item){
   var rows = IMP.items.map(function(x){ return x.raw; });
+  var seq = ++IMP.seq;
   api('adminSchedImportRead', { rows: rows }).then(function(r){
+    // 取り込みが済んで下見を閉じたあとに届いた返事で、下見を開き直さない
+    if (seq !== IMP.seq || !IMP.items.length) return;
     if (!r || !r.ok){ toast((r && r.message) || '見直せませんでした', true); return; }
     IMP.items = r.items || []; IMP.counts = r.counts; IMP.missing = r.missing || [];
     schImpRender();
+    toast(r.counts && r.counts.bad
+      ? '直りました。あと ' + r.counts.bad + '行 です'
+      : '直りました。取り込めます');
   }, function(e){ toast(String(e && e.message || e), true); });
 }
 
@@ -3843,9 +3878,12 @@ function schImpGo(){
   var c = IMP.counts || {};
   if (c.bad){ toast('直していない行があります', true); return; }
   var rows = IMP.items.map(function(x){ return x.raw; });
+  // 送信中は IMP に持つ。描き直されてもボタンは押せないまま
+  IMP.busy = true;
   $('#schImpGo').disabled = true;
   api('adminSchedImportApply', { rows: rows }).then(function(r){
-    $('#schImpGo').disabled = false;
+    IMP.busy = false;
+    try { $('#schImpGo').disabled = false; } catch(e){}
     if (!r || !r.ok){
       toast((r && r.message) || '取り込めませんでした', true);
       if (r && r.items){ IMP.items = r.items; IMP.counts = r.counts; schImpRender(); }
@@ -3854,7 +3892,11 @@ function schImpGo(){
     toast('取り込みました（追加' + r.added + '件 ／ 更新' + r.updated + '件）');
     schImpClose();
     loadSched();
-  }, function(e){ $('#schImpGo').disabled = false; toast(String(e && e.message || e), true); });
+  }, function(e){
+    IMP.busy = false;
+    try { $('#schImpGo').disabled = false; } catch(e2){}
+    toast(String(e && e.message || e), true);
+  });
 }
 
 /** 下見の行を、①の編集パネルが読める形にする */
@@ -4191,9 +4233,18 @@ function schOpen(row, week){
       + '</span></div>';
   }).join('');
 
-  $('#schDel').hidden = isNew;
-  $('#schMetaBox').hidden = isNew;
-  if (!isNew){
+  /*
+   * 取り込みの下見を直しているときは、**削除も、追加・更新の記録も出さない。**
+   * 下見の行は台帳の行ではないので、消すものがない。
+   * それでも「削除する」が出ていて、押すと
+   * 「元に戻すには変更履歴から手で入れ直すことになります」という
+   * こわい確認が出たうえで「その行は見つかりませんでした」で終わっていた
+   * （台帳は無事だが、案内が全部嘘・検証役 2026-09-07）。
+   */
+  var impMode = (IMP.editing !== null && IMP.editing !== undefined);
+  $('#schDel').hidden = isNew || impMode;
+  $('#schMetaBox').hidden = isNew || impMode;
+  if (!isNew && !impMode){
     $('#schMeta').textContent =
       (row.author ? row.author + ' さんが ' + (row.createdAt || '') + ' に追加' : '')
       + (row.updatedBy ? '／' + row.updatedBy + ' さんが ' + (row.updatedAt || '') + ' に更新' : '')
@@ -4340,7 +4391,16 @@ function bindSched(){
   $('#schExcel').addEventListener('click', function(){
     downloadXlsx('adminSchedExport', '制作スケジュール');
   });
-  $('#schImport').addEventListener('click', function(){ $('#schFile').click(); });
+  $('#schImport').addEventListener('click', function(){
+    /*
+     * **押すたびに選択を空にする。**
+     * 同じ名前のファイルを選び直しても change が飛ばないのがブラウザの仕様なので、
+     * 「Excelで直して、同じファイルをもう一度読み込む」——説明どおりの使い方で
+     * ボタンが無反応になっていた（検証役 2026-09-07）。
+     */
+    try { $('#schFile').value = ''; } catch(e){}
+    $('#schFile').click();
+  });
   $('#schFile').addEventListener('change', function(e){
     schImpPick(e.target.files && e.target.files[0]);
   });

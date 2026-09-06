@@ -60,39 +60,19 @@ const SCHED_HEADERS = [
 
 const PEOPLE_HEADERS = ['氏名', '所属', '部署', 'メール', 'フォーム表示', '管理ページ利用', '役割', '通知'];
 
-/** シートの代役。書いた中身をあとから見られるようにする */
-function makeSheet(headers, rows) {
-  const grid = [headers.slice()].concat((rows || []).map(r => r.slice()));
-  return {
-    grid,
-    getLastRow: () => grid.length,
-    getLastColumn: () => headers.length,
-    getDataRange: () => ({ getValues: () => grid.map(r => r.slice()) }),
-    getRange(row, col, nRows, nCols) {
-      return {
-        getValues: () => {
-          const out = [];
-          for (let r = 0; r < (nRows || 1); r++) {
-            const line = [];
-            for (let c = 0; c < (nCols || 1); c++) line.push((grid[row - 1 + r] || [])[col - 1 + c]);
-            out.push(line);
-          }
-          return out;
-        },
-        setValue: v => { while (grid.length < row) grid.push([]); grid[row - 1][col - 1] = v; },
-        setValues: vals => {
-          vals.forEach((line, r) => line.forEach((v, c) => {
-            while (grid.length < row + r) grid.push([]);
-            if (!grid[row - 1 + r]) grid[row - 1 + r] = [];
-            grid[row - 1 + r][col - 1 + c] = v;
-          }));
-        },
-      };
-    },
-    appendRow: line => grid.push(line.slice()),
-    deleteRow: n => { grid.splice(n - 1, 1); },
-  };
-}
+/*
+ * シートの代役は **src/gasbox.js の共有のものを使う。**
+ *
+ * ここには写しの代役があった。それが `getValue` を持っていなかったせいで、
+ * `adminSched_` に「最後に誰がいつ」を足したとたん、この検査だけが
+ * `sh.getRange(...).getValue is not a function` で落ちた。
+ * つまり**この検査は、設定シートを読む道を一度も通っていなかった**。
+ *
+ * 代役の写しを2つ持つと、片方だけが本物から遅れる。
+ * 共有のほうは maxRows を数え、範囲外の getRange で例外を投げる
+ * （②で `deleteRows` がシートを縮める事故を見つけたのは、この厳しさ）。
+ */
+const { makeSheet } = require('../src/gasbox');
 
 /**
  * gas/Sched.gs を、代役つきの箱で走らせる。

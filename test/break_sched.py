@@ -33,7 +33,9 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _guard import guard  # noqa: E402
 R = pathlib.Path(__file__).resolve().parent.parent
-TARGETS = ['test/linkify.test.js', 'test/sched.test.js']
+TARGETS = ['test/linkify.test.js', 'test/sched.test.js',
+           'test/sched-import.test.js', 'test/sched-import-mock.test.js',
+           'test/sched-page.test.js', 'test/stamp.test.js']
 
 
 def run():
@@ -93,6 +95,8 @@ M = 'src/mock.js'
 # 壊したら作り直さないと効かないので、run() が毎回ビルドする
 A = 'src/build-admin.js'
 B = 'src/build-admin.js'
+I = 'gas/SchedImport.gs'      # Excelの取り込み
+P = 'gas/Stamp.gs'            # 「最後に誰がいつ」（②と共有）
 
 # 画面側の esc と同じもの。case5 で「関数の外」に置くために使う
 OUTER_ESC = (
@@ -206,8 +210,11 @@ CASES = [
             "  if (true) {\n    return { row: row, values: values };\n  }\n  if (!id) {\n    return { error: 'stale',"),
     ], 'IDなしの更新が通りました'),
 
+    # 2026-09-07、「中身が変わらなければ書かない」を入れたときに
+    # この辺りを書き換えたので、目印も付け替えた
     ('更新を変更履歴に残さない', [
-        (S, '    if (beforeText !== afterText) {', '    if (false) {'),
+        (S, "    appendHistory(auth.person, '（スケジュール）', '更新', beforeText, afterText, '');",
+            "    if (false) appendHistory(auth.person, '（スケジュール）', '更新', '', '', '');"),
     ], '更新が履歴に残っていません'),
 
     ('担当会社の件数の上限を外す', [
@@ -382,6 +389,182 @@ CASES = [
         (M, "        today: nowText().slice(0, 10),   // 日本時間。本番は Asia/Tokyo",
             "        today: new Date(Date.now() - 86400000).toISOString().slice(0, 10),"),
     ], '模擬の today が日本時間ではありません'),
+
+    # ── Excelの取り込み（design_sched_import.md §6-2）────────────
+    # 一時ファイルの消し忘れは**静かな事故**。Driveが散らかるだけでなく、
+    # 台帳の中身がそのまま残る（資料フォルダは全共有）
+    ('取り込みの一時ファイルの削除を消す（finally を外す）', [
+        (I, "      try { DriveApp.getFileById(id).setTrashed(true); }",
+            "      try { if (false) DriveApp.getFileById(id).setTrashed(true); }"),
+    ], '一時ファイルが残っています'),
+
+    # 消せなかったことを黙って流すと、Driveに中身が残ったままになる
+    ('取り込みの片づけの失敗を、黙って流すようにする', [
+        (I, "        if (out) out.leftover = true;", "        if (false) out.leftover = true;"),
+    ], '消し漏れを伝えていません'),
+
+    # Excelで行をコピーするとIDも複製される。**これは必ず起きる**
+    ('同じIDが2行あっても通すようにする', [
+        (I, "      if (seen[id]) {\n"
+            "        problems.push({ field: 'ID', why: '同じIDの行が2つあります。'\n"
+            "          + '新しく足すなら、ID列を空にしてください。' });\n"
+            "      }",
+            "      if (false) {\n"
+            "        problems.push({ field: 'ID', why: '同じIDの行が2つあります。' });\n"
+            "      }"),
+    ], '同じIDが2行あるのに通っています'),
+
+    # 黙って復活させると、消したはずの行が戻ってくる
+    ('台帳に無いIDを、黙って追加するようにする', [
+        (I, "      if (!ledger[id]) {\n"
+            "        // **黙って復活させない**\n"
+            "        problems.push({ field: 'ID', why: 'この行は台帳から削除されています。'\n"
+            "          + '新しく足すなら、ID列を空にしてください。' });\n"
+            "      }",
+            "      if (false) {\n"
+            "        problems.push({ field: 'ID', why: 'この行は台帳から削除されています。' });\n"
+            "      }"),
+        # 素朴な実装は「台帳に無ければ新規」と書く。例外にはしない
+        (I, "    } else {\n"
+            "      used[id] = true;\n"
+            "      action = (schedImportItemKey_(v.value)",
+            "    } else if (!ledger[id]) {\n"
+            "      action = 'add';\n"
+            "    } else {\n"
+            "      used[id] = true;\n"
+            "      action = (schedImportItemKey_(v.value)"),
+    ], '台帳に無いIDを、黙って追加しようとしています'),
+
+    # まるごと差し替えではないので、一部だけ入ると Excel と台帳がずれる
+    ('1行だけ不正でも、残りを書くようにする', [
+        (I, "    if (bad.length) {", "    if (false) {"),
+        # 「通った行だけ書く」という、いかにも親切そうな形にする
+        (I, "      if (x.action === 'same') return;          // 触らない（更新者も塗り替えない）",
+            "      if (x.action === 'same' || x.action === 'bad') return;"),
+    ], '通らない行があるのに保存されました'),
+
+    # ①は全員が触れる。Excelに無い行を消すと、他の人が足した行が黙って消える
+    ('Excelに無い行を消すようにする', [
+        # 「Excelがそのまま台帳になる」という、よくある思い込みの形
+        (I, "    var added = 0, updated = 0;",
+            "    var added = 0, updated = 0;\n"
+            "    plan.missing.forEach(function (m) {\n"
+            "      var gone = schedImportFindRow_(sh, m.id);\n"
+            "      if (gone) sh.deleteRow(gone);\n"
+            "    });"),
+    ], 'が消えました（Excelに無い行は消さない決まりです）'),
+
+    # 「実行時の再検証を外す」は、**壊しようがない**ので置かない。
+    # 画面は判定（action）を送らず、生の行だけを送るので、
+    # サーバーは必ず自分で組み立て直す。上の「1行だけ不正でも書く」が同じ穴を見ている。
+
+    # 「変わらない」を判定しないと、全部が「更新」になって更新者が塗り替わる
+    ('比べる欄に、更新者と更新日時を混ぜる', [
+        (I, "var SCHED_IMPORT_COMPARE_ = ['種類', '日付', '終了日', '領域', '担当会社', '担当者',\n"
+            "                            'タスク名', '詳細', 'ステータス', '備考'];",
+            "var SCHED_IMPORT_COMPARE_ = ['種類', '日付', '終了日', '領域', '担当会社', '担当者',\n"
+            "                            'タスク名', '詳細', 'ステータス', '備考',\n"
+            "                            '更新者', '更新日時'];"),
+    ], '更新者・更新日時・並び順の違いを「更新」に数えています'),
+
+    # 画面の accept だけに頼ると、CSVを投げ込まれて文字化けする
+    ('拡張子の検査を外す（画面の accept だけに頼る）', [
+        (I, "  if (!/\\.xlsx$/i.test(String(fileName || ''))) {",
+            "  if (false) {"),
+    ], 'が通っています'),
+
+    # 大きさを Drive に触ってから見ると、無駄なファイルが作られる
+    ('大きさの検査を、Driveに触ったあとに動かす', [
+        (I, "  if (b64.length * 0.75 > SCHED_IMPORT_MAX_BYTES) {", "  if (false) {"),
+    ], '大きすぎるファイルが通っています'),
+
+    # ── 「最後に誰がいつ」（§5）─────────────────────────
+    # 開いて閉じただけで記録されると、けいたが求めた「編集してなければ記録せず」が破れる
+    ('中身が同じでも、更新者・更新日時を書き換えるようにする', [
+        ('gas/Sched.gs',
+            "    if (beforeText === afterText) return { ok: true, added: false, unchanged: true };",
+            "    if (false) return { ok: true, added: false, unchanged: true };"),
+    ], '中身が同じなのに更新者が書き換わりました'),
+
+    # キャッシュ越しに読むと、書いた直後に古い値が返る
+    ('記録の読み取りを、設定のキャッシュ越しにする', [
+        (P, "function configRaw_(key) {\n"
+            "  var sh = sheet_(SHEET.CONFIG);\n"
+            "  var row = findConfigRow_(sh, key);\n"
+            "  if (!row) return '';\n"
+            "  return sh.getRange(row, 2).getValue();",
+            "function configRaw_(key) {\n"
+            "  return configText(key, '');\n"
+            "  var sh = sheet_(SHEET.CONFIG);\n"
+            "  var row = findConfigRow_(sh, key);\n"
+            "  if (!row) return '';\n"
+            "  return sh.getRange(row, 2).getValue();"),
+    ], 'キャッシュ越しに読んでいます'),
+
+    # 名前に | が入ると、素朴に split すると時刻を読み違える
+    ('記録の区切りを、最初の | で見るようにする', [
+        (P, "  var i = raw.lastIndexOf('|');", "  var i = raw.indexOf('|');"),
+    ], 'AssertionError'),
+
+    # 赤があっても押せると、通らない行をそのまま送ってしまう
+    ('赤があっても「取り込む」を押せるようにする', [
+        (A, "  $('#schImpGo').disabled = !!c.bad || !!IMP.busy;",
+            "  $('#schImpGo').disabled = false;"),
+    ], '赤があっても「取り込む」を押せます'),
+
+    # ── ここから、検証役3体（2026-09-07）が見つけた穴の歯止め ──
+
+    # 送信中の印をボタンに直接立てると、描き直しで消えて二重に入る
+    ('送信中かどうかを、描き直しのときに見ないようにする', [
+        (A, "  $('#schImpGo').disabled = !!c.bad || !!IMP.busy;",
+            "  $('#schImpGo').disabled = !!c.bad;"),
+    ], '描き直しのときに、送信中かどうかを見ていません'),
+
+    # 閉じたあとに届いた返事で、下見が復活して二度押しできてしまう
+    ('遅れて返ってきた見直しを、そのまま受け取るようにする', [
+        (A, "    if (seq !== IMP.seq || !IMP.items.length) return;", "    if (false) return;"),
+    ], '古い返事を捨てていません'),
+
+    # 記録の帯は、サーバーが返さなければ画面に出ない
+    ('記録の帯を、サーバーが返さないようにする', [
+        (S, "    stamps: {", "    stampsUnused_: {"),
+    ], 'stamps を返していません'),
+
+    # 台帳のID重複を見逃すと、関係のない行が丸ごと消える
+    ('台帳に同じIDが2つあっても、そのまま更新するようにする', [
+        (I, "      if (dupInLedger[id]) {", "      if (false) {"),
+    ], '同じIDが2つあるのに、そのまま更新しようとしています'),
+
+    # ※「台帳のIDを後勝ちで覚えるように戻す」は、壊し方として入れなかった。
+    #   dupInLedger で赤にして止めているので、どちらで覚えても書き込みに届かない。
+    #   落ちない壊し方を並べると「守れている」に見えるだけで、何も確かめていない。
+
+    # 上限を取り込みのときだけ見ると、直し終えてから断られる
+    ('行数の上限を、読むときに見ないようにする', [
+        (I, "    if (rows.length > SCHED_IMPORT_ROWS_MAX) {\n"
+            "      return { message: '一度に取り込めるのは'",
+            "    if (false) {\n"
+            "      return { message: '一度に取り込めるのは'"),
+    ], '205行が下見に出てしまいました'),
+
+    # 断る道で out を作らないと、消し漏れが黙って捨てられる
+    ('断るときは、消し漏れを伝えないようにする', [
+        (I, "      out = { ok: false, leftover: false, message: got.message };\n"
+            "      return out;",
+            "      return { ok: false, message: got.message };"),
+    ], '断ったときは、消し漏れが黙って捨てられています'),
+
+    # 判定を画面に写すと、サーバーと規則がズレる
+    ('直したあとの見直しを、画面でやるようにする', [
+        (A, "  api('adminSchedImportRead', { rows: rows }).then(function(r){",
+            "  api('adminSched', {}).then(function(r){"),
+    ], '直したあとの見直しを、画面でやっています'),
+
+    # 下見を直しただけで台帳が書き換わってはいけない
+    ('取り込みの編集でも、台帳に保存するようにする', [
+        (A, "  if (IMP.editing !== null && IMP.editing !== undefined){",
+            "  if (false){"),
+    ], '取り込みの編集と、台帳の保存を見分けていません'),
 ]
 
 

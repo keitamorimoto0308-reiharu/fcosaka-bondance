@@ -674,6 +674,22 @@ function siStamps() {
     + ' export: lastActionGet_(SCHED_EXPORT_KEY_) })', SI.box)));
 }
 
+/**
+ * 「最後に誰がいつ」を記録する。**本番の lastActionSet_ をそのまま呼ぶ。**
+ *
+ * これが無かったせいで、模擬では取り込みだけが記録され、
+ * **編集と書き出しは何度やっても記録されなかった**（検証役 2026-09-07）。
+ * 取り込みだけが本番の .gs を動かしていて、保存・削除・書き出しは
+ * DB.sched を直にいじる写しだったため、記録を残す経路を通っていない。
+ * このファイルの冒頭が戒めている「写しを持っていたせいで気づけなかった」の再発。
+ */
+function siStampSet(key, person) {
+  siSyncIn();
+  SI.box.__key = key;
+  SI.box.__person = String(person || '');
+  vm.runInContext('lastActionSet_(__key, __person, new Date().getTime())', SI.box);
+}
+
 /** 行を見分ける印。本番の schedNewId_ と同じ 8桁 */
 const schedNewIdMock = () => crypto.randomBytes(4).toString('hex');
 
@@ -1511,18 +1527,28 @@ function handle(payload) {
         }));
         DB.history.unshift({ at: nowText(), who: auth.person, id: '（スケジュール）',
                              item: '追加', before: '', after: item.title, reason: '' });
+        siStampSet(SI.box.SCHED_EDIT_KEY_, auth.person);
         return { ok: true, added: true };
       }
       const found = schedFindMock(row, payload.id);
       if (found.message) return { ok: false, error: found.error, message: found.message };
       const prev = DB.sched[found.i];
-      DB.sched[found.i] = Object.assign({}, item, {
+      const next = Object.assign({}, item, {
         id: prev.id,
         // 手で入れた完了日は上書きしない（本番と同じ）
         doneDate: settled ? (prev.doneDate || today) : '',
         author: prev.author, createdAt: prev.createdAt,
         updatedBy: auth.person, updatedAt: nowText(),
       });
+      /*
+       * **中身が変わっていなければ、記録しない。**
+       * 「ログインしていても、編集していなければ記録に残さない」がけいた確定の仕様。
+       * 更新者・更新日時を除いて比べる（本番の schedRowObject_ と同じ考え）。
+       */
+      const bare = o => JSON.stringify(Object.assign({}, o, { updatedBy: '', updatedAt: '' }));
+      if (bare(prev) === bare(next)) return { ok: true, added: false, unchanged: true };
+      DB.sched[found.i] = next;
+      siStampSet(SI.box.SCHED_EDIT_KEY_, auth.person);
       return { ok: true, added: false };
     }
 
@@ -1541,6 +1567,7 @@ function handle(payload) {
                            who: auth.person, id: '（スケジュール）', item: '削除',
                            before: JSON.stringify(gone), after: '', reason: '' });
       DB.sched.splice(i, 1);
+      siStampSet(SI.box.SCHED_EDIT_KEY_, auth.person);
       return { ok: true, title: gone.title };
     }
 
@@ -1562,6 +1589,8 @@ function handle(payload) {
       const sched = (a === 'adminSchedExport');
       const rows = sched ? DB.sched.length : ttCall('adminTimetable_', auth).rows.length;
       const day = sched ? '制作スケジュール' : (DB.settings['進行表の日付'] + ' 進行表');
+      // 書き出せたときだけ記録する（本番の adminSchedExport_ と同じ）
+      if (sched) siStampSet(SI.box.SCHED_EXPORT_KEY_, auth.person);
       return {
         ok: true,
         // 模擬の中身は「これは模擬です」と分かる短いテキスト。

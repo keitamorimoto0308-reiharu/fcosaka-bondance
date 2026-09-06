@@ -144,6 +144,20 @@ function schedImportRows_(ss) {
     }
     if (!any) continue;                          // 空の行は飛ばす
     rows.push(o);
+    /*
+     * **読んでいる最中に断る。**
+     * 上限は取り込むときにしか見ていなかったので、500行のファイルでも
+     * 下見は普通に出て、赤を全部直し終えてから「200行までです」と言われた
+     * （それまでの直しが丸ごとむだ・検証役 2026-09-07）。
+     * それに、読む側に上限が無いと、数十万行の .xlsx で
+     * 実行時間の上限に当たる。**そのとき finally は走らないので、
+     * 一時ファイルが Drive に残り続ける。**
+     */
+    if (rows.length > SCHED_IMPORT_ROWS_MAX) {
+      return { message: '一度に取り込めるのは' + SCHED_IMPORT_ROWS_MAX + '行までです。'
+             + 'Excelを' + SCHED_IMPORT_ROWS_MAX + '行ずつに分けて、'
+             + '何回かに分けて取り込んでください。' };
+    }
   }
   return { rows: rows };
 }
@@ -180,16 +194,27 @@ function schedImportRead_(base64, fileName) {
    * 返り値には入らない（②の書き出しで実際に踏んだ）。
    * 同じ入れ物に後から書き込めば、呼び出し側にも届く。
    */
+  /*
+   * **断るときの返り値も out に持つ。**
+   * 成功のときだけ out に入れていたので、「タスク名の列が無い」など
+   * 断る道を通ると finally の `out.leftover = true` が何もせず、
+   * 消せなかった一時ファイルを**黙って残していた**（検証役 2026-09-07）。
+   * 「黙って残すのがいちばん危ない」という下の注意と矛盾していた。
+   */
   var out = null;
   try {
     id = schedImportUpload_(base64, fileName);
     if (!id) {
-      return { ok: false,
+      out = { ok: false, leftover: false,
         message: 'Excelを読み取れませんでした。'
                + '.xlsx として保存し直してから、もう一度お試しください。' };
+      return out;
     }
     var got = schedImportRows_(SpreadsheetApp.openById(id));
-    if (got.message) return { ok: false, message: got.message };
+    if (got.message) {
+      out = { ok: false, leftover: false, message: got.message };
+      return out;
+    }
 
     out = { ok: true, rows: got.rows, leftover: false };
     return out;
@@ -286,11 +311,27 @@ function schedImportPlan_(rows, people) {
   var idx = {};
   S.headers.forEach(function (h, i) { idx[h] = i; });
 
-  // 台帳の行を ID で引けるようにする
+  /*
+   * 台帳の行を ID で引けるようにする。
+   *
+   * **同じIDが2つある台帳を、そのまま扱ってはいけない。**
+   * ここは後勝ちで覚え、書くときの schedImportFindRow_ は先勝ちで探していた。
+   * このずれのせいで、直したい行は無傷のまま**別の行が丸ごと消え**、
+   * それでも「更新1件・成功」が返っていた（検証役・2026-09-07）。
+   * SCHED_HEADERS_ のコメントが書いている「甲がBを保存したつもりでCを
+   * 上書きし、ok:true が返っていた」事故の、ID経路での再発。
+   *
+   * 台帳のIDが重複するのは、人がシートで行をコピーすれば起きる。
+   * 直しようがないので**取り込みでは触らない**（消さないのが仕様なので、
+   * 勝手に採番し直すこともしない）。人にシートで直してもらう。
+   */
   var ledger = Object.create(null);
+  var dupInLedger = Object.create(null);
   for (var i = 0; i < S.rows.length; i++) {
     var lid = asText_(S.rows[i][idx['ID']]).trim();
-    if (lid) ledger[lid] = { row: i + 2, values: S.rows[i] };
+    if (!lid) continue;
+    if (ledger[lid]) { dupInLedger[lid] = true; continue; }   // 先に見た行を残す
+    ledger[lid] = { row: i + 2, values: S.rows[i] };
   }
 
   // **素の {} にしない**（constructor というIDで「もう見た」になる）
@@ -309,6 +350,11 @@ function schedImportPlan_(rows, people) {
           + '新しく足すなら、ID列を空にしてください。' });
       }
       seen[id] = true;
+      if (dupInLedger[id]) {
+        // 台帳のほうが壊れている。Excel を直しても直らないので、そう書く
+        problems.push({ field: 'ID', why: '台帳に同じIDの行が2つあります。'
+          + '先にスプレッドシートで片方のID列を空にしてください。' });
+      }
       if (!ledger[id]) {
         // **黙って復活させない**
         problems.push({ field: 'ID', why: 'この行は台帳から削除されています。'
@@ -482,6 +528,13 @@ function schedImportFindRow_(sh, id) {
 function adminSchedImportRead_(auth, payload) {
   // 直したあとの見直し。ファイルは読まない
   if (payload && Array.isArray(payload.rows)) {
+    // 見直しの入口にも同じ上限を置く。ここだけ素通しだと、
+    // 画面を通さずに何万行でも送れる（①は一般権限でも呼べる）
+    if (payload.rows.length > SCHED_IMPORT_ROWS_MAX) {
+      return { ok: false, error: 'too_many',
+        message: '一度に取り込めるのは' + SCHED_IMPORT_ROWS_MAX + '行までです（'
+               + payload.rows.length + '行）。' };
+    }
     var again = schedImportPlan_(payload.rows, schedPeople_());
     return { ok: true, items: again.items, counts: again.counts,
              missing: again.missing, leftover: false, message: '' };

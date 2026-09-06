@@ -187,7 +187,7 @@ CASES = [
             "      CacheService.getScriptCache().put(TT_EDITORS_KEY_, JSON.stringify(all), TT_LEASE_SEC_ * 2);\n"
             "    } catch (e) { logError_('adminTimetableHeartbeat_', e); }",
             "    try {\n"
-            "      ttSetConfig_(TT_EDITORS_KEY_, JSON.stringify(all));\n"
+            "      setConfigValue_(TT_EDITORS_KEY_, JSON.stringify(all));\n"
             "      CacheService.getScriptCache().put(TT_EDITORS_KEY_, JSON.stringify(all), TT_LEASE_SEC_ * 2);\n"
             "    } catch (e) { logError_('adminTimetableHeartbeat_', e); }"),
     ], 'シートに書き込んでいます'),
@@ -222,8 +222,8 @@ CASES = [
     # 保存したのに版を進めないと、**次の保存が黙って通る**。
     # ぶつかりの検出そのものが働かなくなる
     ('保存しても、版を進めないようにする', [
-        (T, "    var next = version + 1;\n    ttSetConfig_(TT_VERSION_KEY_, next);",
-            "    var next = version + 1;\n    if (false) ttSetConfig_(TT_VERSION_KEY_, next);"),
+        (T, "    var next = version + 1;\n    setConfigValue_(TT_VERSION_KEY_, next);",
+            "    var next = version + 1;\n    if (false) setConfigValue_(TT_VERSION_KEY_, next);"),
     ], '版が1つ進みませんでした'),
 
     # 0分の予定（時刻だけの目印）を帯として扱うと、
