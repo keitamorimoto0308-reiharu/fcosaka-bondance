@@ -392,8 +392,9 @@ describe('受付IDで台帳を引き直す（broadcastRows_）', () => {
 
   test('宛先の形が壊れている行は、送らずに分けて返す', () => {
     const r = pick([L('SB-0001', { '担当者メール': 'こわれている' })], ['SB-0001']);
-    assert.deepStrictEqual(r.rows, []);
-    assert.deepStrictEqual(r.invalid.map(x => x.id), ['SB-0001']);
+    assert.deepStrictEqual(r.rows, [], '壊れた宛先を送信対象に入れています');
+    assert.deepStrictEqual(r.invalid.map(x => x.id), ['SB-0001'],
+      '壊れた宛先を分けて返していません');
   });
 
   /*
@@ -486,6 +487,48 @@ describe('直前の送信との照合（broadcastRecent_）', () => {
 });
 
 /*
+ * ■ 下書きは、配ってしまうと直せない
+ *
+ *   雛形に知らない差し込みが1つ混ざっていると、
+ *   押した人は気づかないまま50社へ {{…}} のまま送ろうとする。
+ *   **自分の検査を自分で通ること**を、出荷前に確かめる。
+ */
+describe('下書き（BROADCAST_DRAFTS_）', () => {
+
+  const drafts = () => call(makeBox(), 'BROADCAST_DRAFTS_');
+
+  test('下書きがある', () => {
+    assert.ok(drafts().length >= 2, '下書きが足りません');
+  });
+
+  test('どの下書きにも、名前・件名・本文がある', () => {
+    drafts().forEach(d => {
+      assert.ok(d.name, JSON.stringify(d));
+      assert.ok(d.subject, d.name + ' の件名が空です');
+      assert.ok(d.body, d.name + ' の本文が空です');
+    });
+  });
+
+  /*
+   * ここが肝。下書きが自分の検査に落ちる状態で出荷すると、
+   * 「押したのに送れない」画面になる。
+   */
+  test('すべての下書きが、そのまま送れる（自分の検査を通る）', () => {
+    const box = makeBox();
+    call(box, 'BROADCAST_DRAFTS_').forEach(d => {
+      const errs = call(box, 'broadcastValidate_', d.subject, d.body);
+      assert.deepStrictEqual(errs, [],
+        d.name + ' が検査に落ちます：' + errs.join(' / '));
+    });
+  });
+
+  test('下書きの名前が重複していない（画面の選択肢になる）', () => {
+    const names = drafts().map(d => d.name);
+    assert.strictEqual(new Set(names).size, names.length, names.join(' / '));
+  });
+});
+
+/*
  * ■ ここから先は取り消せない
  *
  *   守りを1つずつ、別々の検査にする。まとめて1本にすると、
@@ -552,8 +595,8 @@ describe('送信（adminBroadcastSend_）', () => {
 
   test('確認が無ければ1通も送らない', () => {
     const r = run([L('SB-0001')], ['SB-0001'], { confirm: false });
+    assert.deepStrictEqual(r.box.__sentTo, [], '確認が無いのに送っています');
     assert.strictEqual(r.res.error, 'not_confirmed');
-    assert.deepStrictEqual(r.box.__sentTo, []);
   });
 
   test('札が無ければ1通も送らない', () => {
@@ -599,9 +642,23 @@ describe('送信（adminBroadcastSend_）', () => {
     const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002'], null, {
       mutate: ledger => { ledger.rows[1][LH.indexOf('ステータス')] = '辞退'; },
     });
-    assert.strictEqual(r.res.ok, false, JSON.stringify(r.res));
-    assert.strictEqual(r.res.error, 'changed');
+    /*
+     * ■ 守りは二重にかかっている（壊し検査で分かったこと）
+     *   送信を実際に止めているのは**札**——辞退した行が対象から外れると
+     *   送り先の集合が変わり、指紋が合わなくなる。
+     *   `lost.length` の検知を丸ごと消しても、1通も出ない。
+     *
+     *   ではこの検知は何のためか。**人に分かる言葉で伝えるため**。
+     *   札だけだと「プレビューで確認したものと違います」としか言えず、
+     *   押した人は何が起きたのか分からない。
+     *   だからここでは「送られていないこと」と「理由が伝わること」を
+     *   別々に見る。
+     */
     assert.deepStrictEqual(r.box.__sentTo, [], '辞退した会社に送っています');
+    assert.strictEqual(r.res.ok, false, JSON.stringify(r.res));
+    assert.strictEqual(r.res.error, 'changed',
+      '台帳が変わったことを「対象が変わりました」として伝えていません（いま：'
+      + r.res.error + '）');
     assert.ok(/SB-0002/.test(r.res.message), 'どの会社が変わったかを伝えていません');
   });
 
@@ -613,16 +670,16 @@ describe('送信（adminBroadcastSend_）', () => {
 
   test('本日の送信可能数が足りなければ1通も送らない', () => {
     const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002'], null, { quota: 1 });
-    assert.strictEqual(r.res.error, 'quota');
     assert.deepStrictEqual(r.box.__sentTo, [], '途中まで送って半分だけ届いています');
+    assert.strictEqual(r.res.error, 'quota');
   });
 
   test('一度に送れる上限を超えたら送らない', () => {
     const many = [];
     for (let i = 1; i <= 41; i++) many.push(L('SB-' + String(i).padStart(4, '0')));
     const r = run(many, many.map(x => x['受付ID']));
+    assert.deepStrictEqual(r.box.__sentTo, [], '上限を超えたのに送りはじめています');
     assert.strictEqual(r.res.ok, false);
-    assert.deepStrictEqual(r.box.__sentTo, []);
   });
 
   test('1件失敗しても、残りは送り、失敗を返す', () => {

@@ -23,6 +23,25 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const S = require('./schema.js');
+
+/**
+ * 本番のソースを読むときの改行の正規化。**ここに1つだけ置く。**
+ *
+ * ■ なぜ1つにするか
+ *   `gas/*.gs` の改行は混在しうる。正規化を忘れると目印が一致せず、
+ *   切り出しが**空文字**になる（2026-09-04、模擬の保存が100%
+ *   「asText_ is not defined」で落ちていたのがこれ。それでもテストは全通していた）。
+ *
+ *   以前は同じ1行が箱ごとに4つ写されていた。害は2つ：
+ *   1つ直しても残りが古いまま残ること。そして
+ *   **`npm run break` が最初の1件しか置き換えないので、
+ *   狙った箱ではないものを壊してしまうこと**
+ *   （2026-09-07、5つ目を足した瞬間に break_sched.py が理由違いになった）。
+ */
+const norm = t => t.split('\r\n').join('\n');
+
+/** gas/ のソースを、正規化して読む */
+const rd = f => norm(fs.readFileSync(path.join(ROOT, 'gas', f), 'utf8'));
 /** 履歴の日時。本番と同じ見え方にする */
 // 本番（gas/*.gs）は Utilities.formatDate で 'yyyy-MM-dd HH:mm'。
 // ここが 'ja-JP' だったので、変更履歴に「2026/9/4 3:38:15」と「2026-09-16 18:40」が
@@ -416,8 +435,6 @@ const MAILTPL = (() => {
  */
 const BC = (() => {
   const G = require('./gasbox.js');
-  const norm = t => t.split('\r\n').join('\n');
-  const rd = f => norm(fs.readFileSync(path.join(ROOT, 'gas', f), 'utf8'));
   const adminSrc = rd('Admin.gs');
   const authSrc = rd('Auth.gs');
 
@@ -500,7 +517,6 @@ const SCHED = (() => {
   // 目印が一致せず、切り出しが**空文字**になる。
   // 2026-09-04、そのせいで模擬の保存が100%「asText_ is not defined」で落ちていた
   // （それでもテスト832件は全部通っていた。模擬を通しで呼ぶ検査が無かったため）。
-  const norm = t => t.split('\r\n').join('\n');
   const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Sched.gs'), 'utf8'));
   const adminSrc = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Admin.gs'), 'utf8'));
   // 検証が使う道具も本番から借りる（正規表現で切ると \s が1層落ちるので indexOf で切る）
@@ -532,7 +548,6 @@ const SCHED = (() => {
  * 版のぶつかりは本番では試せないので、ここが唯一の確認手段になる（§7-6）。
  */
 const TT = (() => {
-  const norm = t => t.split('\r\n').join('\n');
   const G = require('./gasbox.js');
   const src = norm(fs.readFileSync(path.join(ROOT, 'gas', 'Timetable.gs'), 'utf8'));
   // 設定シートの読み書きと「最後に誰がいつ」は gas/Stamp.gs にある（①と共有・2026-09-07）
@@ -650,8 +665,6 @@ function ttCall(name, auth, payload) {
  */
 const SI = (() => {
   const G = require('./gasbox.js');
-  const norm = t => t.split('\r\n').join('\n');
-  const rd = f => norm(fs.readFileSync(path.join(ROOT, 'gas', f), 'utf8'));
   const adminSrc = rd('Admin.gs');
   const setupSrc = rd('Setup.gs');
 

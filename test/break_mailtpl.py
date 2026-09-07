@@ -182,11 +182,15 @@ CASES = [
          "      if (false) {\n        return { ok: false, error: 'bad_value', errors: errs,"),
     ], '断るべきものを保存しました'),
 
+    # ⚠ 目印に行末の `];` を含めていたため、adminOnly の一覧に別の action を
+    #   足しただけで **目印が消え、この守りが黙って未検査になった**
+    #   （2026-09-07、一斉メールを足したときに実際に起きた）。
+    #   一覧の末尾に依存しない形——**この3つの名前だけ**を目印にする。
     ('一般権限にも開放する', [
         ('gas/Admin.gs',
          "                   'adminMailTemplate', 'adminMailTemplateSave', "
-         "'adminMailTemplateReset'];",
-         '                   ];'),
+         "'adminMailTemplateReset',",
+         "                   'ダミー1', 'ダミー2', 'ダミー3',"),
     ], '管理者限定の一覧にありません'),
 
     ('シートが読めないときに、既定へ落とさない', [
