@@ -561,3 +561,77 @@ describe('② 印刷：画面と同じ形にする（2026-09-07）', () => {
       '紙で短い予定が次の予定に隠れます');
   });
 });
+
+describe('② 印刷：1枚に収める（2026-09-07）', () => {
+
+  test('時間軸以外の高さを、決め打ちにしない', () => {
+    /*
+     * 「見出しと脚注でおよそ40mm」と見積もっていたが、
+     * 脚注の行数は予定によって変わるので、多いと1枚に収まらない
+     * （実測で 55.6mm だった。15mmはみ出す）。
+     */
+    assert.ok(SRC.indexOf('function ttPrintUsedMm') >= 0, '実際に測る手立てがありません');
+    const f = noComment(SRC.slice(SRC.indexOf('function ttPrintUsedMm'),
+                                  SRC.indexOf('function ttBuildPrintAt')));
+    assert.match(f, /getBoundingClientRect/, '高さを測っていません');
+    // 時間軸そのものは引く（残りが「見出し＋脚注」）
+    assert.match(f, /all - timeline/, '時間軸を引いていません');
+  });
+
+  test('測ってから、組み直す', () => {
+    const f = noComment(SRC.slice(SRC.indexOf('function ttBuildPrint('),
+                                  SRC.indexOf('function ttPrintUsedMm')));
+    assert.match(f, /ttPrintUsedMm\(\)/, '測った結果を使っていません');
+    assert.match(f, /ttBuildPrintAt\(R, next\)/, '測ったあとに組み直していません');
+    assert.match(f, /for \(var pass = 0; pass < 2; pass\+\+\)/,
+      '組み直しの回数に上限がありません');
+  });
+
+  test('1mmが何pxかは、端末で測る（96dpiの決め打ちにしない）', () => {
+    const f = noComment(SRC.slice(SRC.indexOf('function ttPxPerMm'),
+                                  SRC.indexOf('function ttBuildPrint(')));
+    assert.match(f, /height:100mm/, '実寸を測っていません');
+    assert.match(f, /3\.7795/, '測れなかったときの控えがありません');
+  });
+
+  test('刷りのずれのぶん、余裕を取る', () => {
+    const f = noComment(SRC.slice(SRC.indexOf('var TT_P_PAGE_MM'),
+                                  SRC.indexOf('function ttPxPerMm')));
+    assert.match(f, /TT_P_PAGE_MM - used - 5/, '余裕を取っていません');
+  });
+
+  test('通信の失敗は、②でも netFail を通す', () => {
+    // 入室が切れると、赤い帯に __session_ended__ が生で出ていた
+    const b = noComment(ttBlock());
+    assert.ok(b.indexOf('toast(String(e && e.message || e), true)') < 0,
+      '②が、通信の失敗を生のまま出しています');
+  });
+});
+
+describe('② 印刷：測るときの前提（2026-09-07）', () => {
+
+  test('紙の幅は固定する（画面の幅で測らない）', () => {
+    /*
+     * **これを外すと、測った高さが紙とまるで違う。**
+     * 画面が狭いと文字が何行にも折り返し、実測で 272mm の紙が
+     * 893mm と出た（そのぶん時間軸が潰れて、使いものにならない紙になる）。
+     * A4縦 210mm − 左右の余白 10mm ずつ ＝ 190mm。
+     */
+    const flat = SRC.split(String.fromCharCode(10)).join('');
+    assert.match(flat, /\.tt-paper\{[^}]*width:190mm/,
+      '紙の幅を固定していません（画面の幅で折り返した高さを測ってしまいます）');
+  });
+
+  test('枠に入る量の判断は、幅が半分かどうかで変える', () => {
+    /*
+     * 全幅なら題名は1行、重なりで半分になると2行になる。
+     * 一律にすると、余裕のある全幅の枠まで中身を下へ送ってしまう。
+     */
+    const f = noComment(SRC.slice(SRC.indexOf('function ttBuildPrintAt'),
+                                  SRC.indexOf('function ttPrint(')));
+    assert.match(f, /var titleMm = \(cols > 1 \? 2 : 1\) \* 3;/,
+      '題名の行数を、幅から見ていません');
+    assert.match(f, /hh >= needCast/, '出演者の判断が決め打ちです');
+    assert.match(f, /hh >= needMemo/, '備考の判断が決め打ちです');
+  });
+});

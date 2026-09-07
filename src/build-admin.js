@@ -872,7 +872,11 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 /* 印刷して配る（§6-1）。画面では出さない。
    **画面と同じ形にする**（表組みをやめた・2026-09-07）。
    時間軸に置くので、予定の長さと空き時間が紙の上でも見える */
-.tt-paper{display:none}
+/* 幅は**紙に合わせて固定する**（A4縦 210mm − 左右の余白 10mm ずつ）。
+   画面の幅のままだと、狭い端末では文字が何行にも折り返し、
+   高さを測った結果が紙とまるで違う（実測で 275mm が 893mm になった）。
+   刷るときの版面と同じ幅にしておけば、測った値がそのまま使える */
+.tt-paper{display:none;width:190mm}
 .tt-paper h2{font-size:13pt;margin:0 0 2mm}
 .tt-paper .day{font-size:9pt;margin:0 0 3mm;color:#000}
 .tt-p{border:0.3mm solid #333}
@@ -4820,7 +4824,9 @@ function loadTimetable(){
     TT.loaded = true;
     $('#ttBanner').hidden = true;
     ttRenderHead(); renderTT(); ttStatus(); ttStartTimers();
-  }, function(e){ toast(String(e && e.message || e), true); });
+    // 入室が切れたときの合図（__session_ended__）を、そのまま赤い帯に出さない。
+    // 入室画面には正しい説明が出ているのに、その上に符丁が重なっていた
+  }, function(e){ netFail(e, '進行表を読めませんでした'); });
 }
 
 /**
@@ -5630,11 +5636,15 @@ function ttOverlapMenu(which){
  */
 /** 紙の枠の、これ以上は低くしない高さ(mm)。字が読める下限 */
 /*
- * 枠の下限(mm)。**題名と時刻の2行が入る高さ**にする。
- * 6mm では時刻の行が枠から切れて、
- * 「いつ終わるのか分からない紙」になった（刷る形にして発覚）。
+ * 枠の下限(mm)。
+ *
+ * **題名が2行に折り返しても、時刻の行まで入る高さ**にする。
+ * 重なりがあると枠は半分の幅になるので、長い題名は必ず2行になる。
+ * 8mm では「オープニングセレモニー」が2行を占めて時刻が切れ、
+ * 「いつ終わるのか分からない紙」になった（刷って発覚）。
+ * 題名2行(6mm)＋時刻(3mm)＋上下の余白(1.6mm)＝10.6mm に、少し足す。
  */
-var TT_P_EV_MIN_MM = 8;
+var TT_P_EV_MIN_MM = 11.5;
 /**
  * 0分の目印の高さ(mm)。
  * **0にしてはいけない。**枠は overflow:hidden なので、
@@ -5662,9 +5672,48 @@ function ttPrintRange(){
  * 残り 237mm に (to - from) 分を割り当てる。
  * 13時間なら 0.30mm/分（1時間＝18mm）。
  */
-function ttPrintMm(R){
+/**
+ * A4縦の刷り面のうち、時間軸に使える高さ(mm)。
+ *
+ * 297mm − 上下の余白（@page で 10mm ずつ）＝ 277mm。
+ * ここから、見出し・レーン名の行・下の「備考」が使うぶんを引く。
+ */
+var TT_P_PAGE_MM = 277;
+
+/**
+ * 1分あたりの高さ(mm)。
+ *
+ * **決め打ちにしない。**
+ * 「見出しと脚注でおよそ40mm」と見積もっていたが、脚注の行数は
+ * 予定によって変わるので、多いと1枚に収まらない
+ * （2026-09-07、実際にはみ出した）。
+ * 時間軸**以外**の高さを実際に測って、残りを割り当てる。
+ *
+ * @param {Object} R  時間の幅
+ * @param {number=} usedMm 時間軸以外が使っている高さ（測れたとき）
+ */
+function ttPrintMm(R, usedMm){
   var span = Math.max(R.to - R.from, 60);
-  return Math.min(237 / span, 0.6);
+  // 測れないときの控えめな見積り。測ったあとに必ず組み直す
+  var used = (typeof usedMm === 'number' && isFinite(usedMm)) ? usedMm : 40;
+  // 画面と紙では字の詰まりが少し違う。余裕は5mm取る（2mmでは足りない）
+  var room = Math.max(TT_P_PAGE_MM - used - 5, 60);
+  return Math.min(room / span, 0.6);
+}
+
+/**
+ * 画面の1mmが何pxかを測る。
+ *
+ * 端末や拡大率で変わるので、決め打ちの 96dpi 換算にはしない
+ * （ここがずれると、測ったものが全部ずれる）。
+ */
+function ttPxPerMm(){
+  var probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:100mm';
+  document.body.appendChild(probe);
+  var px = probe.getBoundingClientRect().height / 100;
+  probe.parentNode.removeChild(probe);
+  return px > 0 ? px : 3.7795;      // 測れなければ 96dpi 相当
 }
 
 /**
@@ -5685,9 +5734,56 @@ function ttPrintMm(R){
  *   枠に収まらないものは**切らずに、下の「備考」へ番号で送る**。
  *   紙は直せないので、黙って切れているのがいちばん困る（撮影して発覚）。
  */
+/**
+ * 印刷用に組み立てて、**1枚に収まるまで測って組み直す。**
+ *
+ * 脚注の行数は予定によって変わるので、見積りだけでは合わない。
+ * 1回組んで、時間軸以外が使っている高さを測り、その残りで組み直す。
+ * 2回目で足りなければ、もう1回だけ縮める（それ以上は数mmの誤差なので、
+ * 回すほど遅くなるだけで良くならない）。
+ */
 function ttBuildPrint(){
   var R = ttPrintRange();
-  var mm = ttPrintMm(R);
+  ttBuildPrintAt(R, ttPrintMm(R));
+  for (var pass = 0; pass < 2; pass++){
+    var used = ttPrintUsedMm();
+    if (used === null) break;                    // 測れない環境（検査など）
+    var next = ttPrintMm(R, used);
+    var now = ttPrintMmNow;
+    // 0.5%以内なら、これ以上組み直しても紙は変わらない
+    if (Math.abs(next - now) / Math.max(now, 0.001) < 0.005) break;
+    ttBuildPrintAt(R, next);
+  }
+}
+
+/** 直前に組んだときの1分あたりの高さ(mm)。測り直しの判断に使う */
+var ttPrintMmNow = 0;
+
+/**
+ * 時間軸**以外**が使っている高さ(mm)を測る。
+ * 見出し・日付・レーン名の行・上下の余白・下の「備考」の合計。
+ */
+function ttPrintUsedMm(){
+  var paper = document.getElementById('ttPaper');
+  var body = paper && paper.querySelector('.tt-p-body');
+  if (!paper || !body || !paper.getBoundingClientRect) return null;
+
+  // 測るあいだだけ見えるようにする（display:none では高さが 0 になる）
+  var was = paper.style.display, wasV = paper.style.visibility;
+  paper.style.visibility = 'hidden';
+  paper.style.display = 'block';
+  var all = paper.getBoundingClientRect().height;
+  var lanes = body.querySelector('.tt-p-lane');
+  var timeline = lanes ? lanes.getBoundingClientRect().height : 0;
+  paper.style.display = was;
+  paper.style.visibility = wasV;
+
+  if (!all) return null;
+  return (all - timeline) / ttPxPerMm();
+}
+
+function ttBuildPrintAt(R, mm){
+  ttPrintMmNow = mm;
   var h = (R.to - R.from) * mm;
   /*
    * 紙でも、字が読める下限（TT_P_EV_MIN_MM）まで枠を伸ばす。
@@ -5732,14 +5828,20 @@ function ttBuildPrint(){
          * （備考が途中で切れた紙を、けいたが撮影して発覚）。
          *
          * 目安（7〜8ptで1行およそ3mm、上下の余白で1.6mm）：
-         *   8mm  … 題名＋時刻
-         *   11.5mm … ＋出演者
-         *   15mm  … ＋短い備考
+         * 1行およそ3mm、上下の余白で1.6mm。
+         * **幅が半分になっているかで、題名の行数が変わる。**
+         * 全幅なら題名は1行に収まるが、重なりで半分になると2行になる。
+         * ここを一律にすると、全幅の枠まで必要以上に中身を下へ送ってしまう
+         * （60分の「設営・搬入」の備考が、余裕があるのに下へ行った）。
          */
+        var titleMm = (cols > 1 ? 2 : 1) * 3;
+        var needName = titleMm + 3 + 1.6;   // 題名＋時刻
+        var needCast = needName + 3;
+        var needMemo = needCast + 3;
         var over = [];                    // 枠に入らなかったもの
         var cast = '';
         if (r.casts && r.casts.length){
-          if (!isMark && hh >= 11.5){
+          if (!isMark && hh >= needCast){
             cast = '<span class="tt-p-cast">' + esc(r.casts.join('・')) + '</span>';
           } else {
             over.push('出演：' + r.casts.join('・'));
@@ -5747,7 +5849,7 @@ function ttBuildPrint(){
         }
         var memo = '';
         if (r.detail){
-          if (!isMark && hh >= 15 && r.detail.length <= 34){
+          if (!isMark && hh >= needMemo && r.detail.length <= 34){
             memo = '<span class="tt-p-memo">' + esc(r.detail) + '</span>';
           } else {
             over.push(r.detail);
