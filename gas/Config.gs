@@ -9,6 +9,7 @@
 var SHEET = {
   LEDGER:     '応募一覧',
   HISTORY:    '変更履歴',
+  BROADCAST:  '一斉メール履歴',
   SPACES:     '区画',
   CONFIG:     '設定',
   PEOPLE:     '関係者',

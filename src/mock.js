@@ -403,6 +403,92 @@ const MAILTPL = (() => {
 })();
 
 /**
+ * 一斉メールは、**本番の gas/Broadcast.gs をまるごと動かす**。写しを持たない。
+ *
+ * 採択通知（下の adminNotifySend）は模擬に写しを持っているが、
+ * そのせいで「画面が ids を送っていない」不具合を模擬が見逃した
+ * （本番では必ず changed で弾かれていた・2026-09-03）。同じことを繰り返さない。
+ *
+ * ■ ここで守りたいこと
+ *   一斉メールの守り（札・台帳の引き直し・ステータスの除外・上限）は
+ *   全部サーバー側にある。模擬がそれを写しで持つと、
+ *   **模擬で通るのに本番で落ちる**（またはその逆）が必ず起きる。
+ */
+const BC = (() => {
+  const G = require('./gasbox.js');
+  const norm = t => t.split('\r\n').join('\n');
+  const rd = f => norm(fs.readFileSync(path.join(ROOT, 'gas', f), 'utf8'));
+  const adminSrc = rd('Admin.gs');
+  const authSrc = rd('Auth.gs');
+
+  const sheets = {};
+  const sent = [];   // 模擬では実際に送らない。宛先だけ覚えておく
+
+  const box = {
+    Array, Object, String, Number, JSON, RegExp, Math, isFinite, Boolean, Date, Error,
+    console: { error() {}, log() {} },
+    Utilities: G.makeUtilities(),
+    CacheService: G.makeCache(),
+    SpreadsheetApp: { flush() {} },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
+    MailApp: { getRemainingDailyQuota: () => 1500 },
+    GmailApp: { sendEmail: (to, subject, body) => { sent.push({ to, subject, body }); } },
+    LOCK_WAIT_MS: 30000,
+    SHEET: { MAILTPL: 'メール文面', BROADCAST: '一斉メール履歴' },
+    sheet_: name => {
+      if (!sheets[name]) {
+        sheets[name] = G.makeSheet(
+          name === '一斉メール履歴' ? box.BROADCAST_HEAD : ['種類', '件名', '本文', '更新日時', '更新者'],
+          []);
+      }
+      return sheets[name];
+    },
+    // 台帳は模擬のDBから作る。**受付IDで引き直す**という本番の性質を保つため、
+    // 画面から来た値ではなく必ずここを通す
+    readLedger_: () => {
+      const headers = ['受付ID', '企業名', '出店名', '担当者氏名', '担当者メール',
+                       'ステータス', '割当開始区画', '割当区画数', '搬入予定時刻'];
+      return { headers, rows: DB.rows.map(r => headers.map(h => r[h] == null ? '' : r[h])) };
+    },
+    configText: (k, d) => (DB && DB.settings && DB.settings[k]) || d || '',
+    appendHistory: (operator, receiptId, item, before, after, reason) => {
+      DB.history.unshift({ at: nowText(), who: operator, id: receiptId,
+                           item, before, after, reason });
+    },
+    logError_: () => {},
+    mailOptions_: () => ({}),
+    diagnoseMail: () => ({ aliasRegistered: true, from: 'fcosaka_bondance@kreha-c.com',
+                           replyTo: 'fcosaka_bondance@kreha-c.com', remainingQuota: 1500,
+                           note: '（模擬）エイリアスは登録済みです。' }),
+    // 差し込みの値づくりに要るもの。MAILTPL の箱と同じものを使う
+    EVENT_NAME: MAILTPL.EVENT_NAME,
+    eventFactsBlock_: MAILTPL.eventFactsBlock_,
+    signature_: MAILTPL.signature_,
+    confirmDeadlineText_: MAILTPL.confirmDeadlineText_,
+  };
+  vm.createContext(box);
+  // 切り出しは src/gasbox.js のもの。切り出せなければ**その場で止まる**
+  vm.runInContext([
+    G.cutFunction(authSrc, 'sha256_'), G.cutFunction(authSrc, 'safeEquals_'),
+    G.cutFunction(adminSrc, 'indexOf_'), G.cutFunction(adminSrc, 'liveRows_'),
+    G.cutFunction(adminSrc, 'cell_'), G.cutFunction(adminSrc, 'asText_'),
+    adminSrc.slice(adminSrc.indexOf('var COL = {'),
+                   adminSrc.indexOf('};', adminSrc.indexOf('var COL = {')) + 2),
+  ].join(String.fromCharCode(10)), box);
+  vm.runInContext(rd('MailTemplate.gs'), box);
+  vm.runInContext(rd('Broadcast.gs'), box);
+  return { box, sheets, sent };
+})();
+
+/** 箱の中の action を呼ぶ。返りは素の値に写す（VMのオブジェクトは別物） */
+function bcCall(name, auth, payload) {
+  BC.box.__auth = auth;
+  BC.box.__payload = payload;
+  const r = vm.runInContext(name + '(__auth, __payload)', BC.box);
+  return (r === undefined || r === null) ? r : JSON.parse(JSON.stringify(r));
+}
+
+/**
  * 制作スケジュールの検証を、**本番のソースからそのまま借りる**（gas/Sched.gs）。
  *
  * ここに写しを置くと、種類・領域・ステータスを1つ足したときに
@@ -2278,6 +2364,24 @@ function handle(payload) {
     // ここは**本当にメールを送らない**。送ったつもりで台帳の日時だけを埋め、
     // 画面の動きと歯止め（件数の食い違い・上限・宛先の形）を確かめられるようにする。
     // 歯止めの条件は本番と揃えること。緩いと「模擬では通るのに本番で弾かれる」。
+    /*
+     * 一斉メール。**判断は1つも模擬に書かない**（BC の箱が本番のコードを走らせる）。
+     * ここでやるのは、権限の確認と、本番の関数へ渡すことだけ。
+     */
+    case 'adminBroadcastPreview':
+    case 'adminBroadcastSend': {
+      // 文言まで本番（gas/Admin.gs の adminOnly）と合わせる
+      if (auth.role !== '管理者') return { ok: false, error: 'forbidden',
+        message: 'この操作は管理者のみです。' };
+      const fn = a === 'adminBroadcastSend'
+        ? 'adminBroadcastSend_' : 'adminBroadcastPreview_';
+      const r = bcCall(fn, auth, payload);
+      if (a === 'adminBroadcastSend' && r && r.ok) {
+        r.message = r.message + '（模擬サーバーなので実際には送っていません）';
+      }
+      return r;
+    }
+
     case 'adminNotifyPreview': {
       // 文言まで本番（gas/Admin.gs）と合わせる。無いと、模擬では
       // 「何も出ない」ように見えて、本番との違いに気づけない
@@ -2548,7 +2652,28 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(f).pipe(res);
 });
 
-module.exports = { handle, mockToken, DB, PORT };
+/**
+ * 一斉メールで実際に送られたもの（模擬だけの入口。本番のGASにこの経路は無い）。
+ * 「送っていないこと」を確かめるのに要る——結果が ok:false でも、
+ * その前に何通か出ていたら意味が無い。
+ */
+function __broadcastSent() {
+  return BC.sent.map(x => ({ to: x.to, subject: x.subject, body: x.body }));
+}
+
+/** 一斉メールの送信履歴シート（模擬だけの入口）。見出しを鍵にした形で返す */
+function __broadcastLog() {
+  const sh = BC.sheets['一斉メール履歴'];
+  if (!sh || sh.grid.length < 2) return [];
+  const head = sh.grid[0];
+  return sh.grid.slice(1).map(line => {
+    const o = {};
+    head.forEach((h, i) => { o[h] = line[i]; });
+    return o;
+  });
+}
+
+module.exports = { handle, mockToken, DB, PORT, __broadcastSent, __broadcastLog };
 
 if (require.main !== module) return;
 

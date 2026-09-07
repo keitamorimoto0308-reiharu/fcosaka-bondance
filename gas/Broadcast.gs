@@ -190,6 +190,13 @@ function broadcastRows_(L, ids) {
 var BROADCAST_TICKET_SEC = 1800;
 
 /**
+ * 一度に送れる上限。採択通知（NOTIFY_BATCH_MAX）と同じ値にそろえる。
+ * GAS には1回の実行に6分の制限があり、途中で切れると
+ * **どこまで送ったか分からない状態**になる。
+ */
+var BROADCAST_BATCH_MAX = 40;
+
+/**
  * 宛先の並びを、比べられる1つの文字列にする。
  * 画面の並べ替えで指紋が変わらないように並べ直し、重複も落とす。
  */
@@ -341,4 +348,265 @@ function broadcastBuild_(row, subject, body) {
     body: mailtplRender_(String(body == null ? '' : body), vars),
     dropped: dropped,
   };
+}
+
+// ─────────────────────────────── 送信履歴
+
+/** 送信IDを作る。BC-20261007-1 の形（日付＋その日の連番） */
+function broadcastSendId_(sh, now) {
+  var day = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyyMMdd');
+  var prefix = 'BC-' + day + '-';
+  var n = 0;
+  if (sh && sh.getLastRow() >= 2) {
+    var grid = sh.getDataRange().getValues();
+    var iId = grid[0].map(function (h) { return String(h).trim(); }).indexOf('送信ID');
+    if (iId >= 0) {
+      for (var i = 1; i < grid.length; i++) {
+        var v = String(grid[i][iId] == null ? '' : grid[i][iId]).trim();
+        if (v.indexOf(prefix) !== 0) continue;
+        var m = Number(v.slice(prefix.length));
+        if (isFinite(m) && m > n) n = m;
+      }
+    }
+  }
+  return prefix + (n + 1);
+}
+
+/**
+ * 送信履歴に1行書く。**送る前に呼ぶ。**
+ *
+ * ■ gas/Notify.gs とは逆の順序にしている
+ *   あちらは「送ってから記録する」。台帳の送信日時の列が
+ *   **二重送信の歯止めそのもの**なので、先に書くと失敗した行が
+ *   「送信済み」として残り、二度と再送されない。
+ *
+ *   こちらの履歴は歯止めではなく**監査の記録**で、
+ *   GASの6分制限で途中終了したときに「送ったのに記録が無い」が
+ *   いちばん困る（問い合わせに答えられず、二重送信の照合もできない）。
+ *   だから先に書いて、結果は送り終えてから埋める。
+ *
+ * @returns {number} 書いた行番号（結果を後から埋めるのに使う）
+ */
+function broadcastLog_(sh, sendId, now, person, subject, body, ids) {
+  sh.appendRow([
+    sendId,
+    Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm'),
+    String(person == null ? '' : person),
+    String(subject == null ? '' : subject),
+    String(body == null ? '' : body),
+    ids.length,
+    ids.join(','),
+    '送信中',
+  ]);
+  return sh.getLastRow();
+}
+
+/** 送り終えてから、結果の列だけを埋める */
+function broadcastLogResult_(sh, rowNo, text) {
+  var col = BROADCAST_HEAD.indexOf('結果') + 1;
+  if (col > 0 && rowNo > 0) sh.getRange(rowNo, col).setValue(text);
+}
+
+// ─────────────────────────────── 画面から呼ばれる2つ
+
+/**
+ * プレビュー。**ここでは1通も送らない。**
+ *
+ * 画面が送ってよいのは受付IDの配列と、その場で書いた件名・本文だけ。
+ * 宛先も企業名も、ここで台帳から引き直す。
+ *
+ * 返した ticket は、送信のときにそのまま返してもらう。
+ * 札は「件名・本文・送れる相手」の指紋と結びついているので、
+ * **画面で見たものしか送れない**。
+ */
+function adminBroadcastPreview_(auth, payload) {
+  payload = payload || {};
+  var subject = String(payload.subject == null ? '' : payload.subject);
+  var body = String(payload.body == null ? '' : payload.body);
+
+  var L, picked;
+  try {
+    L = readLedger_();
+    picked = broadcastRows_(L, payload.ids);
+  } catch (e) {
+    // 台帳の列が足りないときの throw。gas/Api.gs は例外を文言なしの
+    // server_error に潰すので、**直し方が画面に出ない**。ここで受けて伝える
+    logError_('adminBroadcastPreview_', e);
+    return { ok: false, error: 'server_error', message: String(e.message || e) };
+  }
+
+  var errors = broadcastValidate_(subject, body);
+
+  // 差し込みが空になる行を、**受付IDまで**出す。
+  // 50社ぶんの本文は目で追えないので、落ちたことを機械が数えて見せる
+  var droppedBy = Object.create(null);
+  var sample = null;
+  picked.rows.forEach(function (r, i) {
+    var built = broadcastBuild_(r, subject, body);
+    built.dropped.forEach(function (name) {
+      if (!droppedBy[name]) droppedBy[name] = [];
+      droppedBy[name].push(r.id);
+    });
+    if (i === 0) sample = { to: r.email, company: r.company,
+                            subject: built.subject, body: built.body };
+  });
+  var dropped = [];
+  for (var name in droppedBy) {
+    if (Object.prototype.hasOwnProperty.call(droppedBy, name)) {
+      dropped.push({ name: name, ids: droppedBy[name] });
+    }
+  }
+
+  var sendIds = picked.rows.map(function (r) { return r.id; });
+
+  return {
+    ok: true,
+    rows: picked.rows.map(function (r) {
+      return { id: r.id, company: r.company, shopName: r.shopName,
+               person: r.person, email: r.email, status: r.status,
+               block: r.block, inAt: r.inAt };
+    }),
+    missing: picked.missing,
+    invalid: picked.invalid.map(function (r) {
+      return { id: r.id, company: r.company, email: r.email };
+    }),
+    blocked: picked.blocked.map(function (r) {
+      return { id: r.id, company: r.company, status: r.status };
+    }),
+    errors: errors,
+    dropped: dropped,
+    sample: sample,
+    // 24時間以内に同じ件名を送った相手。**止めない。人に見せる**
+    recent: broadcastRecent_(subject, sendIds),
+    batchMax: BROADCAST_BATCH_MAX,
+    tooMany: sendIds.length > BROADCAST_BATCH_MAX,
+    vars: broadcastVarNames_(),
+    // 差出人の設定が壊れていると、事業者に別のアドレスから届く。送る前に見せる
+    mail: diagnoseMail(),
+    // 文面に問題があるうちは札を出さない（どのみち送れない）
+    ticket: errors.length ? '' : broadcastTicket_(subject, body, sendIds),
+  };
+}
+
+/**
+ * 一斉送信。**ここから先は取り消せない。**
+ *
+ * ■ 画面が送ってくる ids は「プレビューで送れると出した相手」
+ *   除外された行（辞退・宛先が壊れている・台帳に無い）は入っていない前提。
+ *   入っていたら、それは台帳が変わったということなので送らない。
+ *
+ * ■ 送信者への警報メールは出さない
+ *   採択通知は alertOperator_ を呼ぶが、あれは押した人が
+ *   結果を見ていない場合があるため。一斉メールは人が画面を見ながら押し、
+ *   失敗はその場に出る。**警報が多すぎると本当の警報が埋もれる**（引き継ぎ書 §6）。
+ */
+function adminBroadcastSend_(auth, payload) {
+  payload = payload || {};
+  if (payload.confirm !== true) {
+    return { ok: false, error: 'not_confirmed', message: '送信の確認が取れていません。' };
+  }
+
+  var subject = String(payload.subject == null ? '' : payload.subject);
+  var body = String(payload.body == null ? '' : payload.body);
+
+  // 文面の検査は**ロックを取る前**に済ませる（持ったまま抜けないように）
+  var errs = broadcastValidate_(subject, body);
+  if (errs.length) {
+    return { ok: false, error: 'bad_template', errors: errs,
+      message: '文面に問題があるため、1通も送っていません：' + errs.join(' ／ ') };
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_WAIT_MS)) return { ok: false, error: 'busy' };
+
+  try {
+    var L = readLedger_();
+    var picked = broadcastRows_(L, payload.ids);
+
+    // ■ プレビューのあとに台帳が変わっていないか
+    //   札は「画面に出したもの」を縛るが、**台帳のほうが変わる**ことは縛れない。
+    //   プレビューのあとに辞退へ変わった行に「当日のご案内」が届くのが、
+    //   いちばん起きやすくて、いちばんまずい形
+    var lost = picked.missing.slice();
+    picked.blocked.forEach(function (r) {
+      lost.push(r.id + '（' + r.status + '）');
+    });
+    picked.invalid.forEach(function (r) { lost.push(r.id + '（宛先）'); });
+    if (lost.length) {
+      return { ok: false, error: 'changed',
+        message: 'プレビューのあとに、対象が変わりました。'
+               + 'もう一度プレビューをやり直してください。（変わった：'
+               + lost.join('、') + '）' };
+    }
+    if (!picked.rows.length) {
+      return { ok: false, error: 'empty', message: '送信対象がありません。' };
+    }
+    if (picked.rows.length > BROADCAST_BATCH_MAX) {
+      return { ok: false, error: 'too_many',
+        message: '一度に送れるのは' + BROADCAST_BATCH_MAX + '件までです（いま'
+               + picked.rows.length + '件）。分けてお送りください。' };
+    }
+
+    // ■ 札を使う。**一度きり**
+    //   ここまでの検査を通ってから消費する（台帳が変わっていただけなら、
+    //   札を無駄にせずプレビューし直せる）
+    var sendIds = picked.rows.map(function (r) { return r.id; });
+    if (!broadcastUseTicket_(payload.ticket, subject, body, sendIds)) {
+      return { ok: false, error: 'stale',
+        message: 'この内容は、プレビューで確認したものと違います'
+               + '（または、すでに送信済みです）。'
+               + 'もう一度プレビューをやり直してください。' };
+    }
+
+    // 送る前に残量を確かめる。途中で尽きると、半分だけ届いた状態になる
+    var quota = MailApp.getRemainingDailyQuota();
+    if (quota < sendIds.length) {
+      return { ok: false, error: 'quota',
+        message: '本日の送信可能数が足りません（残り' + quota + '通／対象'
+               + sendIds.length + '件）。明日あらためてお試しください。' };
+    }
+
+    // ■ 記録してから送る（gas/Notify.gs とは逆。broadcastLog_ の説明を参照）
+    var now = new Date();
+    var sh = sheet_(SHEET.BROADCAST);
+    var sendId = broadcastSendId_(sh, now);
+    var logRow = broadcastLog_(sh, sendId, now, auth && auth.person,
+                               subject, body, sendIds);
+    SpreadsheetApp.flush();
+
+    var opt = mailOptions_();
+    var sent = [], failed = [];
+
+    picked.rows.forEach(function (r) {
+      try {
+        var mail = broadcastBuild_(r, subject, body);
+        GmailApp.sendEmail(r.email, mail.subject, mail.body, opt);
+        sent.push(r.id);
+      } catch (e) {
+        logError_('adminBroadcastSend_:' + r.id, e);
+        failed.push({ id: r.id, company: r.company,
+                      reason: String((e && e.message) || e).slice(0, 200) });
+      }
+    });
+
+    broadcastLogResult_(sh, logRow,
+      '成功' + sent.length + '件'
+      + (failed.length ? ' / 失敗' + failed.length + '件：'
+          + failed.map(function (f) { return f.id; }).join(',') : ''));
+
+    // 変更履歴は**送信ごとに1行**。1通ごとだと50行増えて履歴が埋まる
+    appendHistory(auth && auth.person, '', '一斉メール', '',
+      subject + '（' + sent.length + '件）', sendId);
+
+    return {
+      ok: true,
+      sendId: sendId,
+      sent: sent,
+      failed: failed,
+      message: sent.length + '件を送信しました。'
+        + (failed.length ? '（' + failed.length + '件が失敗しています）' : ''),
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }

@@ -22,6 +22,7 @@ function setup() {
   setupMailTemplateSheet_(ss);
   setupSchedSheet_(ss);   // 制作スケジュール（確認事項の移行を含む）
   setupTimetableSheet_(ss);   // タイムスケジュール（当日の時間割）
+  setupBroadcastSheet_(ss);   // 一斉メールの送信履歴
   ensureDocsFolders_();       // 資料フォルダの区分と、提出物フォルダ（社外秘）
   cleanupOldPriceRows_(ss);   // 単価を移したあとに、設定シートの古い行を片づける
   removeDefaultSheet_(ss);
@@ -39,7 +40,7 @@ function setup() {
   var msg = '台帳の構築が完了しました：'
        + [SHEET.LEDGER, SHEET.CONFIRM, SHEET.HISTORY, SHEET.SPACES, SHEET.CONFIG,
           SHEET.PEOPLE, SHEET.RENTAL, SHEET.SCHED, SHEET.TIMETABLE,
-          SHEET.MAILTPL].join(' / ');
+          SHEET.MAILTPL, SHEET.BROADCAST].join(' / ');
   console.log(msg);
   return msg;
 }
@@ -64,6 +65,29 @@ function setupMailTemplateSheet_(ss) {
   sh.setColumnWidth(5, 120);   // 更新者
   // 本文は長い。折り返さないと、シートを開いた人が中身を確かめられない
   try { sh.getRange(2, 3, Math.max(sh.getMaxRows() - 1, 1), 1).setWrap(true); } catch (e) {}
+  return sh;
+}
+
+/**
+ * 一斉メールの送信履歴。
+ *
+ * **本文を丸ごと残すために、変更履歴とは別のシートにする**
+ * （変更履歴のセルには長さの上限がある）。
+ * 「いつ・誰が・誰に・何を送ったか」を後から読めないと、
+ * 事業者からの問い合わせに答えられない。
+ */
+function setupBroadcastSheet_(ss) {
+  var sh = getOrCreate_(ss, SHEET.BROADCAST);
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, BROADCAST_HEAD.length).setValues([BROADCAST_HEAD]);
+  }
+  styleHeader_(sh, BROADCAST_HEAD.length);
+  [120, 130, 100, 300, 640, 80, 260, 200]
+    .forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  // 本文は長い。折り返さないと、シートを開いた人が中身を確かめられない
+  try { sh.getRange(2, 5, Math.max(sh.getMaxRows() - 1, 1), 1).setWrap(true); } catch (e) {}
+  sh.getRange('A1').setNote('管理ページの「メール送信」タブから自動で書き込まれます。'
+    + '手で消すと、同じ件名を続けて送ろうとしたときの確認が働かなくなります。');
   return sh;
 }
 

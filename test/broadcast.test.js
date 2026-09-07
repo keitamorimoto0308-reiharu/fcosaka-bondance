@@ -35,7 +35,14 @@ function makeBox(opts) {
   opts = opts || {};
   const history = [];
   const sentTo = [];
+  const sentMail = [];
   const sheets = {};
+  /*
+   * 起きたことを起きた順に並べる。
+   * 「履歴を送信より先に書く」は**順序そのもの**が守りなので、
+   * 結果だけを見る検査では確かめられない（後で書いても結果は同じに見える）。
+   */
+  const ops = [];
 
   /*
    * シートの見出しは、**本番の定義（BROADCAST_HEAD）をそのまま使う**。
@@ -49,6 +56,8 @@ function makeBox(opts) {
         : (box.BROADCAST_HEAD || ['送信ID']);
       sheets[name] = GASBOX.makeSheet(head, (opts.logRows || []).map(r => head.map(h => r[h] || '')));
       sheets[name].name = name;
+      const append = sheets[name].appendRow;
+      sheets[name].appendRow = line => { ops.push('log:' + name); return append(line); };
     }
     return sheets[name];
   };
@@ -75,9 +84,11 @@ function makeBox(opts) {
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
     MailApp: { getRemainingDailyQuota: () => (opts.quota == null ? 1000 : opts.quota) },
     GmailApp: {
-      sendEmail(to) {
+      sendEmail(to, subject, body) {
+        ops.push('send:' + to);
         if (opts.failFor && opts.failFor.indexOf(to) >= 0) throw new Error('送信失敗');
         sentTo.push(to);
+        sentMail.push({ to: to, subject: subject, body: body });
       },
     },
     // ── プロジェクト側
@@ -119,7 +130,9 @@ function makeBox(opts) {
 
   box.__history = history;
   box.__sentTo = sentTo;
+  box.__sentMail = sentMail;
   box.__sheets = sheets;
+  box.__ops = ops;
   return box;
 }
 
@@ -469,5 +482,167 @@ describe('直前の送信との照合（broadcastRecent_）', () => {
     const box = makeBox({ now: new Date(2026, 9, 7, 12, 0) });
     const r = call(box, 'broadcastRecent_', '当日のご案内', ['SB-0001']);
     assert.deepStrictEqual(r.ids, []);
+  });
+});
+
+/*
+ * ■ ここから先は取り消せない
+ *
+ *   守りを1つずつ、別々の検査にする。まとめて1本にすると、
+ *   1つ落ちたときに「どの守りが効かなくなったか」が分からない。
+ */
+describe('送信（adminBroadcastSend_）', () => {
+
+  const LH = ['受付ID', '企業名', '出店名', '担当者氏名', '担当者メール',
+              'ステータス', '割当開始区画', '割当区画数', '搬入予定時刻', '素材トークン'];
+
+  const L = (id, over) => Object.assign({
+    '受付ID': id, '企業名': id + '社', '出店名': '', '担当者氏名': '担当 太郎',
+    '担当者メール': id.toLowerCase() + '@example.com', 'ステータス': '採択',
+    '割当開始区画': '', '割当区画数': '', '搬入予定時刻': '',
+    '素材トークン': 'a'.repeat(32),
+  }, over || {});
+
+  /**
+   * プレビュー → 送信 を通しで走らせる。
+   * **札は本物のプレビューから受け取る**（検査のためにでっちあげない）。
+   */
+  function run(rows, ids, over, opts) {
+    opts = opts || {};
+    const box = makeBox(Object.assign({ now: new Date(2026, 9, 7, 12, 0) }, opts));
+    const ledger = { headers: LH, rows: rows.map(r => LH.map(h => r[h])) };
+    box.readLedger_ = () => ledger;
+
+    const subject = opts.subject || '当日のご案内';
+    const body = opts.body || '{{お名前}} 様' + NL + 'よろしくお願いいたします。';
+
+    const pre = call(box, 'adminBroadcastPreview_',
+      { person: '小谷', role: '管理者' }, { ids: ids, subject: subject, body: body });
+
+    // プレビューのあとに台帳が変わる状況を作れるようにする
+    if (opts.mutate) opts.mutate(ledger);
+
+    const payload = Object.assign({
+      confirm: true, ids: ids, subject: subject, body: body, ticket: pre.ticket,
+    }, over || {});
+    const res = call(box, 'adminBroadcastSend_', { person: '小谷', role: '管理者' }, payload);
+    return { pre, res, box };
+  }
+
+  test('選んだ相手に送れて、履歴が残る', () => {
+    const r = run([L('SB-0001'), L('SB-0002'), L('SB-0003')], ['SB-0001', 'SB-0003']);
+    assert.strictEqual(r.res.ok, true, JSON.stringify(r.res));
+    assert.deepStrictEqual(r.box.__sentTo, ['sb-0001@example.com', 'sb-0003@example.com']);
+    const log = r.box.__sheets['一斉メール履歴'].grid;
+    assert.strictEqual(log.length, 2, '履歴が1行残っていません');
+    assert.strictEqual(log[1][log[0].indexOf('件名')], '当日のご案内');
+    assert.strictEqual(log[1][log[0].indexOf('宛先の受付ID')], 'SB-0001,SB-0003');
+  });
+
+  /*
+   * 送ったのに記録が無い、が起きるといちばん困る
+   * （問い合わせに答えられない・二重送信の照合もできない）。
+   * 順序そのものが守りなので、起きた順を見る。
+   */
+  test('履歴を、1通も送る前に書く', () => {
+    const r = run([L('SB-0001')], ['SB-0001']);
+    assert.strictEqual(r.box.__ops[0], 'log:一斉メール履歴',
+      '送信より先に履歴を書いていません：' + r.box.__ops.join(' → '));
+  });
+
+  test('確認が無ければ1通も送らない', () => {
+    const r = run([L('SB-0001')], ['SB-0001'], { confirm: false });
+    assert.strictEqual(r.res.error, 'not_confirmed');
+    assert.deepStrictEqual(r.box.__sentTo, []);
+  });
+
+  test('札が無ければ1通も送らない', () => {
+    const r = run([L('SB-0001')], ['SB-0001'], { ticket: '' });
+    assert.strictEqual(r.res.ok, false);
+    assert.deepStrictEqual(r.box.__sentTo, []);
+  });
+
+  test('同じ札で二度目は送らない（二重クリック）', () => {
+    const box = makeBox({ now: new Date(2026, 9, 7, 12, 0) });
+    const ledger = { headers: LH, rows: [L('SB-0001')].map(r => LH.map(h => r[h])) };
+    box.readLedger_ = () => ledger;
+    const pre = call(box, 'adminBroadcastPreview_', { person: '小谷', role: '管理者' },
+      { ids: ['SB-0001'], subject: '件名', body: '本文' });
+    const p = { confirm: true, ids: ['SB-0001'], subject: '件名', body: '本文',
+                ticket: pre.ticket };
+    const a = call(box, 'adminBroadcastSend_', { person: '小谷' }, p);
+    const b = call(box, 'adminBroadcastSend_', { person: '小谷' }, p);
+    assert.strictEqual(a.ok, true, JSON.stringify(a));
+    assert.strictEqual(b.ok, false, '同じ札で2通目が送れています');
+    assert.strictEqual(box.__sentTo.length, 1, '同じ人に2通届いています');
+  });
+
+  test('プレビューのあとに本文を書き換えたら送らない', () => {
+    const r = run([L('SB-0001')], ['SB-0001'], { body: 'すり替えた本文' });
+    assert.strictEqual(r.res.ok, false, '画面で見ていない本文が送れています');
+    assert.deepStrictEqual(r.box.__sentTo, []);
+  });
+
+  test('プレビューのあとに宛先を足したら送らない', () => {
+    const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001'],
+      { ids: ['SB-0001', 'SB-0002'] });
+    assert.strictEqual(r.res.ok, false, '画面で見ていない相手に送れています');
+    assert.deepStrictEqual(r.box.__sentTo, []);
+  });
+
+  /*
+   * 札は「画面に出したもの」を縛るが、**台帳のほうが変わる**ことは縛れない。
+   * プレビューのあとに辞退へ変わった行に「当日のご案内」が届くのが、
+   * いちばん起きやすくて、いちばんまずい形。
+   */
+  test('プレビューのあとに辞退へ変わっていたら、1通も送らない', () => {
+    const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002'], null, {
+      mutate: ledger => { ledger.rows[1][LH.indexOf('ステータス')] = '辞退'; },
+    });
+    assert.strictEqual(r.res.ok, false, JSON.stringify(r.res));
+    assert.strictEqual(r.res.error, 'changed');
+    assert.deepStrictEqual(r.box.__sentTo, [], '辞退した会社に送っています');
+    assert.ok(/SB-0002/.test(r.res.message), 'どの会社が変わったかを伝えていません');
+  });
+
+  test('文面に問題があれば1通も送らない', () => {
+    const r = run([L('SB-0001')], ['SB-0001'], null, { body: '{{担当者}} 様' });
+    assert.strictEqual(r.res.ok, false);
+    assert.deepStrictEqual(r.box.__sentTo, []);
+  });
+
+  test('本日の送信可能数が足りなければ1通も送らない', () => {
+    const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002'], null, { quota: 1 });
+    assert.strictEqual(r.res.error, 'quota');
+    assert.deepStrictEqual(r.box.__sentTo, [], '途中まで送って半分だけ届いています');
+  });
+
+  test('一度に送れる上限を超えたら送らない', () => {
+    const many = [];
+    for (let i = 1; i <= 41; i++) many.push(L('SB-' + String(i).padStart(4, '0')));
+    const r = run(many, many.map(x => x['受付ID']));
+    assert.strictEqual(r.res.ok, false);
+    assert.deepStrictEqual(r.box.__sentTo, []);
+  });
+
+  test('1件失敗しても、残りは送り、失敗を返す', () => {
+    const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002'], null,
+      { failFor: ['sb-0001@example.com'] });
+    assert.strictEqual(r.res.ok, true, JSON.stringify(r.res));
+    assert.deepStrictEqual(r.res.sent, ['SB-0002']);
+    assert.deepStrictEqual(r.res.failed.map(f => f.id), ['SB-0001']);
+  });
+
+  test('差し込みが解決された本文が届く（原文ではない）', () => {
+    const r = run([L('SB-0001', { '担当者氏名': '花園 花子' })], ['SB-0001']);
+    assert.ok(r.box.__sentMail[0].body.indexOf('花園 花子 様') >= 0,
+      '差し込みが解決されないまま届いています：' + r.box.__sentMail[0].body);
+    assert.ok(r.box.__sentMail[0].body.indexOf('{{') < 0);
+  });
+
+  test('変更履歴にも1行残る（1通ごとではなく、送信ごとに1行）', () => {
+    const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002']);
+    assert.strictEqual(r.box.__history.length, 1,
+      '変更履歴の行数が送信ごとに1行になっていません：' + r.box.__history.length);
   });
 });

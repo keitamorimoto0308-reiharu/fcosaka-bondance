@@ -1768,7 +1768,11 @@ function adminDispatch_(payload) {
                    // 単価はお金の話。一般権限には触らせない
                    'adminRental', 'adminRentalSave', 'adminRentalDisable',
                    // 文面を変えると、50社に届く文が変わる。管理者だけに限る
-                   'adminMailTemplate', 'adminMailTemplateSave', 'adminMailTemplateReset'];
+                   'adminMailTemplate', 'adminMailTemplateSave', 'adminMailTemplateReset',
+                   // 一斉メール。仕様書 §6-2 の権限表で管理者のみ。
+                   // **プレビューも管理者のみ**にする。あれは選んだ全社の
+                   // 氏名と宛先を返すので、送信を止めても名簿がそのまま出る
+                   'adminBroadcastPreview', 'adminBroadcastSend'];
   if (adminOnly.indexOf(action) >= 0 && auth.role !== '管理者') {
     return { ok: false, error: 'forbidden', message: 'この操作は管理者のみです。' };
   }
@@ -1805,6 +1809,9 @@ function adminDispatch_(payload) {
     case 'adminSchedImportRead':   return adminSchedImportRead_(auth, payload);
     case 'adminSchedImportApply':  return adminSchedImportApply_(auth, payload);
     case 'adminConfirmSave':  return adminConfirmSave_(auth, payload);
+    // 一斉メール。**adminOnly に入れる**（下の一覧を参照）
+    case 'adminBroadcastPreview': return adminBroadcastPreview_(auth, payload);
+    case 'adminBroadcastSend':    return adminBroadcastSend_(auth, payload);
     case 'adminMailTemplate':      return adminMailTemplate_(auth, payload);
     case 'adminMailTemplateSave':  return adminMailTemplateSave_(auth, payload);
     case 'adminMailTemplateReset': return adminMailTemplateReset_(auth, payload);

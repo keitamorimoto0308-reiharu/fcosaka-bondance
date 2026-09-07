@@ -138,6 +138,11 @@ function makeUtilities(opts) {
       const p = n => String(n).padStart(2, '0');
       const ymd = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
       if (fmt === 'yyyy-MM-dd') return ymd;
+      // 本物は書式をそのまま解釈する。知らない書式を既定値で返すと、
+      // **代役だけが違う文字列を返す**（優しいのではなく、単に間違い）。
+      // 送信IDの日付部分がここを通るので、揃っていないと検査が嘘になる
+      if (fmt === 'yyyyMMdd') return String(d.getFullYear())
+        + p(d.getMonth() + 1) + p(d.getDate());
       if (fmt === 'HH:mm') return p(d.getHours()) + ':' + p(d.getMinutes());
       return ymd + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
     },
