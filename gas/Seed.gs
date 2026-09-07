@@ -190,3 +190,33 @@ function seedTestData(n) {
   console.log('デモが終わったら、出店者一覧の「テストデータの一括削除」で消してください。');
   return { ok: true, added: done.length, receiptIds: done };
 }
+
+/**
+ * 管理ページから：テストデータを入れる。
+ *
+ * ■ なぜ画面から押せるようにするか
+ *   2026-09-07 けいた指示：「管理ページにつけて」。
+ *   Apps Script の editor を開いて、関数の一覧から選んで実行する——
+ *   これは人に頼める手順ではない。
+ *   削除（出店者一覧の「テストデータの一括削除」）と同じ場所・同じ鍵にする。
+ *
+ * ■ 中身は写さない
+ *   `seedTestData()` をそのまま呼ぶ。ここに書き直すと、
+ *   editor から実行したときと画面から押したときで振る舞いが分かれる。
+ *
+ * ■ 断るときは、例外ではなく理由を返す
+ *   editor では例外でよい（赤く出る）が、画面には
+ *   `{ ok:false, message }` で返さないと「読み取れませんでした」としか出せない。
+ *   直せない断り方は、断っていないのと同じ。
+ */
+function adminSeedTestData_(auth, payload) {
+  try {
+    var n = payload && payload.count;
+    var r = seedTestData(n === undefined || n === null || n === '' ? undefined : n);
+    return { ok: true, added: r.added, receiptIds: r.receiptIds,
+             message: 'テストデータを ' + r.added + ' 件入れました。'
+                    + 'デモが終わったら「テストデータの一括削除」で消してください。' };
+  } catch (e) {
+    return { ok: false, error: 'seed_failed', message: (e && e.message) || String(e) };
+  }
+}

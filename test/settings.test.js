@@ -30,6 +30,10 @@ function load() {
     '要対応_経過日数': '3',
     '担当社員への結果通知': 'ON',
     '問い合わせメール': 'a@example.com',
+    // 本番の設定シートにある行は、代役にも置く。
+    // 行が無いと「書き込めなかった」のか「断られた」のか見分けられない
+    'テストデータの削除': 'OFF',
+    '事務局の連絡先': '事務局（a@example.com）',
     '管理者パスワード': 'admin-password-0123456789',
     '一般パスワード': 'staff-password-0123456789',
   };
@@ -72,7 +76,8 @@ function load() {
   box.globalThis = box;
 
   const src = read('Admin.gs');
-  for (const marker of ['var SETTING_KEYS_', 'var PASSWORD_KEYS_',
+  // safeCellText_ も要る（設定の text をシートに書く前に通す）
+  for (const marker of ['function safeCellText_', 'var SETTING_KEYS_', 'var PASSWORD_KEYS_',
                         'function adminSettings_', 'function checkSetting_',
                         'function adminSettingsSave_']) {
     const start = src.indexOf(marker);
@@ -186,7 +191,10 @@ describe('設定：数と選択肢', () => {
     // 20番が割り当て済みなのに総数を10にすると、その割当が消える
     const A = load();
     const r = plain(A.adminSettingsSave_(ME, { values: { '区画総数': '10' } }));
-    assert.strictEqual(r.error, 'bad_value');
+    // 落ちたときの文は、この検査だけのものにする
+    // （test/break_settings.py がどの歯止めか見分けるため）
+    assert.strictEqual(r.error, 'bad_value',
+      '割り当て済みより小さい総数が通りました');
     assert.ok(/20/.test(r.message), '何番が消えるのかを伝えていません');
     assert.strictEqual(WRITES.length, 0);
   });
@@ -250,5 +258,86 @@ describe('設定：一覧に無い項目は触らせない', () => {
     assert.ok(m, 'adminOnly の定義が見つかりません');
     assert.ok(m[1].includes('adminSettings'), '設定の閲覧が管理者限定になっていません');
     assert.ok(m[1].includes('adminSettingsSave'), '設定の保存が管理者限定になっていません');
+  });
+});
+
+/*
+ * 2026-09-07 けいた報告：
+ * 「テストデータの一括削除を許可のボタンをONにして保存しても
+ *   不明な項目ですと出て保存されません」
+ *
+ * 原因は、`checkSetting_` に **text 型の分岐が無かった**こと。
+ * 画面は全項目をまとめて送るので、text の項目が1つ混ざっているだけで
+ * **どの設定も1件も保存できない**。「テストデータの削除」は巻き添えだった。
+ */
+describe('設定：全部の型を保存できる', () => {
+
+  test('SETTING_KEYS_ の型は、全部 checkSetting_ が扱える', () => {
+    /*
+     * ここが本体。項目を足すときに型を新しくすると、
+     * **その項目だけでなく、設定タブ全体が保存できなくなる。**
+     * 型の一覧どうしを突き合わせる。
+     */
+    const A = load();
+    const kinds = [...new Set(A.SETTING_KEYS_.map(d => d.type))];
+    const bad = kinds.filter(t => {
+      const r = A.checkSetting_({ key: 'x', label: 'x', type: t, allowBlank: true }, 'あ');
+      return r && r.message === '不明な項目です。';
+    });
+    assert.deepStrictEqual(bad, [],
+      'checkSetting_ が扱えない型があります: ' + bad.join(', ')
+      + '（この型の項目が1つあるだけで、設定タブ全体が保存できなくなります）');
+  });
+
+  test('事務局の連絡先（text）を保存できる', () => {
+    const A = load();
+    const r = plain(A.adminSettingsSave_(ME, { values: {
+      '事務局の連絡先': '実行委員会事務局（森本啓太／a@example.com）' } }));
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    // 書き込みは WRITES に積まれる（この検査の代役シートの作り）
+    assert.strictEqual(WRITES.length, 1, '書き込んでいません');
+    assert.strictEqual(WRITES[0].value,
+      '実行委員会事務局（森本啓太／a@example.com）');
+  });
+
+  test('text の項目が混ざっていても、ON/OFF が保存できる', () => {
+    // けいたが実際に踏んだ形。画面は全項目をまとめて送る
+    const A = load();
+    const r = plain(A.adminSettingsSave_(ME, { values: {
+      'テストデータの削除': 'ON',
+      '事務局の連絡先': '事務局（a@example.com）' } }));
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    const on = WRITES.filter(w => w.value === 'ON');
+    assert.strictEqual(on.length, 1, 'ON にできていません（巻き添えで断られています）');
+  });
+
+  test('1つでも通らなければ、1件も書かない', () => {
+    /*
+     * 通ったものだけ書く形にすると、**一部だけ保存された**状態が生まれる。
+     * 画面は全項目をまとめて送るので、どれが書かれたのか人には分からない。
+     */
+    const A = load();
+    const r = plain(A.adminSettingsSave_(ME, { values: {
+      '区画総数': '60',            // これは通る
+      '締切日時': 'こわれた書き方' } }));   // これは通らない
+    assert.strictEqual(WRITES.length, 0,
+      '通らない項目が混ざっているのに、書き込んでいます');
+    assert.strictEqual(r.ok, false);
+  });
+
+  test('text も、長すぎるものは断る', () => {
+    const A = load();
+    const r = plain(A.adminSettingsSave_(ME, { values: {
+      '事務局の連絡先': 'あ'.repeat(400) } }));
+    assert.strictEqual(r.ok, false, '長すぎるものが通りました');
+    assert.match(r.message, /長すぎます/);
+  });
+
+  test('text は、数式として解釈される形を持ち込ませない', () => {
+    // 設定はシートのセルに書かれる。= で始まると数式になる
+    const A = load();
+    A.adminSettingsSave_(ME, { values: { '事務局の連絡先': '=1+1' } });
+    assert.ok(WRITES.length === 0 || String(WRITES[0].value).indexOf('=') !== 0,
+      'シートに数式として書き込まれます');
   });
 });

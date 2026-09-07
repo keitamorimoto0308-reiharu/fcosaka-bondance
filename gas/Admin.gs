@@ -1417,6 +1417,30 @@ function checkSetting_(def, raw) {
     return { value: v };
   }
 
+  /*
+   * ふつうの文字。
+   *
+   * **これが無いために、設定タブが丸ごと保存できなくなっていた**
+   * （2026-09-07 けいた報告：「ONにして保存しても不明な項目ですと出る」）。
+   * 画面は**全項目をまとめて送る**ので、text の項目が1つ混ざっているだけで
+   * `adminSettingsSave_` の「1つでも通らなければ1件も書かない」が働き、
+   * 関係のない ON/OFF まで巻き添えで断られていた。
+   *
+   * 型を足すときは checkSetting_ にも足す。
+   * それを忘れないように、test/settings.test.js が
+   * SETTING_KEYS_ の型と、ここで扱える型を突き合わせている。
+   */
+  if (def.type === 'text') {
+    if (!v) {
+      if (def.allowBlank) return { value: '' };
+      return { message: def.label + 'は空にできません。' };
+    }
+    if (v.length > 300) return { message: def.label + 'が長すぎます。' };
+    // 数式よけ（safeCellText_）は**書き込むところで通している**（adminSettingsSave_）。
+    // ここで二重に通すと、守りが2か所に散って、どちらが本体か分からなくなる
+    return { value: v };
+  }
+
   if (def.type === 'email') {
     if (!v) return { message: def.label + 'は空にできません。' };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
@@ -1735,6 +1759,8 @@ function adminDispatch_(payload) {
                    'adminInbox', 'adminNotifyPreview', 'adminNotifySend',
                    // 資料の削除は管理者のみ（一覧と追加は一般もできる・§6-1）
                    'adminDocsDelete', 'adminPurgePreview', 'adminPurgeRun',
+                   // テストデータの投入は、削除と対の道具。同じく管理者のみ
+                   'adminSeedTestData',
                    'adminConfirmSave',
                    // 単価はお金の話。一般権限には触らせない
                    'adminRental', 'adminRentalSave', 'adminRentalDisable',
@@ -1784,6 +1810,8 @@ function adminDispatch_(payload) {
     case 'adminRentalDisable': return adminRentalDisable_(auth, payload);
     case 'adminPurgePreview': return adminPurgePreview_(auth);
     case 'adminPurgeRun':     return adminPurgeRun_(auth, payload);
+    // デモ用のテストデータを入れる（gas/Seed.gs）。削除と対の道具
+    case 'adminSeedTestData': return adminSeedTestData_(auth, payload);
     case 'adminSettings':     return adminSettings_(auth);
     case 'adminSettingsSave': return adminSettingsSave_(auth, payload);
     case 'adminPeople':     return adminPeople_(auth);

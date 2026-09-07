@@ -190,3 +190,118 @@ describe('テストデータの投入', () => {
     assert.strictEqual(b.appended.length, 0);
   });
 });
+
+/*
+ * 管理ページからの入口（2026-09-07 けいた指示「管理ページにつけて」）。
+ *
+ * Apps Script の editor を開いて関数を選んで実行、は人に頼めない手順だった。
+ * 削除ボタンと同じ場所・同じ鍵で押せるようにする。
+ */
+describe('管理ページからの投入', () => {
+
+  test('adminSeedTestData_ は、seedTestData を呼ぶだけ', () => {
+    // 中身を写すと、editor から実行したときと画面から押したときで
+    // 振る舞いが分かれる（この案件が繰り返し避けてきた形）
+    const src = read('gas/Seed.gs');
+    assert.ok(src.indexOf('function adminSeedTestData_') >= 0,
+      '管理ページからの入口がありません');
+    const s = src.indexOf('function adminSeedTestData_');
+    const f = src.slice(s, src.indexOf('\n}\n', s));
+    assert.match(f, /seedTestData\(/, '本体を呼んでいません');
+  });
+
+  test('断るときは、例外ではなく理由を返す（画面が読める形）', () => {
+    /*
+     * editor から実行するときは例外でよい（赤く出る）。
+     * 画面から押すときは、`{ ok:false, message }` でないと
+     * 「読み取れませんでした」としか出せない。
+     */
+    const b = makeBox({ config: { 'テストデータの削除': 'OFF' } });
+    b.box.__auth = { person: '山田 太郎', role: '管理者' };
+    const r = JSON.parse(JSON.stringify(
+      vm.runInContext('adminSeedTestData_(__auth, {})', b.box)));
+    assert.strictEqual(r.ok, false, 'OFFなのに入れました');
+    assert.match(r.message, /テストデータの一括削除を許可/, '理由が読めません');
+    assert.strictEqual(b.appended.length, 0);
+  });
+
+  test('入れられたら、件数と受付IDを返す', () => {
+    const b = makeBox({ config: { 'テストデータの削除': 'ON' } });
+    b.box.__auth = { person: '山田 太郎', role: '管理者' };
+    const r = JSON.parse(JSON.stringify(
+      vm.runInContext('adminSeedTestData_(__auth, { count: 3 })', b.box)));
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.strictEqual(r.added, 3);
+    assert.match(r.message, /3 件/, '何件入ったかを言っていません');
+  });
+
+  test('件数が読み取れなくても、例外を投げない', () => {
+    // 画面から変な値が来ても、白い画面にしない
+    const b = makeBox({ config: { 'テストデータの削除': 'ON' } });
+    b.box.__auth = { person: '山田 太郎', role: '管理者' };
+    const r = JSON.parse(JSON.stringify(
+      vm.runInContext('adminSeedTestData_(__auth, { count: "たくさん" })', b.box)));
+    assert.strictEqual(r.ok, false, '読み取れない件数が通りました');
+    assert.match(r.message, /件数/);
+  });
+
+  test('管理者だけが呼べる（一般権限には出さない）', () => {
+    // gas/Admin.gs の adminOnly に入っていること
+    const admin = read('gas/Admin.gs');
+    const s = admin.indexOf('var adminOnly = [');
+    const list = admin.slice(s, admin.indexOf('];', s));
+    assert.ok(list.indexOf("'adminSeedTestData'") >= 0,
+      'adminSeedTestData が管理者専用になっていません');
+  });
+
+  test('入口が登録されている（画面から呼べる）', () => {
+    const admin = read('gas/Admin.gs');
+    assert.match(admin, /case 'adminSeedTestData':\s*return adminSeedTestData_\(auth, payload\);/,
+      '入口が登録されていません（画面から呼んでも届きません）');
+  });
+});
+
+describe('管理ページの画面（ボタン）', () => {
+  const A = read('src/build-admin.js');
+
+  test('入れるボタンがある', () => {
+    assert.ok(A.indexOf('id="seedBox"') >= 0, 'テストデータを入れる箱がありません');
+    assert.ok(A.indexOf('id="seedRun"') >= 0, '入れるボタンがありません');
+  });
+
+  test('削除と同じ鍵で、同時に出し入れする', () => {
+    /*
+     * 片方だけ出ていると「入れたのに消せない」「消せるのに入れられない」になる。
+     * 開け閉ての判断は1か所（loadPurgeBox）にまとめる。
+     */
+    const s = A.indexOf('function loadPurgeBox()');
+    const f = A.slice(s, A.indexOf('\n}\n', s));
+    assert.match(f, /\$\('#seedBox'\)\.hidden = !on \|\| S\.role !== '管理者';/,
+      '入れる側が、削除と同じ鍵で開け閉めされていません');
+  });
+
+  test('押す前に確認する', () => {
+    // 本番の台帳に行が入る。「試しに押してみた」で入らないようにする
+    const s = A.indexOf('function seedRun()');
+    const f = A.slice(s, A.indexOf('\n}\n', s));
+    assert.match(f, /if \(!confirm\(/, '押す前に止めていません');
+    assert.match(f, /8社/, '何件入るかを言っていません');
+  });
+
+  test('入れたあと、一覧を読み直す', () => {
+    // 押しただけで何も変わらないように見せない
+    const s = A.indexOf('function seedRun()');
+    const f = A.slice(s, A.indexOf('\n}\n', s));
+    assert.match(f, /loadList\(\);/, '一覧を読み直していません');
+  });
+
+  test('赤くしない（取り返しがつくものを、つかない色で出さない）', () => {
+    /*
+     * 消す側（.purge）は赤い枠。入れる側まで赤くすると、
+     * 赤の意味が薄れて、消す側の警告が効かなくなる。
+     */
+    const flat = A.split(String.fromCharCode(10)).join('');
+    assert.match(flat, /\.seed\{[^}]*border:1px solid var\(--border\)/,
+      '入れる側が、消す側と同じ見た目になっています');
+  });
+});

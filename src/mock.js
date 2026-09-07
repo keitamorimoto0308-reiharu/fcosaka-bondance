@@ -1770,6 +1770,59 @@ function handle(payload) {
       return { ok: true, cleared, spaces, folders, backupUrl, ids: live };
     }
 
+    /*
+     * デモ用テストデータの投入（本番は gas/Seed.gs）。**削除と対の道具。**
+     *
+     * 歯止めは本番と同じ3つ：
+     *   1. 管理者だけ
+     *   2. 設定の「テストデータの削除」がONのときだけ
+     *      （あとで消せない状態で入れられる道を作らない）
+     *   3. 本物の応募が1件でもあれば断る
+     *      （混ざると、一括削除で本物まで消える）
+     *
+     * **模擬には最初から8件の見本が入っている。**
+     * それは「本物の応募」として数えるので、ここは 3 で断る。
+     * 断られること自体が正しい動きなので、そのままにする。
+     * 通しで試すときは、先に一括削除で空にしてから押す。
+     */
+    case 'adminSeedTestData': {
+      if (auth.role !== '管理者') return { ok: false, error: 'forbidden',
+        message: 'この操作は管理者のみです。' };
+      if (String(DB.settings['テストデータの削除'] || 'OFF') !== 'ON') {
+        return { ok: false, error: 'disabled',
+          message: '「設定」タブの「テストデータの一括削除を許可」をONにしてから'
+                 + '実行してください。'
+                 + '（あとで消せない状態でテストデータを入れないための決まりです）' };
+      }
+      const real = DB.rows
+        .map(r => String(r['企業名'] || '').trim())
+        .filter(nm => nm && nm.indexOf('【テスト】') !== 0);
+      if (real.length) {
+        return { ok: false, error: 'has_real',
+          message: '本物の応募が ' + real.length + ' 件あります（' + real[0] + ' など）。'
+                 + 'テストデータは入れません。' };
+      }
+      const want = (payload && payload.count !== undefined && payload.count !== null
+                    && payload.count !== '') ? Number(payload.count) : 8;
+      if (!isFinite(want) || want < 1 || want !== Math.floor(want)) {
+        return { ok: false, error: 'bad_count', message: '件数が読み取れません。' };
+      }
+      const n = Math.min(want, 8);
+      const ids = [];
+      for (let k = 0; k < n; k++) {
+        const i = DB.rows.length + 1;
+        const row = mkRow(i);
+        row['企業名'] = '【テスト】' + row['企業名'];
+        row['担当者メール'] = 'test' + i + '@example.com';
+        row['担当者電話'] = '000-0000-' + String(i).padStart(4, '0');
+        DB.rows.push(row);
+        ids.push(row['受付ID']);
+      }
+      return { ok: true, added: n, receiptIds: ids,
+               message: 'テストデータを ' + n + ' 件入れました。'
+                      + 'デモが終わったら「テストデータの一括削除」で消してください。' };
+    }
+
     // 枚数の打ち込み（管理者のみ）。本番 adminConfirmSave_ と同じ歯止め
     case 'adminConfirmSave': {
       if (auth.role !== '管理者') return { ok: false, error: 'forbidden',

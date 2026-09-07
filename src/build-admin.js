@@ -290,6 +290,14 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .totals .card .sub{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.6}
 .totals .card.partial .sub{color:#B5714C}
 /* テストデータの一括削除。目立たせるが、押しやすくはしない */
+/* 入れる側。消す側（.purge）と対だが、**赤くしない**。
+   取り返しがつくもの（あとで消せる）を、つかない色で出すと
+   赤の意味が薄れて、消す側の警告が効かなくなる */
+.seed{margin-top:16px;border:1px solid var(--border)}
+.seed h3{margin:0 0 8px;font-size:14px}
+.seed .pnote.warn{background:#FDF2F0;color:var(--error);margin-top:10px}
+.seed button{margin-top:4px}
+
 .purge{margin-top:16px;border:1px solid var(--error)}
 .purge h3{margin:0 0 8px;font-size:14px;color:var(--error)}
 .purge .pnote.warn{background:#FDF2F0;color:var(--error);margin-top:10px}
@@ -1551,8 +1559,53 @@ function loadPurgeBox(){
   api('adminPurgePreview').then(function(r){
     var on = !!(r && r.ok);
     $('#purgeBox').hidden = !on || S.role !== '管理者';
+    // 入れる側も、同じ鍵で開け閉めする。
+    // 片方だけ出ていると「入れたのに消せない」「消せるのに入れられない」になる
+    $('#seedBox').hidden = !on || S.role !== '管理者';
     if (!on) purgeForget('');
-  }, function(){ $('#purgeBox').hidden = true; });
+  }, function(){
+    $('#purgeBox').hidden = true;
+    $('#seedBox').hidden = true;
+  });
+}
+
+/**
+ * テストデータを入れる。
+ *
+ * **押す前に止める。**本番の台帳に行が入るので、
+ * 「試しに押してみた」で入ってしまわないようにする。
+ */
+function seedRun(){
+  if (!confirm('デモ用のテストデータを 8社 入れます。\\n\\n'
+      + '・企業名は「【テスト】…」で始まります\\n'
+      + '・メールは送りません\\n'
+      + '・あとで「テストデータの一括削除」で消せます\\n\\n'
+      + 'よろしいですか？')) return;
+
+  var btn = $('#seedRun'), msg = $('#seedMsg');
+  btn.disabled = true;
+  msg.hidden = false;
+  msg.className = 'pnote';
+  msg.textContent = '入れています…';
+
+  api('adminSeedTestData', {}).then(function(r){
+    btn.disabled = false;
+    if (!r || !r.ok){
+      msg.className = 'pnote warn';
+      msg.textContent = (r && r.message) || '入れられませんでした。';
+      return;
+    }
+    msg.className = 'pnote';
+    msg.textContent = r.message;
+    toast('テストデータを ' + r.added + ' 件入れました');
+    // 一覧・集計・区画の割当を読み直す。押しただけで何も変わらないように見せない
+    loadList(); loadSummary(); loadPurgeBox();
+  }, function(e){
+    btn.disabled = false;
+    msg.className = 'pnote warn';
+    msg.textContent = '通信に失敗しました。もう一度お試しください。';
+    netFail(e, 'テストデータを入れられませんでした');
+  });
 }
 
 /** 控えを捨てて、②の欄を閉じる。もう一度①からやり直しになる */
@@ -3694,6 +3747,7 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#rentalNew').addEventListener('click', function(){ editRental(0); });
   $('#rSave').addEventListener('click', saveRental);
   $('#rCancel').addEventListener('click', function(){ $('#rentalForm').hidden = true; });
+  $('#seedRun').addEventListener('click', seedRun);
   $('#purgeCheck').addEventListener('click', purgeCheck);
   $('#purgeRun').addEventListener('click', purgeRun);
   $('#todoSave').addEventListener('click', saveTodo);
@@ -6570,6 +6624,22 @@ function html() {
 
       <!-- テストデータの一括削除。設定でONにしたときだけ出る（管理者のみ）。
            取り返しのつかない操作なので、3段階で押させる -->
+      <!-- 入れる側。削除と対の道具なので、同じ場所・同じ鍵にする。
+           Apps Script の editor を開いて関数を選んで実行、は人に頼めない
+           （2026-09-07 けいた指示「管理ページにつけて」） -->
+      <div class="panel seed admin-only" id="seedBox" hidden>
+        <h3>デモ用のテストデータを入れる</h3>
+        <p class="pnote">
+          嘘の出店者を <b>8社</b> 入れます。企業名は「【テスト】…」、
+          メールは example.com なので、<b>本物と見分けが付きます。</b>
+          <b>メールは送りません。</b><br>
+          本物の応募が1件でもあると入りません（混ざると、下の一括削除で
+          本物まで消えてしまうため）。
+        </p>
+        <button class="ghost" id="seedRun">テストデータを入れる</button>
+        <p class="pnote" id="seedMsg" hidden></p>
+      </div>
+
       <div class="panel purge admin-only" id="purgeBox" hidden>
         <h3>テストデータの一括削除</h3>
         <p class="pnote">

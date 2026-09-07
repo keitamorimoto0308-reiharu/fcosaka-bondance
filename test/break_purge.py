@@ -235,6 +235,35 @@ CASES = [
          '  if (!isFinite(want) || want < 1) want = rows.length;'),
     ], '件数が読み取れません'),
 
+    # 管理ページからの入口（2026-09-07「管理ページにつけて」）
+    ('入口を、管理者専用から外す', [
+        ('gas/Admin.gs', "                   'adminSeedTestData',", '                   '),
+    ], 'adminSeedTestData が管理者専用になっていません'),
+
+    ('入口の登録を消す（画面から押しても届かない）', [
+        ('gas/Admin.gs', "    case 'adminSeedTestData': return adminSeedTestData_(auth, payload);",
+         "    case 'adminSeedTestDataX': return adminSeedTestData_(auth, payload);"),
+    ], '入口が登録されていません'),
+
+    # 断る理由をそのまま返さないと、画面には「入れられませんでした」しか出せない。
+    # 何を直せばいいのか分からない断り方は、断っていないのと同じ
+    ('断る理由を、そのまま返さないようにする', [
+        ('gas/Seed.gs', "message: (e && e.message) || String(e) };",
+         "message: '入れられませんでした。' };"),
+    ], '理由が読めません'),
+
+    # 片方だけ出ていると「入れたのに消せない」になる
+    ('入れる側だけ、削除とは別の鍵で開け閉めする', [
+        ('src/build-admin.js', "    $('#seedBox').hidden = !on || S.role !== '管理者';",
+         "    $('#seedBox').hidden = false;"),
+    ], '入れる側が、削除と同じ鍵で開け閉めされていません'),
+
+    # 本番の台帳に行が入る。試し押しで入ってはいけない
+    ('押す前の確認をやめる', [
+        ('src/build-admin.js', "  if (!confirm('デモ用のテストデータを 8社 入れます。",
+         "  if (false && !confirm('デモ用のテストデータを 8社 入れます。"),
+    ], '押す前に止めていません'),
+
     # デモの中身が本物に見えると、うっかり本物として扱われる
     ('テストデータの企業名から、テストの印を外す', [
         ('gas/Seed.gs', "companyName: '【テスト】みどり食堂'", "companyName: 'みどり食堂'"),
