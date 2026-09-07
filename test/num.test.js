@@ -155,6 +155,15 @@ describe('3つの読み取りが、同じ入口を通っているか', () => {
     // 模擬が写しを持つと、「模擬では通るのに本番で弾かれる」がまた起きる
     const mock = read('src/mock.js');
     assert.ok(mock.includes("'Num.gs'"), '模擬が gas/Num.gs を読んでいません');
+    /*
+     * **「NUM.numCount_ がどこかにあるか」では足りない。**
+     * 模擬の別の場所（制作スケジュールの一括削除など）でも使うようになったので、
+     * 写しに戻した箇所があっても、ほかの1件で真になってしまう
+     * （2026-09-07、実際にこの壊し検査が働かなくなった）。
+     * **借りている当人**を名指しで見る。
+     */
+    assert.match(mock, /const confirmCount = t => NUM\.numCount_\(t\);/,
+      '模擬が numCount_ を使っていません');
     ['numCount_', 'numAmount_'].forEach(fn => {
       assert.ok(mock.includes('NUM.' + fn), '模擬が ' + fn + ' を使っていません');
     });
