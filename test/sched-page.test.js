@@ -362,3 +362,43 @@ describe('① 画面：待つあいだと、戻ってきたとき', () => {
       'タブに戻ったときに、下見を見直していません');
   });
 });
+
+describe('① 画面：制作スケジュールの一括削除（2026-09-07）', () => {
+
+  test('管理者だけに出す。行が無ければ出さない', () => {
+    assert.ok(SRC.indexOf('id="schPurge"') >= 0, '一括削除のボタンがありません');
+    assert.match(SRC,
+      /\$\('#schPurge'\)\.hidden = \(S\.role !== '管理者'\) \|\| !SCH\.rows\.length;/,
+      '管理者・行の有無で出し分けていません');
+  });
+
+  test('件数を打ち込ませる（惰性で押せないように）', () => {
+    /*
+     * 惰性よけであると同時に、画面を開いたまま席を立っているあいだに
+     * 他の人が足していたら、見ていない行まで巻き込んで消してしまう。
+     */
+    /*
+     * **「prompt という字があるか」では足りない。**
+     * `if (false) prompt(...)` で囲んでも字は残るので素通りする。
+     * 打ち込んだ値がそのまま使われる形を見る。
+     */
+    const f = noComment(body('function schPurge'));
+    assert.match(f, /var typed = prompt\(/, '件数を打ち込ませていません');
+    assert.match(f, /if \(typed === null\) return;/, 'キャンセルで消しています');
+    assert.match(f, /api\('adminSchedPurge', \{ count: typed \}\)/,
+      '打ち込んだ件数をサーバーに渡していません');
+  });
+
+  test('消したあと、一覧を読み直す', () => {
+    const f = noComment(body('function schPurge'));
+    assert.match(f, /loadSched\(\);/, '一覧を読み直していません');
+    assert.match(f, /変更履歴/, '戻せる場所を伝えていません');
+  });
+
+  test('押し間違えないように、色で分ける', () => {
+    // 「Excelで保存」の隣に同じ見た目で並ぶと押し間違える
+    const flat = SRC.split(String.fromCharCode(10)).join('');
+    assert.match(flat, /\.sch-danger\{[^}]*color:var\(--error\)/,
+      '一括削除が、ほかのボタンと同じ見た目です');
+  });
+});

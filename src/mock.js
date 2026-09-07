@@ -1785,6 +1785,34 @@ function handle(payload) {
      * 断られること自体が正しい動きなので、そのままにする。
      * 通しで試すときは、先に一括削除で空にしてから押す。
      */
+    /*
+     * 制作スケジュールをまとめて空にする（本番は gas/Sched.gs の adminSchedPurge_）。
+     * 取り込みは「消さない」を守るので、消す入口はここだけ。
+     * 歯止めは本番と同じ：管理者だけ／件数が合わなければ1件も消さない／
+     * 消した中身は変更履歴に残す。
+     */
+    case 'adminSchedPurge': {
+      if (auth.role !== '管理者') return { ok: false, error: 'forbidden',
+        message: 'この操作は管理者のみです。' };
+      // 数の読み取りは本番の関数をそのまま呼ぶ。模擬に写しを作らない
+      const n = NUM.numCount_(payload && payload.count);
+      if (n === null) return { ok: false, error: 'bad_value',
+        message: 'いま入っている件数を、半角の数字でご入力ください。' };
+      const live = DB.sched.filter(r => String(r.title || '').trim());
+      if (!live.length) return { ok: false, error: 'empty', message: '消すものがありません。' };
+      if (n !== live.length) {
+        return { ok: false, error: 'bad_count',
+          message: '件数が一致しません。いま ' + live.length + ' 件あります。'
+                 + live.length + ' とご入力ください。' };
+      }
+      DB.history.unshift({ at: nowText(), who: auth.person, id: '（スケジュール）',
+                           item: '一括削除', before: JSON.stringify(live),
+                           after: '', reason: '' });
+      DB.sched = [];
+      siStampSet(SI.box.SCHED_EDIT_KEY_, auth.person);
+      return { ok: true, deleted: live.length };
+    }
+
     case 'adminSeedTestData': {
       if (auth.role !== '管理者') return { ok: false, error: 'forbidden',
         message: 'この操作は管理者のみです。' };

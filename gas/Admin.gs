@@ -1761,6 +1761,9 @@ function adminDispatch_(payload) {
                    'adminDocsDelete', 'adminPurgePreview', 'adminPurgeRun',
                    // テストデータの投入は、削除と対の道具。同じく管理者のみ
                    'adminSeedTestData',
+                   // 制作スケジュールの一括削除。1件ずつの削除は全員できるが、
+                   // まとめて消すのは管理者だけにする
+                   'adminSchedPurge',
                    'adminConfirmSave',
                    // 単価はお金の話。一般権限には触らせない
                    'adminRental', 'adminRentalSave', 'adminRentalDisable',
@@ -1812,6 +1815,8 @@ function adminDispatch_(payload) {
     case 'adminPurgeRun':     return adminPurgeRun_(auth, payload);
     // デモ用のテストデータを入れる（gas/Seed.gs）。削除と対の道具
     case 'adminSeedTestData': return adminSeedTestData_(auth, payload);
+    // 制作スケジュールをまとめて空にする（貼り直す・取り込み直す前に）
+    case 'adminSchedPurge':   return adminSchedPurge_(auth, payload);
     case 'adminSettings':     return adminSettings_(auth);
     case 'adminSettingsSave': return adminSettingsSave_(auth, payload);
     case 'adminPeople':     return adminPeople_(auth);

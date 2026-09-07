@@ -161,6 +161,8 @@ function makeBox(opts) {
   ].join('\n'), box);
 
   vm.runInContext(cutFunction(setup, 'findConfigRow_'), box);
+  // 数の読み取りは gas/Num.gs にまとめてある。写しを作らない
+  vm.runInContext(read('gas/Num.gs'), box);
   vm.runInContext(stamp, box);
   vm.runInContext(sched, box);
   return { box, sheets, history, today };
@@ -1585,5 +1587,118 @@ describe('① IDの無い行に、IDを付ける', () => {
     load(b, '小谷');
     assert.strictEqual(b.sheets['制作スケジュール'].grid[1][16], '',
       '空行にIDを付けました');
+  });
+});
+
+/*
+ * 制作スケジュールの一括削除（2026-09-07 けいた指示・急ぎ）。
+ *
+ * 取り込みは「消さない」を守る（そこを緩めると、Excelの操作ミスが
+ * そのまま台帳の消失になる）。代わりに、**消すための入口を別に作る**。
+ * 空にしてから貼り直す／取り込み直す、という使い方を想定している。
+ */
+describe('① 制作スケジュールの一括削除', () => {
+
+  const rows3 = () => ([
+    ['タスク', '2026-09-20', '', '制作', 'FC大阪', '小谷', 'A', '', '未着手',
+     '', '', 1, '小谷', '2026-09-01', '', '', 'aaaa0001'],
+    ['タスク', '2026-09-21', '', '制作', 'FC大阪', '小谷', 'B', '', '未着手',
+     '', '', 2, '小谷', '2026-09-01', '', '', 'aaaa0002'],
+    ['期間', '2026-09-22', '2026-09-30', '営業', 'FC大阪', '小谷', 'C', '', '',
+     '', '', 3, '小谷', '2026-09-01', '', '', 'aaaa0003'],
+  ]);
+
+  const purge = (b, n, person) => {
+    b.box.__auth = { person: person || '小谷', role: '管理者' };
+    b.box.__payload = { count: n };
+    return JSON.parse(JSON.stringify(
+      vm.runInContext('adminSchedPurge_(__auth, __payload)', b.box) || null));
+  };
+
+  test('件数を打ち込むと、全部消える', () => {
+    const b = makeBox({ rows: rows3() });
+    const r = purge(b, 3);
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.strictEqual(r.deleted, 3);
+    assert.strictEqual(load(b, '小谷').rows.length, 0, '消えていません');
+  });
+
+  test('件数が合わなければ、1件も消さない', () => {
+    /*
+     * **惰性で押せないようにする。**それだけでなく、
+     * 画面を開いたまま席を立っているあいだに他の人が足していたら、
+     * 見ていない行まで巻き込んで消してしまう。
+     */
+    const b = makeBox({ rows: rows3() });
+    const r = purge(b, 2);
+    assert.strictEqual(r.ok, false, '件数が違うのに消えました');
+    assert.match(r.message, /3/, 'いま何件あるのかを伝えていません');
+    assert.strictEqual(load(b, '小谷').rows.length, 3, '断ったのに消しています');
+  });
+
+  test('管理者だけが消せる', () => {
+    const b = makeBox({ rows: rows3() });
+    b.box.__auth = { person: '小谷', role: '一般' };
+    b.box.__payload = { count: 3 };
+    const r = JSON.parse(JSON.stringify(
+      vm.runInContext('adminSchedPurge_(__auth, __payload)', b.box)));
+    assert.strictEqual(r.ok, false, '一般権限で消せました');
+    assert.match(r.message, /管理者/);
+    assert.strictEqual(load(b, '小谷').rows.length, 3);
+  });
+
+  test('消したものは、変更履歴に残す', () => {
+    // 唯一の復元手段。件数だけでは、何を消したのか分からない
+    const b = makeBox({ rows: rows3() });
+    purge(b, 3);
+    const hit = b.history.filter(h => /一括削除/.test(h.item));
+    assert.strictEqual(hit.length, 1, '変更履歴に残っていません');
+    assert.match(hit[0].before, /A/, '消した中身が残っていません');
+    assert.match(hit[0].before, /C/, '一部しか残っていません');
+  });
+
+  test('0件のときは、何もしないと言う', () => {
+    const b = makeBox({ rows: [] });
+    const r = purge(b, 0);
+    assert.strictEqual(r.ok, false, '消すものが無いのに成功と返しました');
+    assert.match(r.message, /ありません/);
+  });
+
+  test('件数が読み取れないときは断る', () => {
+    const b = makeBox({ rows: rows3() });
+    const r = purge(b, 'ぜんぶ');
+    assert.strictEqual(r.ok, false, '読み取れない件数が通りました');
+    assert.strictEqual(load(b, '小谷').rows.length, 3);
+  });
+
+  test('消したことは、最終編集として記録する', () => {
+    const b = makeBox({ rows: rows3() });
+    purge(b, 3, '山田');
+    const r = load(b, '山田');
+    assert.strictEqual(r.stamps.edit.person, '山田', '記録されていません');
+  });
+
+  test('見出しの行は消さない', () => {
+    const b = makeBox({ rows: rows3() });
+    purge(b, 3);
+    const head = b.sheets['制作スケジュール'].grid[0];
+    assert.strictEqual(head[0], '種類', '見出しまで消しました');
+    assert.strictEqual(head[16], 'ID');
+  });
+
+  test('シートを縮めない（中身だけ消す）', () => {
+    /*
+     * ②で「deleteRows がシートを縮め、25回目の保存で台帳が消える」を踏んでいる。
+     * 行そのものは残し、中身だけ消す。
+     */
+    const b = makeBox({ rows: rows3() });
+    // **getMaxRows() で読む。**`.maxRows` は外から見えないので、
+    // そのまま比べると undefined 同士が一致して、何も確かめずに通る
+    const sh = b.sheets['制作スケジュール'];
+    const before = sh.getMaxRows();
+    assert.ok(before > 0, '行数を読めていません');
+    purge(b, 3);
+    assert.strictEqual(sh.getMaxRows(), before,
+      'シートが縮みました（行ごと消しています）');
   });
 });

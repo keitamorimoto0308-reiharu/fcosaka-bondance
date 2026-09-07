@@ -962,3 +962,81 @@ function schedMigrateTodos_(ss) {
              : '（移すものはありませんでした）。'));
   return moved;
 }
+
+/**
+ * 制作スケジュールを、まとめて空にする（管理者のみ）。
+ *
+ * ■ なぜ要るか
+ *   2026-09-07 けいた指示：
+ *   「制作スケジュールを一括で消すか、取り込みの際にエクセルにない
+ *     タスクをすべて消す機能を、時間がないのですぐに実装して」
+ *
+ *   **取り込み側の「消さない」は緩めない。**
+ *   そこを緩めると、Excelの操作ミス（行を消した／フィルタをかけたまま保存した）が
+ *   そのまま台帳の消失になる。消すのは、消すと分かって押す入口からだけにする。
+ *   使い方は「空にしてから、貼り直す／取り込み直す」。
+ *
+ * ■ 歯止め
+ *   1. 管理者だけ
+ *   2. **いま何件あるかを打ち込ませる。**惰性で押せないようにするためだが、
+ *      それ以上に、画面を開いたまま席を立っているあいだに他の人が足していたら、
+ *      見ていない行まで巻き込んで消してしまう。数が合わなければ1件も消さない。
+ *   3. 消した中身は変更履歴に残す（唯一の復元手段）。
+ *      件数だけでは、何を消したのか分からない。
+ *
+ * ■ deleteRows は使わない
+ *   ②で「シートが縮んで25回目の保存が台帳を消す」を踏んでいる。
+ *   中身だけ消して、行そのものは残す。
+ */
+function adminSchedPurge_(auth, payload) {
+  if (!auth || auth.role !== '管理者') {
+    return { ok: false, error: 'forbidden', message: 'この操作は管理者のみです。' };
+  }
+  var want = payload && payload.count;
+  var n = numCount_(want);
+  if (n === null) {
+    return { ok: false, error: 'bad_value',
+             message: 'いま入っている件数を、半角の数字でご入力ください。' };
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_WAIT_MS)) {
+    return { ok: false, error: 'busy',
+             message: 'ほかの方が保存中です。少し待ってから、もう一度お願いします。' };
+  }
+  try {
+    var S = schedRows_();
+    var idx = {};
+    S.headers.forEach(function (h, i) { idx[h] = i; });
+
+    // タスク名のある行だけを数える（下のほうの空行は入れない）
+    var live = [];
+    for (var i = 0; i < S.rows.length; i++) {
+      if (asText_(S.rows[i][idx['タスク名']]).trim()) live.push(S.rows[i]);
+    }
+    if (!live.length) {
+      return { ok: false, error: 'empty', message: '消すものがありません。' };
+    }
+    if (n !== live.length) {
+      return { ok: false, error: 'bad_count',
+               message: '件数が一致しません。いま ' + live.length + ' 件あります。'
+                      + live.length + ' とご入力ください。' };
+    }
+
+    // **消す中身を先に控える。**消してからでは、もう読めない
+    var full = live.map(function (r) { return schedRowObject_(r); });
+
+    var last = S.sheet.getLastRow();
+    if (last >= 2) {
+      S.sheet.getRange(2, 1, last - 1, SCHED_HEADERS_.length).clearContent();
+    }
+    SpreadsheetApp.flush();
+
+    appendHistory(auth.person, '（スケジュール）', '一括削除',
+                  JSON.stringify(full), '', '');
+    schedStampEdit_(auth);
+    return { ok: true, deleted: live.length };
+  } finally {
+    lock.releaseLock();
+  }
+}

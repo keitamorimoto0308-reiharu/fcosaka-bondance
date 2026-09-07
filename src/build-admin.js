@@ -642,6 +642,9 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 .sch-chip{background:#fff;border:1px solid var(--border);border-radius:999px;
   padding:7px 14px;font-size:12.5px;cursor:pointer;color:var(--ink)}
 .sch-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+/* まとめて消すボタン。ほかのボタンと同じ見た目にすると、
+   「Excelで保存」の隣で押し間違える */
+.sch-danger{color:var(--error);border-color:var(--error)}
 .sch-note{font-size:11.5px;color:var(--muted);margin:0 0 14px;line-height:1.7}
 
 /* いま動いている期間の帯 */
@@ -4136,6 +4139,34 @@ function schImpRowForEdit(x){
            memo: r['備考'] || '', id: r['ID'] || '', row: 0 };
 }
 
+/**
+ * 制作スケジュールを、まとめて空にする（管理者のみ）。
+ *
+ * 取り込みは「消さない」を守るので、消すための入口をここに置く
+ * （2026-09-07 けいた指示）。使い方は「空にしてから、貼り直す／取り込み直す」。
+ *
+ * **件数を打ち込ませる。**惰性で押せないようにするためだが、それ以上に、
+ * 画面を開いたまま席を立っているあいだに他の人が足していたら、
+ * 見ていない行まで巻き込んで消すことになる。
+ * 数はサーバー側でも突き合わせるので、画面の数字は守りではなく「意思の確認」。
+ */
+function schPurge(){
+  var n = SCH.rows.length;
+  if (!n){ toast('消すものがありません'); return; }
+
+  var typed = prompt('制作スケジュールの ' + n + ' 件を、すべて消します。'
+    + String.fromCharCode(10) + '元に戻すには、変更履歴から入れ直すことになります。'
+    + String.fromCharCode(10) + String.fromCharCode(10)
+    + '消してよければ、件数「' + n + '」を入力してください。');
+  if (typed === null) return;                       // 「キャンセル」
+
+  api('adminSchedPurge', { count: typed }).then(function(r){
+    if (!r || !r.ok){ toast((r && r.message) || '消せませんでした', true); return; }
+    toast(r.deleted + ' 件を消しました。変更履歴に中身が残っています');
+    loadSched();
+  }, function(e){ netFail(e, '消せませんでした'); });
+}
+
 function loadSched(){
   api('adminSched').then(function(r){
     if (!r || !r.ok){
@@ -4149,6 +4180,9 @@ function loadSched(){
     SCH.stamps = r.stamps || null;
     renderSched();
     schRenderStamps();
+    // まとめて消せるのは管理者だけ。行が1件も無ければ出さない
+    // （押しても「消すものがありません」と言うだけのボタンは、迷いを生む）
+    $('#schPurge').hidden = (S.role !== '管理者') || !SCH.rows.length;
     renderDashTerms();
     // 要対応にも合流させているので、集計が先に来ていれば描き直す
     if (S.summary) renderAlerts();
@@ -4622,6 +4656,7 @@ function bindSched(){
   $('#schExcel').addEventListener('click', function(){
     downloadXlsx('adminSchedExport', '制作スケジュール');
   });
+  $('#schPurge').addEventListener('click', schPurge);
   $('#schImport').addEventListener('click', function(){
     /*
      * **押すたびに選択を空にする。**
@@ -6499,6 +6534,9 @@ function html() {
         <span class="sp"></span>
         <button class="ghost" id="schExcel">Excelで保存</button>
         <button class="ghost" id="schImport">Excelから取り込む</button>
+        <!-- 取り込みは「消さない」を守る（Excelの操作ミスが台帳の消失になるため）。
+             代わりに、消すための入口をここに置く。管理者だけに出す -->
+        <button class="ghost sch-danger admin-only" id="schPurge" hidden>全部消す</button>
         <button class="btn" id="schAdd">＋ タスクを追加</button>
       </div>
       <div class="sch-bar" id="schStatusBox" hidden></div>

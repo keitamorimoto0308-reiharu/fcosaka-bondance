@@ -32,7 +32,15 @@ function makeBox(opts) {
     console: { log() {}, error() {} },
     SHEET: { LEDGER: '出店者' },
     sheet_: name => sheets[name],
-    getConfig: k => (opts.config || {})[k],
+    /*
+     * **本物と同じ形にする。**
+     * getConfig は引数を取らない（設定全部を返す）。
+     * ここを `k => cfg[k]` という別の形にしていたので、
+     * 本番では常にOFFと判定されるのに、検査だけが通っていた
+     * （2026-09-07、けいたが「ONにしているのに入れられない」と報告）。
+     */
+    getConfig: () => (opts.config || {}),
+    configBool: k => String((opts.config || {})[k] || '').toUpperCase() === 'ON',
     PURGE_SWITCH: 'テストデータの削除',
     asText_: v => (v == null ? '' : String(v)),
     // **本物の appendApplication の代役。**呼ばれたことと、渡された中身を見る
@@ -303,5 +311,34 @@ describe('管理ページの画面（ボタン）', () => {
     const flat = A.split(String.fromCharCode(10)).join('');
     assert.match(flat, /\.seed\{[^}]*border:1px solid var\(--border\)/,
       '入れる側が、消す側と同じ見た目になっています');
+  });
+});
+
+describe('設定の読み方は、削除側とそろえる', () => {
+
+  test('スイッチは configBool で読む（getConfig に引数を渡さない）', () => {
+    /*
+     * `getConfig()` は**引数を取らない**（設定を全部返す）。
+     * `getConfig(PURGE_SWITCH)` と書くと、返るのは設定の入れ物そのもので、
+     * どう比べてもONにならない。
+     * 2026-09-07、けいたが「ONにしているのに入れられない」と報告。
+     * 読む口が2つあると、片方だけ間違える。削除側（gas/Purge.gs）と同じにする。
+     */
+    /*
+     * **コメントを外してから見る。**
+     * 直した理由をコメントに書くと、そこに昔の書き方がそのまま残る。
+     * 素で探すと「まだ直っていない」と誤って言う（この案件で4度目）。
+     */
+    const src = read('gas/Seed.gs').split(String.fromCharCode(10))
+      .map(l => l.replace(/^\s*\*.*$/, '').replace(/^\s*\/\/.*$/, ''))
+      .join(String.fromCharCode(10));
+    assert.ok(src.indexOf('getConfig(PURGE_SWITCH)') < 0,
+      'getConfig に引数を渡しています（常にOFF扱いになります）');
+    assert.match(src, /if \(!configBool\(PURGE_SWITCH\)\)/,
+      '削除側と同じ読み方になっていません');
+
+    const purge = read('gas/Purge.gs');
+    assert.match(purge, /configBool\(PURGE_SWITCH\)/,
+      '削除側の読み方が変わっています（そろえ直してください）');
   });
 });

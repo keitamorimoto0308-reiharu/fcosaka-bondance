@@ -145,8 +145,14 @@ function SEED_ROWS_() {
  * @param {number=} n 入れる件数（省略すると全部）
  */
 function seedTestData(n) {
-  var sw = String(getConfig(PURGE_SWITCH) || '').trim().toUpperCase();
-  if (sw !== 'ON') {
+  /*
+   * **削除側とまったく同じ読み方にする**（gas/Purge.gs も configBool）。
+   * ここを `getConfig(PURGE_SWITCH)` と書いていた。
+   * getConfig は引数を取らず設定全部を返すので、常に「OFFでない何か」になり、
+   * ONにしても入れられなかった（2026-09-07 けいた報告）。
+   * 読む口が2つあると、片方だけ間違える。
+   */
+  if (!configBool(PURGE_SWITCH)) {
     throw new Error(
       '「設定」タブの「テストデータの一括削除を許可」をONにしてから実行してください。'
       + '（あとで消せない状態でテストデータを入れないための決まりです）');
