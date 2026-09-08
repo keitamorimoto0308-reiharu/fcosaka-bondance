@@ -288,14 +288,46 @@ describe('① 画面：直し方が分かるか（2026-09-07）', () => {
       'パネルの見出しが「タスクを編集」のままです');
   });
 
-  test('「Excelで消しても台帳からは消えない」を、件数がゼロでも出す', () => {
-    // 「そのまま残します」だけでは、Excelの行を残すのか台帳の行を残すのか読めない
+  /*
+   * 2026-09-08、けいたの指摘で「台帳」という語をやめた
+   * （発注者本人に通じなかった。画面では入れ物ではなく中身の名前で呼ぶ）。
+   * 検査の目的は変えない——**件数がゼロでも「消えません」を必ず言う**。
+   */
+  test('「Excelで消しても消えない」を、件数がゼロでも出す', () => {
+    // 「そのまま残します」だけでは、Excelの行を残すのか画面の行を残すのか読めない
     const f = noComment(body('function schImpRender'));
-    const i = f.indexOf('Excelで行を消しても、台帳からは消えません');
+    const i = f.indexOf('いまの制作スケジュールからは消えません');
     assert.ok(i > 0, '「消えません」の案内がありません');
     // c.missing の中ではなく、外に置く（0件でも出す）
     assert.ok(f.slice(0, i).lastIndexOf('c.missing') < f.slice(0, i).lastIndexOf('sch-imp-sum'),
       '件数があるときだけ出しています');
+  });
+
+  /*
+   * 置き換え（けいた指示・2026-09-08）。**逆のことが起きるので、逆のことを言う。**
+   * 「消えません」と出したまま全部消すのが、いちばんまずい形。
+   */
+  test('置き換えを選んだときは、「全部消す」と言う', () => {
+    const f = noComment(body('function schImpRender'));
+    assert.match(f, /IMP\.replace/, '置き換えかどうかで出し分けていません');
+    assert.match(f, /いまの制作スケジュールを全部消して/,
+      '置き換えのときに「全部消す」と言っていません');
+  });
+
+  test('置き換えは、管理者にだけ出す', () => {
+    const f = noComment(body('function schImpRender'));
+    const i = f.indexOf('schImpRep');
+    assert.ok(i > 0, '置き換えの入口がありません');
+    assert.ok(f.slice(0, i).lastIndexOf("S.role === '管理者'") > 0,
+      '一般権限にも置き換えを出しています');
+  });
+
+  test('置き換えの前に、いまの件数を打たせる', () => {
+    // 一括削除と同じ守り。取り返しがつかない
+    const f = noComment(body('function schImpGo'));
+    assert.match(f, /IMP\.replace/, '置き換えかどうかを見ていません');
+    assert.match(f, /prompt\(/, '件数を打たせていません');
+    assert.match(f, /count: count/, '打った件数をサーバーに渡していません');
   });
 
   test('書き換える行があるときは、押す前に確認する', () => {
@@ -323,7 +355,7 @@ describe('① 画面：直し方が分かるか（2026-09-07）', () => {
     assert.match(how, /「Excelから取り込む」で戻します/, '戻す手順が書かれていません');
     assert.match(how, /ID列は消さないでください/, 'ID列のことが書かれていません');
     assert.match(how, /ID列まで一緒にコピー/, '行を増やすときの注意がありません');
-    assert.match(how, /Excelで消しても、台帳からは消えません/,
+    assert.match(how, /Excelで消しても、いまの制作スケジュールからは消えません/,
       '「消しても消えない」が書かれていません');
   });
 });

@@ -718,6 +718,9 @@ const SI = (() => {
     G.cutFunction(adminSrc, 'asText_'), G.cutFunction(adminSrc, 'safeCellText_'),
     G.cutFunction(adminSrc, 'normalizeDue_'), G.cutFunction(setupSrc, 'findConfigRow_'),
   ].join(String.fromCharCode(10)), box);
+  // 人が打った数の読み取りは gas/Num.gs にまとめてある。**本物を読む**
+  // （置き換えの件数照合がここを通る。代役を書くと本物より優しくなる）
+  vm.runInContext(rd('Num.gs'), box);
   vm.runInContext(rd('Stamp.gs'), box);
   vm.runInContext(rd('Sched.gs'), box);
   vm.runInContext(rd('SchedImport.gs'), box);
@@ -1744,8 +1747,8 @@ function handle(payload) {
        * **画面から直しても赤が消えなかった**（テスト1156件は全部通っていた）。
        */
       if (Array.isArray(payload.rows)) {
-        const again = siCall('schedImportPlan_(__rows, schedPeople_())',
-                             { __rows: payload.rows });
+        const again = siCall('schedImportPlan_(__rows, schedPeople_(), __opts)',
+                             { __rows: payload.rows, __opts: { replace: !!payload.replace } });
         return { ok: true, items: again.items, counts: again.counts,
                  missing: again.missing, leftover: false, message: '' };
       }
@@ -1754,8 +1757,8 @@ function handle(payload) {
       const why = siCall('schedImportReject_(__b64, __name)',
                          { __b64: payload.base64 || '', __name: payload.fileName || '' });
       if (why) return { ok: false, message: why };
-      const plan = siCall('schedImportPlan_(__rows, schedPeople_())',
-                          { __rows: SI.box.__seeded() });
+      const plan = siCall('schedImportPlan_(__rows, schedPeople_(), __opts)',
+                          { __rows: SI.box.__seeded(), __opts: { replace: !!payload.replace } });
       return { ok: true, items: plan.items, counts: plan.counts, missing: plan.missing,
                leftover: false,
                message: SI.box.__seeded().length ? '' : 'Excelに行がありませんでした。' };
@@ -1763,7 +1766,9 @@ function handle(payload) {
 
     case 'adminSchedImportApply':
       return siCall('adminSchedImportApply_(__auth, __payload)',
-                    { __auth: { person: auth.person }, __payload: { rows: payload.rows } },
+                    { __auth: { person: auth.person, role: auth.role },
+                      __payload: { rows: payload.rows, replace: !!payload.replace,
+                                   count: payload.count } },
                     true);   // これだけが書く
 
     /*

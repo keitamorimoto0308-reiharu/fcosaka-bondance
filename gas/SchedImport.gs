@@ -329,7 +329,22 @@ function schedImportItemKey_(item) {
  * @param {Object} people schedPeople_() の結果
  * @return {{items:Array, missing:Array, counts:Object}}
  */
-function schedImportPlan_(rows, people) {
+function schedImportPlan_(rows, people, opts) {
+  /*
+   * ■ 置き換え（けいた指示・2026-09-08）
+   *
+   *   いまの制作スケジュールを全部消して、Excelの内容にする。
+   *   このとき **ID は見ない**（全部を新しい行として扱う）。
+   *
+   *   消すだけでは1行も進まないのが要点。
+   *   けいたは書き出したあと一括削除で空にしており、Excelの33行には
+   *   消えた行のIDが残っていた。空にしても
+   *   「この行は削除されています」で同じように弾かれる。
+   *
+   *   **見逃すのはIDだけ。** 中身の検証（validateSchedRow_）はそのまま通す。
+   *   ここで検証ごと外すと、置き換えを選んだだけで何でも入る道になる。
+   */
+  var replace = !!(opts && opts.replace);
   var S = schedRows_();
   var idx = {};
   S.headers.forEach(function (h, i) { idx[h] = i; });
@@ -363,7 +378,8 @@ function schedImportPlan_(rows, people) {
   var items = [];
 
   (rows || []).forEach(function (r) {
-    var id = asText_(r['ID']).trim();
+    // 置き換えでは ID を持たないものとして扱う（全部が新しい行になる）
+    var id = replace ? '' : asText_(r['ID']).trim();
     var problems = [];
 
     if (id) {
@@ -410,12 +426,16 @@ function schedImportPlan_(rows, people) {
    * 「Excelで消した」と「知らなかった」の区別がつかないので、消してはいけない。
    */
   var missing = [];
-  Object.keys(ledger).forEach(function (lid) {
-    if (used[lid]) return;
-    var title = asText_(ledger[lid].values[idx['タスク名']]).trim();
-    if (!title) return;
-    missing.push({ id: lid, title: title });
-  });
+  // 置き換えでは全部を消すので、「残る行」は存在しない。
+  // ここで返すと、画面が「Excelで消しても残ります」と嘘を言う
+  if (!replace) {
+    Object.keys(ledger).forEach(function (lid) {
+      if (used[lid]) return;
+      var title = asText_(ledger[lid].values[idx['タスク名']]).trim();
+      if (!title) return;
+      missing.push({ id: lid, title: title });
+    });
+  }
 
   var counts = { add: 0, update: 0, same: 0, bad: 0, missing: missing.length };
   items.forEach(function (x) { counts[x.action]++; });
@@ -425,6 +445,51 @@ function schedImportPlan_(rows, people) {
 // ─────────────────────────────────────────── 取り込み
 
 /**
+ * 置き換えのために、いまの制作スケジュールを空にする。
+ *
+ * **鍵は呼び出し元が持っている前提**（adminSchedImportApply_ の中から呼ぶ）。
+ * 守りは一括削除（gas/Sched.gs の adminSchedPurge_）と同じにそろえる。
+ *
+ * @returns {Object} 断るときは { error, message } を持つ。消せたら { cleared }
+ */
+function schedReplaceClear_(auth, count) {
+  var n = numCount_(count);
+  if (n === null) {
+    return { error: 'bad_value',
+      message: 'いま入っている件数を、半角の数字でご入力ください。' };
+  }
+
+  var S = schedRows_();
+  var idx = {};
+  S.headers.forEach(function (h, i) { idx[h] = i; });
+
+  // タスク名のある行だけを数える（下のほうの空行は入れない）
+  var live = [];
+  for (var i = 0; i < S.rows.length; i++) {
+    if (asText_(S.rows[i][idx['タスク名']]).trim()) live.push(S.rows[i]);
+  }
+  if (n !== live.length) {
+    return { error: 'bad_count',
+      message: '件数が一致しません。いま ' + live.length + ' 件あります。'
+             + live.length + ' とご入力ください。' };
+  }
+  if (!live.length) return { cleared: 0 };   // 空なら、消さずに入れるだけ
+
+  // **消す中身を先に控える。**消してからでは、もう読めない
+  var full = live.map(function (r) { return schedRowObject_(r); });
+
+  var last = S.sheet.getLastRow();
+  if (last >= 2) {
+    S.sheet.getRange(2, 1, last - 1, SCHED_HEADERS_.length).clearContent();
+  }
+  SpreadsheetApp.flush();
+
+  appendHistory(auth && auth.person, '（スケジュール）', '置き換えのため一括削除',
+                JSON.stringify(full), '', '');
+  return { cleared: live.length };
+}
+
+/**
  * 画面が持っている行を受け取って、台帳に入れる。
  *
  * **実行時にサーバーが全部を検証し直す。**下見で通ったことを根拠にしない
@@ -432,6 +497,25 @@ function schedImportPlan_(rows, people) {
  * **1行でも通らなければ、何も書かない。**
  */
 function adminSchedImportApply_(auth, payload) {
+  /*
+   * ■ 置き換え（けいた指示・2026-09-08）
+   *
+   *   いまの制作スケジュールを全部消して、Excelの内容にする。
+   *
+   *   **消すのと入れるのを、ひとつながりで行う。**
+   *   別々に呼ぶ形にすると、消えたのに入らなかったとき
+   *   制作スケジュールが空のまま残る。ここは1つの鍵の中で両方を済ませ、
+   *   **入れる中身が1行でも通らなければ、1行も消さない。**
+   *
+   *   守りは一括削除（gas/Sched.gs の adminSchedPurge_）と同じ形にそろえる：
+   *   管理者のみ／いま何件あるかを人に打ってもらう／消した中身は変更履歴に全文。
+   */
+  var replace = !!(payload && payload.replace);
+  if (replace && (!auth || auth.role !== '管理者')) {
+    return { ok: false, error: 'forbidden',
+      message: '全部を消して置き換えるのは、管理者のみです。' };
+  }
+
   var rows = (payload && Array.isArray(payload.rows)) ? payload.rows : null;
   if (!rows) {
     return { ok: false, error: 'bad_value',
@@ -453,14 +537,24 @@ function adminSchedImportApply_(auth, payload) {
              message: 'ほかの方が保存中です。少し待ってから、もう一度お願いします。' };
   }
   try {
-    var plan = schedImportPlan_(rows, schedPeople_());
+    var plan = schedImportPlan_(rows, schedPeople_(), { replace: replace });
 
-    // **1行でも通らなければ、何も書かない**
+    // **1行でも通らなければ、何も書かない**（置き換えでは「消さない」も含む）
     var bad = plan.items.filter(function (x) { return x.action === 'bad'; });
     if (bad.length) {
       return { ok: false, error: 'bad_value',
         message: bad.length + '行に問題があります。直してから取り込んでください。',
         items: plan.items, counts: plan.counts, missing: plan.missing };
+    }
+
+    // ■ 置き換えなら、ここで消す。**中身が全部通ったあと**に消すのが要点
+    if (replace) {
+      var gone = schedReplaceClear_(auth, payload && payload.count);
+      // ok:false を必ず付ける。付け忘れると画面の `if (!r.ok)` を素通りし、
+      // **断ったのに成功したように見える**
+      if (gone.error) {
+        return { ok: false, error: gone.error, message: gone.message };
+      }
     }
 
     var S = schedRows_();

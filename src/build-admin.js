@@ -286,6 +286,9 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 /* 「本文の1行が抜ける」話は、「その相手に届かない」話と色を分ける。
    同じ色で並べたせいで正反対に読まれた（2026-09-08 の検証） */
 .pnote.drop{border-left:3px solid var(--border);padding-left:10px;margin:8px 0}
+/* 置き換えは、いまの内容を全部消す。ふつうの取り込みと見た目を変える */
+.sch-imp-rep{color:var(--error);font-weight:700}
+.sch-imp-note{font-size:11.5px;color:var(--muted)}
 .bcdrafts{margin:0 0 12px;font-size:12.5px;color:#6B6259;
   display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .minitable{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
@@ -4579,12 +4582,28 @@ function schImpRender(){
     + '取り込めます ' + (c.add + c.update + c.same) + '件'
     + '（足す ' + c.add + '・書き換える ' + c.update + '・変わらない ' + c.same + '）'
     + (c.bad ? ' ／ <b>直すもの ' + c.bad + '件</b>' : '') + '</p>'
-    // 「消さない」は、件数がゼロでも必ず言う。**逆に読まれると事故になる**
-    + '<p class="sch-imp-sum"><b>Excelで行を消しても、台帳からは消えません。</b>'
-    + (c.missing
-        ? 'Excelに無い行が ' + c.missing + '件 ありますが、台帳にはそのまま残ります。'
+    /*
+     * 「消さない」は、件数がゼロでも必ず言う。**逆に読まれると事故になる**。
+     * 置き換えを選んでいるときは、逆のことが起きるので**逆のことを言う**。
+     */
+    + (IMP.replace
+        ? '<p class="sch-imp-sum sch-imp-rep"><b>いまの制作スケジュールを'
+          + '全部消して、この内容に置き換えます。</b>'
+          + '消した内容は変更履歴に残ります。</p>'
+        : '<p class="sch-imp-sum"><b>Excelで行を消しても、'
+          + 'いまの制作スケジュールからは消えません。</b>'
+          + (c.missing
+              ? 'Excelに無い行が ' + c.missing + '件 ありますが、そのまま残ります。'
+              : '')
+          + '消したい行は、取り込んだあとに画面から1件ずつ消してください。</p>')
+    // 置き換えの入口。**管理者だけ**に出す（全部消す操作なので）
+    + (S.role === '管理者'
+        ? '<p class="sch-imp-sum"><label><input type="checkbox" id="schImpRep"'
+          + (IMP.replace ? ' checked' : '') + '> '
+          + '<b>いまの制作スケジュールを全部消して、この内容に置き換える</b></label>'
+          + '<br><span class="sch-imp-note">Excelを「正」にしたいときにお使いください。'
+          + 'ID列が古くて取り込めない行も、新しい行として入ります。</span></p>'
         : '')
-    + '消したい行は、取り込んだあとに画面から1件ずつ消してください。</p>'
     + (c.bad
         ? '<p class="sch-imp-warn">' + c.bad + '行は取り込めません。'
           + 'その行を押すと、理由と直し方が出ます。'
@@ -4599,9 +4618,22 @@ function schImpRender(){
     + '<div class="pbtns"><span class="sp"></span>'
     + '<button class="ghost" id="schImpCancel">やめる</button>'
     // ボタンの名前で、押したら何が起きるかが分かるようにする
-    + '<button class="print" id="schImpGo">台帳に書き込む（足す ' + c.add
-    + '・書き換える ' + c.update + '）</button></div>';
+    + (IMP.replace
+        ? '<button class="danger" id="schImpGo">全部消して、この ' + c.add
+          + '件に置き換える</button></div>'
+        : '<button class="print" id="schImpGo">書き込む（足す ' + c.add
+          + '・書き換える ' + c.update + '）</button></div>');
   box.hidden = false;
+
+  // 置き換えの切り替え。押したら**サーバーに読み直させる**
+  // （画面で判定を写すと、サーバーと規則がズレる）
+  var rep = $('#schImpRep');
+  if (rep){
+    rep.addEventListener('change', function(){
+      IMP.replace = rep.checked;
+      schImpApplyEdit();
+    });
+  }
 
   // **赤があるあいだと、送っている最中は押せない**
   // busy を IMP に持たせているのは、ここで作り直しても消えないようにするため
@@ -4613,6 +4645,7 @@ function schImpRender(){
 function schImpClose(){
   IMP.items = []; IMP.counts = null; IMP.missing = []; IMP.fileName = '';
   IMP.busy = false;
+  IMP.replace = false;
   // 閉じたあとに届く古い返事で、下見が復活しないようにする
   IMP.seq++;
   $('#schImp').hidden = true;
@@ -4666,7 +4699,7 @@ function schImpPick(file){
 function schImpApplyEdit(item){
   var rows = IMP.items.map(function(x){ return x.raw; });
   var seq = ++IMP.seq;
-  api('adminSchedImportRead', { rows: rows }).then(function(r){
+  api('adminSchedImportRead', { rows: rows, replace: !!IMP.replace }).then(function(r){
     // 取り込みが済んで下見を閉じたあとに届いた返事で、下見を開き直さない
     if (seq !== IMP.seq || !IMP.items.length) return;
     if (!r || !r.ok){ toast((r && r.message) || '見直せませんでした', true); return; }
@@ -4696,11 +4729,28 @@ function schImpGo(){
     + '　（書き換える前の中身は、変更履歴に残ります）\\n'
     + (c.missing ? '・Excelに無い ' + c.missing + '件は、そのまま残ります\\n' : '')
     + '\\nよろしいですか？')) return;
+  /*
+   * 置き換えは**全部消す**ので、一括削除と同じ守りにする（けいた指示・2026-09-08）：
+   * いま何件あるかを人に打ってもらう。サーバー側でも件数を突き合わせる。
+   */
+  var count = null;
+  if (IMP.replace){
+    var now = (S.sched && S.sched.rows) ? S.sched.rows.length : 0;
+    var typed = prompt('いまの制作スケジュール ' + now + '件を全部消して、'
+      + c.add + '件に置き換えます。' + String.fromCharCode(10)
+      + '消した内容は変更履歴に残りますが、画面からは戻せません。'
+      + String.fromCharCode(10) + String.fromCharCode(10)
+      + 'よろしければ、いまの件数「' + now + '」をご入力ください。');
+    if (typed === null) return;
+    count = typed;
+  }
+
   var rows = IMP.items.map(function(x){ return x.raw; });
   // 送信中は IMP に持つ。描き直されてもボタンは押せないまま
   IMP.busy = true;
   $('#schImpGo').disabled = true;
-  api('adminSchedImportApply', { rows: rows }).then(function(r){
+  api('adminSchedImportApply', { rows: rows, replace: !!IMP.replace, count: count })
+    .then(function(r){
     IMP.busy = false;
     try { $('#schImpGo').disabled = false; } catch(e){}
     if (!r || !r.ok){
@@ -4708,7 +4758,8 @@ function schImpGo(){
       if (r && r.items){ IMP.items = r.items; IMP.counts = r.counts; schImpRender(); }
       return;
     }
-    toast('取り込みました（追加' + r.added + '件 ／ 更新' + r.updated + '件）');
+    toast(IMP.replace ? ('置き換えました（' + r.added + '件）')
+                     : ('取り込みました（追加' + r.added + '件 ／ 更新' + r.updated + '件）'));
     schImpClose();
     loadSched();
   }, function(e){
@@ -6838,7 +6889,7 @@ const HOWTO = {
     ['行を増やすとき', 'Excelで行をコピーすると、**ID列まで一緒にコピーされます。**'
                     + '増やした行は、ID列を空にしてください。'
                     + '空になっていれば、新しい行として足されます。'],
-    ['Excelで消しても、台帳からは消えません', '取り込みでできるのは'
+    ['Excelで消しても、いまの制作スケジュールからは消えません', '取り込みでできるのは'
                     + '「足す」と「書き換える」だけです。'
                     + '消したい行は、取り込んだあとに'
                     + 'この画面から1件ずつ消してください。'],

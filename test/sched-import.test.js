@@ -122,6 +122,9 @@ function makeBox(opts) {
     cutFunction(admin, 'normalizeDue_'),
     cutFunction(setup, 'findConfigRow_'),
   ].join(String.fromCharCode(10)), box);
+  // 人が打った数の読み取りは gas/Num.gs にまとめてある。**本物を読む**
+  // （代役を書くと、本物より優しくなって「本番だけ弾かれる」が起きる）
+  vm.runInContext(read('gas/Num.gs'), box);
   // **本番の①をそのまま読む。**検証（validateSchedRow_）に写しを作らない
   vm.runInContext(stamp, box);
   vm.runInContext(sched, box);
@@ -793,5 +796,150 @@ describe('検証役の指摘：書き出したExcelに、読み方を付ける',
     ['SCHED_KINDS_', 'SCHED_AREAS_', 'SCHED_STATUSES_'].forEach(name => {
       assert.ok(f.indexOf(name) >= 0, name + ' から組んでいません');
     });
+  });
+});
+
+/*
+ * ■ 置き換え（けいた指示・2026-09-08）
+ *
+ *   けいたが Excel に書き出したあと、一括削除で制作スケジュールを空にした。
+ *   その Excel を取り込もうとすると、**33行すべて**が
+ *   「この行は制作スケジュールから削除されています。ID列を空にしてください」で
+ *   止まった。Excel に戻って33セル消すのは現実的でない。
+ *
+ *   けいたの選択：**いまの制作スケジュールを全部消して、Excelの内容に置き換える。**
+ *
+ *   ここで大事なのは、**消すだけでは1行も進まない**こと。
+ *   空にしても Excel の行にはIDが残っているので、同じ理由で弾かれる。
+ *   置き換えでは**IDを見ない**（全部を新しい行として扱う）必要がある。
+ */
+describe('置き換え：いまの内容を全部消して、Excelの内容にする', () => {
+
+  const planReplace = (b, rows) => {
+    b.box.__rows = rows;
+    return JSON.parse(JSON.stringify(vm.runInContext(
+      'schedImportPlan_(__rows, schedPeople_(), { replace: true })', b.box)));
+  };
+
+  /** 台帳から消えたIDを持つ行（けいたが踏んだ形） */
+  const staleRow = (title, id) => xrowObj({
+    '種類': 'タスク', '日付': '2026-09-20', '領域': '制作', '担当会社': 'FC大阪',
+    '担当者': '小谷', 'タスク名': title, 'ステータス': '未着手', 'ID': id,
+  });
+
+  test('ふつうの取り込みでは、消えたIDの行は止まる（いまの動き）', () => {
+    const b = makeBox({ ledger: [] });
+    const r = plan(b, [staleRow('看板の入稿', 'zzzz9999'),
+                       staleRow('チラシ校了', 'yyyy8888')]);
+    assert.strictEqual(r.counts.bad, 2, JSON.stringify(r.counts));
+    /*
+     * **理由まで見る。** 件数だけを見ていたとき、行の作り方を間違えて
+     * 全項目が空になり、「別の理由で2件落ちている」のを
+     * 「IDで止まっている」と読み違えた（2026-09-08）。
+     */
+    const why = (r.items[0].problems || []).map(p => p.field + ':' + p.why).join(' ');
+    assert.ok(/ID/.test(why) && /削除されて/.test(why),
+      'IDが理由で止まっていません：' + why);
+  });
+
+  test('置き換えなら、消えたIDの行も「足す」になる', () => {
+    const b = makeBox({ ledger: [] });
+    const r = planReplace(b, [staleRow('看板の入稿', 'zzzz9999'),
+                              staleRow('チラシ校了', 'yyyy8888')]);
+    assert.strictEqual(r.counts.bad, 0,
+      '置き換えなのにIDで止まっています：'
+      + JSON.stringify((r.items[0] || {}).problems));
+    assert.strictEqual(r.counts.add, 2, JSON.stringify(r.counts));
+    assert.strictEqual(r.counts.update, 0, '置き換えでは書き換えにならない');
+  });
+
+  test('置き換えでも、内容の間違いは止まる（IDだけを見逃す）', () => {
+    const b = makeBox({ ledger: [] });
+    const bad = xrowObj({ '種類': 'タスク', '日付': '2026-09-20', '領域': '制作',
+                       '担当会社': 'FC大阪', '担当者': '小谷',
+                       'タスク名': '', 'ステータス': '未着手', 'ID': 'zzzz9999' });
+    const r = planReplace(b, [bad]);
+    assert.strictEqual(r.counts.bad, 1,
+      'タスク名が空なのに通っています（IDだけを見逃すはずが、検証ごと外れている）');
+  });
+
+  test('置き換えでは、Excelに無い行を「残る」と言わない', () => {
+    // 全部消すので「台帳にだけ残る行」は存在しない。
+    // ここで missing を返すと、画面が「消えません」と嘘を言う
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    const r = planReplace(b, [staleRow('看板の入稿', 'zzzz9999')]);
+    assert.deepStrictEqual(r.missing, [], JSON.stringify(r.missing));
+  });
+});
+
+/*
+ * 取り込みの実行側。**消すのと入れるのは、ひとつながりで行う。**
+ * 別々に呼ぶと、消えたのに入らなかったとき、制作スケジュールが空のまま残る。
+ */
+describe('置き換えの実行', () => {
+  const staleRow = (title, id) => xrowObj({
+    '種類': 'タスク', '日付': '2026-09-20', '領域': '制作', '担当会社': 'FC大阪',
+    '担当者': '小谷', 'タスク名': title, 'ステータス': '未着手', 'ID': id,
+  });
+
+  const applyReplace = (b, rows, over) => {
+    b.box.__auth = Object.assign({ person: '小谷', role: '管理者' }, (over || {}).auth || {});
+    b.box.__payload = Object.assign({ rows: rows, replace: true, count: 1 },
+                                    (over || {}).payload || {});
+    return JSON.parse(JSON.stringify(
+      vm.runInContext('adminSchedImportApply_(__auth, __payload)', b.box) || null));
+  };
+
+  test('いまの行が消えて、Excelの行だけになる', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    const r = applyReplace(b, [staleRow('看板の入稿', 'zzzz9999')]);
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    const after = ledgerRows(b).map(r => r[6]);
+    assert.deepStrictEqual(after, ['看板の入稿'],
+      '置き換わっていません：' + JSON.stringify(after));
+  });
+
+  test('管理者でなければ、1行も消さない', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    const r = applyReplace(b, [staleRow('看板の入稿', 'zzzz9999')],
+                           { auth: { role: '一般' } });
+    assert.strictEqual(r.ok, false, JSON.stringify(r));
+    const after = ledgerRows(b).map(r => r[6]);
+    assert.strictEqual(after.length, 1, '一般権限で消えています');
+  });
+
+  /*
+   * 一括削除と同じ守り。取り返しがつかないので、
+   * **いま何件あるかを人に打ってもらう**（gas/Sched.gs の adminSchedPurge_ と同じ）
+   */
+  test('件数が合わなければ、1行も消さない', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    const r = applyReplace(b, [staleRow('看板の入稿', 'zzzz9999')],
+                           { payload: { count: 99 } });
+    assert.strictEqual(r.ok, false, JSON.stringify(r));
+    assert.ok(/1/.test(r.message || ''), 'いま何件あるかを伝えていません：' + r.message);
+    const after = ledgerRows(b).map(r => r[6]);
+    assert.strictEqual(after.length, 1, '件数が違うのに消えています');
+  });
+
+  test('Excelの中身に問題があれば、1行も消さない', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    const bad = xrowObj({ '種類': 'タスク', '日付': '2026-09-20', '領域': '制作',
+                          '担当会社': 'FC大阪', '担当者': '小谷',
+                          'タスク名': '', 'ステータス': '未着手' });
+    const r = applyReplace(b, [bad]);
+    assert.strictEqual(r.ok, false, JSON.stringify(r));
+    const after = ledgerRows(b).map(r => r[6]);
+    assert.strictEqual(after.length, 1,
+      '入れる中身が通らないのに、先に消しています（空のまま残る）');
+  });
+
+  test('消した中身が、変更履歴に丸ごと残る', () => {
+    const b = makeBox({ ledger: [LEDGER_TASK] });
+    applyReplace(b, [staleRow('看板の入稿', 'zzzz9999')]);
+    // makeBox の history は { operator, item, before, … } の形（配列ではない）
+    const h = (b.history || []).map(a => JSON.stringify(a)).join(' | ');
+    assert.ok(/看板の入稿/.test(h),
+      '消した中身が変更履歴に残っていません：' + h);
   });
 });
