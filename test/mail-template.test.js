@@ -171,6 +171,45 @@ describe('作り替えても、事業者に届く文が変わっていないこ�
       '記号だけの行が残りました（箇条書き）：' + JSON.stringify(out2));
   });
 
+  /*
+   * ■ 行を落とす規則は、**値の入った差し込みを道連れにしてはいけない**
+   *
+   *   2026-09-08、検証役が見つけた。1行に差し込みが2つあって片方だけ空のとき、
+   *   落とす規則が行ごと消し、**入っているほうの値まで届かなくなっていた**：
+   *
+   *       　区画番号　{{区画番号}}　搬入　{{搬入予定時刻}}
+   *       （区画番号=12〜14 ／ 搬入予定時刻=空）→ 行ごと消滅
+   *
+   *   当日のご案内で、いちばん伝えたい区画番号が黙って落ちる。
+   *
+   *   同じ穴は**元からあった**（コロンの規則でも起きる）。
+   *   落とす規則の入口に「その行に値の入った差し込みが1つも無いこと」を
+   *   足して、まとめて塞いだ。
+   */
+  test('同じ行に値の入った差し込みがあれば、行を落とさない', () => {
+    const box2 = makeBox();
+    const NL = String.fromCharCode(10);
+    const vars = box2.mailtplVars_('accept', ROW, { confirm: 'https://x.test', upload: '' });
+
+    // 末尾が空白になる形。値の入った {{確定情報フォームURL}} を道連れにしない
+    const a = box2.mailtplRender_(
+      '　提出先　{{確定情報フォームURL}}　素材　{{素材アップロードURL}}', vars);
+    assert.ok(a.indexOf('https://x.test') >= 0,
+      '値の入った差し込みまで消えています：' + JSON.stringify(a));
+
+    // コロンで終わる形でも同じ（**元からあった穴**）
+    const b = box2.mailtplRender_(
+      '提出先：{{確定情報フォームURL}}／素材：{{素材アップロードURL}}', vars);
+    assert.ok(b.indexOf('https://x.test') >= 0,
+      '値の入った差し込みまで消えています（コロン）：' + JSON.stringify(b));
+
+    // 記号だけの形でも同じ
+    const c = box2.mailtplRender_(
+      '・{{確定情報フォームURL}}・{{素材アップロードURL}}', vars);
+    assert.ok(c.indexOf('https://x.test') >= 0,
+      '値の入った差し込みまで消えています（記号）：' + JSON.stringify(c));
+  });
+
   test('不採択の既定に、リンクもトークンも入っていない', () => {
     const now = rendered('reject', null);
     ['http', 'confirm.html', 'upload.html', '{{確定情報', '{{素材'].forEach(w => {

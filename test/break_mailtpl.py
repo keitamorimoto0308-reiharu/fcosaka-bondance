@@ -159,6 +159,14 @@ CASES = [
         ('gas/MailTemplate.gs', "    if (/[：:]\\s*$/.test(filled)) continue;", '    ;'),
     ], '「出店名：」だけの行が残っています'),
 
+    # 1行に差し込みが2つあって片方だけ空のとき、行ごと消すと
+    # **入っているほうの値まで届かなくなる**（2026-09-08、検証役が発見）。
+    # 当日のご案内で、いちばん伝えたい区画番号が黙って落ちていた
+    ('値の入った差し込みまで、道連れにして消す', [
+        ('gas/MailTemplate.gs', '    if (kept) { out.push(filled); continue; }',
+                                '    if (false) { out.push(filled); continue; }'),
+    ], '値の入った差し込みまで消えています'),
+
     ('記号だけが残る行を、消さないようにする', [
         ('gas/MailTemplate.gs',
          "    if (/^[\s　▼・\-—]*$/.test(filled)) continue;", '    ;'),

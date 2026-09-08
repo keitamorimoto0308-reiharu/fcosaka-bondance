@@ -136,11 +136,11 @@ CASES = [
     ], '送信より先に履歴を書いていません'),
 
     ('変更履歴を、1通ごとに残す（履歴が埋まる）', [
-        (BC, """    appendHistory(auth && auth.person, '', '一斉メール', '',
-      subject + '（' + sent.length + '件）', sendId);""",
-             """    sent.forEach(function (id) {
-      appendHistory(auth && auth.person, id, '一斉メール', '', subject, sendId);
-    });"""),
+        (BC, """      appendHistory(auth && auth.person, '', '一斉メール', '',
+        subject + '（' + sent.length + '件）', sendId);""",
+             """      sent.forEach(function (id) {
+        appendHistory(auth && auth.person, id, '一斉メール', '', subject, sendId);
+      });"""),
     ], '変更履歴が送信ごとに1行になっていません'),
 
     ('24時間以内の同じ件名を報せない（二重送信に誰も気づけない）', [
@@ -153,9 +153,9 @@ CASES = [
         (BC, '  if (unknown.length) {', '  if (false) {'),
     ], '知らない差し込みの名前を出していません'),
 
-    ('括弧の閉じ忘れを断らない', [
-        (BC, "  if (rest.indexOf('{{') >= 0 || rest.indexOf('}}') >= 0) {",
-             '  if (false) {'),
+    ('括弧の閉じ忘れ・余りを断らない', [
+        (BC, "    if (rest.indexOf('{') >= 0 || rest.indexOf('}') >= 0) loose = true;",
+             '    ;'),
     ], '閉じ忘れが素通りしています'),
 
     ('差し込みが空になった行を報せない（区画番号の無い案内が黙って届く）', [
@@ -191,6 +191,61 @@ CASES = [
     return null;
   }''', '  return sheet_(SHEET.BROADCAST);'),
     ], 'シートが見つかりません'),
+
+    # ── 検証役3体の指摘で足した歯止め（2026-09-08）────────────
+    ('送信履歴を、数式よけを通さずに書く', [
+        (BC, '    safeCellText_(subject == null ? \'\' : subject),',
+             '    String(subject == null ? \'\' : subject),'),
+    ], '数式として動く件名が、そのまま書かれています'),
+
+    # 40社上限があるので50社の催促は必ず2回に分かれる。
+    # 1行で打ち切ると、前半40社に無警告で2通目が届く
+    ('直前の照合を、最初に当たった1行で打ち切る', [
+        (BC, '''    if (!any) continue;''',
+             '''    if (!any) continue;
+    return { ids: hits, sentAt: asText_(r[iAt]), sendId: '', headBroken: false };'''),
+    ], '前のバッチの相手を報せていません'),
+
+    ('履歴の見出しが壊れていても、黙って「重なりなし」と答える', [
+        (BC, "    return { ids: [], sentAt: '', sendId: '', headBroken: true };",
+             '    return empty;'),
+    ], '見出しが壊れているのに'),
+
+    ('数式よけのクォートを外さずに件名を照合する', [
+        (BC, '    if (broadcastPlainText_(r[iSub]) !== subj) continue;',
+             "    if (String(r[iSub] == null ? '' : r[iSub]).trim() !== subj) continue;"),
+    ], 'クォート付きの件名を照合できていません'),
+
+    ('件名と本文をつないで検査する（境目をまたぐ差し込みが通る）', [
+        (BC, '  [subject, body].forEach(function (text) {',
+             '  [subject + String.fromCharCode(10) + body].forEach(function (text) {'),
+    ], '境目をまたいだ差し込みが素通りしています'),
+
+    # 投げると gas/Api.gs が文言なしの server_error に潰し、
+    # 画面は「送信できませんでした」とだけ言う。**メールは全部届いている**
+    ('送ったあとの記録の失敗を、そのまま外へ投げる', [
+        (BC, "      logError_('adminBroadcastSend_:記録', e);",
+             "      logError_('adminBroadcastSend_:記録', e); throw e;"),
+    ], 'シート「変更履歴」が見つかりません'),
+
+    ('送信可能数の確認を、札を消費したあとに戻す', [
+        (BC, '''    var quota = MailApp.getRemainingDailyQuota();
+    if (quota < sendIds.length) {''',
+             '''    var quota = MailApp.getRemainingDailyQuota();
+    if (false) {'''),
+        (BC, '''    if (!broadcastUseTicket_(payload.ticket, subject, body, sendIds)) {''',
+             '''    if (!broadcastUseTicket_(payload.ticket, subject, body, sendIds)) {
+      return { ok: false, error: 'stale', message: 'やり直してください。' };
+    }
+    if (quota < sendIds.length) {
+      return { ok: false, error: 'quota', message: '残り' + quota + '通です。' };
+    }
+    if (false) {'''),
+    ], '残量が足りなかっただけで札を失っています'),
+
+    # 「値の入った差し込みを道連れにしない」（gas/MailTemplate.gs）の壊し検査は、
+    # その振る舞いを見る検査がある break_mailtpl.py に置いてある。
+    # 壊す場所と、落ちる検査は、同じ壊し検査の中で対にすること
 
     # ── 権限。ここが外れると、一般権限が50社にメールを送れる ────────
     # ⚠ 目印に行末の `];` を含めない。

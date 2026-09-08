@@ -489,6 +489,9 @@ const BC = (() => {
     G.cutFunction(authSrc, 'sha256_'), G.cutFunction(authSrc, 'safeEquals_'),
     G.cutFunction(adminSrc, 'indexOf_'), G.cutFunction(adminSrc, 'liveRows_'),
     G.cutFunction(adminSrc, 'cell_'), G.cutFunction(adminSrc, 'asText_'),
+    // シートで数式として動く値を止める。**模擬でも本物を通す**
+    // （ここを緩めると「模擬では通るのに本番で違う値が入る」が起きる）
+    G.cutFunction(adminSrc, 'safeCellText_'),
     adminSrc.slice(adminSrc.indexOf('var COL = {'),
                    adminSrc.indexOf('};', adminSrc.indexOf('var COL = {')) + 2),
   ].join(String.fromCharCode(10)), box);

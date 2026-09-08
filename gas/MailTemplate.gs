@@ -317,11 +317,13 @@ function mailtplRender_(text, vars) {
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
     var dropped = false;
+    var kept = false;
     var filled = line.replace(/\{\{([^{}]{1,40})\}\}/g, function (m, name) {
       var key = String(name).trim();
       if (!Object.prototype.hasOwnProperty.call(vars, key)) return m;
       var v = vars[key];
       if (v === null || v === undefined || String(v) === '') { dropped = true; return ''; }
+      kept = true;
       return String(v);
     });
     // 値が空だった行は、残っても意味が無いので落とす。
@@ -331,6 +333,26 @@ function mailtplRender_(text, vars) {
     // 空文字に置き換えるだけだと、届いたメールに
     // 「出店名：」という宙に浮いた行が残る（2026-09-03 の検査で発見）
     if (!dropped) { out.push(filled); continue; }
+
+    /*
+     * ⚠ **値の入った差し込みを道連れにしない。**
+     *
+     *   1行に差し込みが2つあって片方だけ空のとき、下の規則が行ごと消すと
+     *   **入っているほうの値まで届かなくなる**（2026-09-08、検証役が発見）：
+     *
+     *       　区画番号　{{区画番号}}　搬入　{{搬入予定時刻}}
+     *       （区画番号=12〜14 ／ 搬入予定時刻=空）→ 行ごと消滅
+     *
+     *   当日のご案内で、いちばん伝えたい区画番号が黙って落ちる。
+     *   コロンの規則でも同じことが起きるので、**元からあった穴**でもある
+     *   （`受付ID：{{受付ID}}／出店名：{{出店名}}` で受付IDが消える）。
+     *
+     *   落とすのは「その行が、空になった差し込みの**残骸だけ**になったとき」。
+     *   値が1つでも入っていれば、見た目が多少不格好でも**消さない**。
+     *   届かないほうが、ずっと高くつく。
+     */
+    if (kept) { out.push(filled); continue; }
+
     if (filled.trim() === '') continue;
     if (/[：:]\s*$/.test(filled)) continue;
     if (/^[\s　▼・\-—]*$/.test(filled)) continue;
