@@ -1187,8 +1187,12 @@ function signOut(msg){
   // 閉じないと、入室画面の後ろに事業者さまの氏名・メール・電話が見えたまま残る
   // （2026-09-03 の検証で指摘）
   try {
-    var dw = document.querySelector('.drawer');
+    // **名指しで閉じる。** クラスだけで掴むと文書の最初の1枚（#schDrawer）に
+    // 当たるので、出店者の詳細は開いたまま残る（2026-09-08 に発覚）
+    var dw = document.querySelector('#vendorDrawer');
     if (dw) dw.classList.remove('on');
+    var sd = document.querySelector('#schDrawer');
+    if (sd) sd.classList.remove('on');
   } catch(e2){}
   S.token=''; S.person=''; S.role='';
   $('.app').classList.remove('on');
@@ -1930,7 +1934,7 @@ function openDetail(id){
     $('#eOut').value = d['撤収予定時刻'] || '';
     $('#dSave').setAttribute('data-id', id);
     $('#dMsg').textContent = '';
-    $('.drawer').classList.add('on');
+    $('#vendorDrawer').classList.add('on');
   }, function(e){ netFail(e, 'この出店者の詳細を読み込めませんでした'); });
 }
 
@@ -2051,7 +2055,7 @@ function renderCountEntry(fields, cf, id){
   });
 }
 
-function closeDetail(){ $('.drawer').classList.remove('on'); }
+function closeDetail(){ $('#vendorDrawer').classList.remove('on'); }
 
 /** 後戻りしにくいステータス。サーバー側（Admin.gs の STATUS_NEEDS_REASON_）と同じ並び */
 var NEEDS_REASON = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
@@ -4351,7 +4355,7 @@ document.addEventListener('DOMContentLoaded', function(){
     $('#'+id).addEventListener('change', redraw);
   });
   $('#dClose').addEventListener('click', closeDetail);
-  $('.drawer').addEventListener('click', function(e){ if (e.target === $('.drawer')) closeDetail(); });
+  $('#vendorDrawer').addEventListener('click', function(e){ if (e.target === $('#vendorDrawer')) closeDetail(); });
   $('#dSave').addEventListener('click', saveDetail);
   bindSched();
   bindTimetable();
@@ -7755,7 +7759,7 @@ function html() {
   </div>
 </div>
 
-<div class="drawer">
+<div class="drawer" id="vendorDrawer">
   <div class="sheet">
     <div class="head">
       <span class="id" id="dId"></span>

@@ -159,3 +159,49 @@ describe('書き出したページの中のJavaScriptが読めるか', () => {
     });
   }
 });
+
+/**
+ * ページを書き出すコード（src/build-*.js）の**コメント行に、バッククォートを書かない**。
+ *
+ * ■ なぜ機械で止めるか
+ *   あれは「JavaScriptを書き出すJavaScript」で、画面のコードは
+ *   テンプレートリテラルの中にある。コメントにバッククォートを1つ書くと
+ *   **そこでテンプレートが終わり**、続きがコードとして解釈される。
+ *
+ *   2026-09-08、1日に3回踏んだ。うち1回は、直した直後にまた踏んだ。
+ *   ソースは構文として通り、落ちるのは書き出しの実行時なので、
+ *   `node --check` は**1件ずつしか**教えてくれない。
+ *
+ *   注意していれば避けられる、という種類のものではない。
+ *   **人の注意力に頼るのをやめて、機械に止めさせる。**
+ *
+ *   （マークダウンの引用のつもりで書きたくなるが、この案件のコメントは
+ *     日本語なので「」で足りる）
+ */
+describe('ページを書き出すコードのコメントに、バッククォートが無いか', () => {
+  const BQ = String.fromCharCode(96);
+  const files = fs.readdirSync(path.join(ROOT, 'src'))
+    .filter(f => /^build-.*\.js$/.test(f));
+
+  test('書き出すコードを拾えている', () => {
+    assert.ok(files.length >= 4, 'src/build-*.js を拾えていません：' + files.join(','));
+  });
+
+  for (const f of files) {
+    test(f + ' のコメントにバッククォートが無い', () => {
+      const lines = fs.readFileSync(path.join(ROOT, 'src', f), 'utf8')
+        .split('\r\n').join('\n').split('\n');
+      const bad = [];
+      lines.forEach((line, i) => {
+        const t = line.trim();
+        const isComment = t.indexOf('//') === 0 || t.indexOf('*') === 0
+                       || t.indexOf('/*') === 0;
+        if (isComment && line.indexOf(BQ) >= 0) bad.push((i + 1) + '行目: ' + t.slice(0, 60));
+      });
+      assert.deepStrictEqual(bad, [],
+        f + ' のコメントにバッククォートがあります。'
+        + 'テンプレートリテラルの中だと、そこで文字列が終わって書き出しが落ちます'
+        + '（「」を使ってください）：' + String.fromCharCode(10) + bad.join(String.fromCharCode(10)));
+    });
+  }
+});

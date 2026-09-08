@@ -487,6 +487,51 @@ describe('管理ページ：参照している列が、本当に台帳にある�
   });
 });
 
+/*
+ * ■ 引き出し（drawer）は2枚ある。**名指しで掴むこと**
+ *
+ *   2026-09-04 に制作スケジュールの引き出し（#schDrawer）が足され、
+ *   それが出店者の詳細より**文書の前**に置かれた。
+ *   `$('.drawer')` は querySelector なので**最初の1つ**を返す。
+ *   その結果、出店者一覧の行を押すと**制作スケジュールのタスク入力画面**が開き、
+ *   出店者の詳細は4日間まったく開けなかった（2026-09-08 にけいたが報告）。
+ *
+ *   同じ書き方が「退出時に引き出しを閉じる」処理にもある。
+ *   そちらは 2026-09-03 の検証で入れた守り——閉じないと、入室画面の後ろに
+ *   事業者の氏名・メール・電話が見えたまま残る。
+ *   **開く側だけ直すと、その漏れが本物になる。**
+ *
+ *   引き出しが2枚以上あるかぎり、`.drawer` を第一候補で掴んではいけない。
+ */
+describe('引き出しは、名指しで掴んでいるか', () => {
+  const built = () => {
+    const f = path.join(ROOT, 'admin.html');
+    assert.ok(fs.existsSync(f), 'admin.html がありません。先に npm run build を実行してください');
+    return fs.readFileSync(f, 'utf8');
+  };
+
+  test('引き出しが2枚以上あるなら、あいまいな選び方をしていない', () => {
+    const h = built();
+    const n = (h.match(/class="drawer"/g) || []).length;
+    assert.ok(n >= 2, '引き出しが2枚未満です（この検査の前提が変わりました）：' + n);
+
+    const src = fs.readFileSync(path.join(ROOT, 'src', 'build-admin.js'), 'utf8');
+    // $('.drawer') と querySelector('.drawer') の両方を見る
+    const loose = (src.match(/(?:\$|querySelector)\(\s*'\.drawer'\s*\)/g) || []);
+    assert.deepStrictEqual(loose, [],
+      '引き出しが' + n + '枚あるのに、.drawer を第一候補で掴んでいます（'
+      + loose.length + '箇所）。最初の1枚しか当たらないので、'
+      + '別の引き出しが開きます。id で名指ししてください');
+  });
+
+  test('出店者の詳細の引き出しに、名前が付いている', () => {
+    const h = built();
+    assert.ok(/<div class="drawer" id="vendorDrawer"/.test(h)
+           || /<div id="vendorDrawer" class="drawer"/.test(h),
+      '出店者の詳細の引き出しに id がありません（名指しできません）');
+  });
+});
+
 describe('入室画面：ブラウザのパスワード保存が働くこと', () => {
   const HTML = () => {
     const f = path.join(ROOT, 'admin.html');
