@@ -25,6 +25,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const C = require('./content.js');
 const IMG = require('./imgsize.js');
+const SCHEMA = require('./schema.js');
 const { TOKENS: T, icon } = require('./theme.js');
 /*
  * 詳細欄のURLのリンク化。**①と②で同じ関数を共有する**（2つ書くと必ずズレる）。
@@ -994,12 +995,37 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 }
 
 // ─────────────────────────────────────────── クライアントJS
+/**
+ * 台帳に入る希望区画の文言 → 「1区画」「2区画」の対応表。
+ *
+ * src/schema.js の units から作る。選択肢を足しても、ここを直す必要はない。
+ */
+function boothShortMap() {
+  const f = SCHEMA.FIELDS.filter(function (x) { return x.sheet === '希望区画'; })[0];
+  const out = {};
+  ((f && f.options) || []).forEach(function (o) {
+    if (o.units) out[o.label] = o.units + '区画';
+  });
+  return out;
+}
+
 function clientJs() {
   return `
 'use strict';
 var GAS_URL = ${JSON.stringify(ENDPOINT.gasUrl || '')};
 var KEY = 'bondance.admin.session';
 // 紙の見出しに使う。src/content.js が正（ここに書き写さない）
+/*
+ * 希望区画の短い呼び方。台帳には応募者が選んだ長い文言がそのまま入っている：
+ *   「間口1.5間×奥行2間（1区画／約2.7m×3.6m）」
+ * 一覧の列や絞り込みでは長すぎて読めないので、ここでは「1区画」と出す
+ * （けいた指示・2026-09-08）。
+ *
+ * **対応表は src/schema.js の units から機械的に作る。**
+ * ここに書き写すと、選択肢を足したときに片方だけ古くなる。
+ * 台帳の値そのものは変えない（応募者が選んだ記録なので、詳細ではフルで出す）。
+ */
+var BOOTH_SHORT = ${JSON.stringify(boothShortMap())};
 var EV_NAME  = ${JSON.stringify(C.EVENT.name)};
 var EV_DATE  = ${JSON.stringify(C.EVENT.date)};
 var EV_VENUE = ${JSON.stringify(C.EVENT.venue)};
@@ -1298,6 +1324,25 @@ function bindJumps(root){
   });
 }
 
+/**
+ * 希望区画を短く呼ぶ。台帳の値は変えず、**出すときだけ**縮める
+ * （「間口1.5間×奥行2間（1区画／約2.7m×3.6m）」→「1区画」）。
+ *
+ * 対応表に無い値（古い応募・文言を変えたあと）は、**そのまま出す**。
+ * 縮められないものを空にすると、値が消えたように見える。
+ */
+function booth(v){
+  var s = String(v == null ? '' : v).trim();
+  return BOOTH_SHORT[s] || s;
+}
+
+/** 集計の見出しだけを短くする（件数はそのまま） */
+function shortKeys(obj){
+  var out = {};
+  Object.keys(obj || {}).forEach(function(k){ out[booth(k)] = obj[k]; });
+  return out;
+}
+
 function bars(obj, order){
   var keys = order || Object.keys(obj);
   // 空のまま返すと、見出しだけの**白い箱**になる。
@@ -1417,7 +1462,7 @@ function loadSummary(){
     $('#breakdown').innerHTML = [
       ['ステータス別', bars(c.byStatus, ['未確認','審査中','採択','不採択','辞退','キャンセル','重複（無効）'])],
       ['出店形態別（延べ）', bars(c.byType)],
-      ['希望区画別', bars(c.bySize)],
+      ['希望区画別', bars(shortKeys(c.bySize))],
       ['電源', bars(c.byPower)],
       ['担当社員別', bars(c.byStaff)],
       ['レンタル備品', bars(Object.assign(
@@ -1472,14 +1517,22 @@ function fillFilters(){
     });
     return Object.keys(set).sort();
   };
-  var opts = function(el, label, list){
+  /*
+   * 第4引数「show」を渡すと、**見せ方だけ**を変える。
+   * 値（value）は台帳の文言のままにする——絞り込みは値で照合しているので、
+   * ここを短くすると**何も選べなくなる**
+   */
+  var opts = function(el, label, list, show){
     var cur = $(el).value;
     $(el).innerHTML = '<option value="">' + label + '</option>'
-      + list.map(function(v){ return '<option>' + esc(v) + '</option>'; }).join('');
+      + list.map(function(v){
+          return '<option value="' + esc(v) + '">'
+               + esc(show ? show(v) : v) + '</option>';
+        }).join('');
     if (list.indexOf(cur) >= 0) $(el).value = cur;
   };
   opts('#fType', '出店形態（すべて）', uniq('出店形態', true));
-  opts('#fSize', '希望区画（すべて）', uniq('希望区画'));
+  opts('#fSize', '希望区画（すべて）', uniq('希望区画'), booth);
   opts('#fDay',  '当日ステータス（すべて）', S.list.dayStatuses);
 }
 
@@ -1806,6 +1859,8 @@ function renderList(){
       // スマホでは表を1件1カードに組み替えるので、見出しを各セルに持たせる
       var lbl = ' data-l="'+esc(c)+'"';
       if (c === 'ステータス') return '<td'+lbl+'><span class="pill '+esc(v)+'">'+esc(v||'未確認')+'</span></td>';
+      // 一覧では長すぎて読めない（けいた指示・2026-09-08）。詳細ではフルのまま出す
+      if (c === '希望区画') return '<td'+lbl+'>'+esc(booth(v))+'</td>';
       if (c === '企業名'){
         var d = String(x['重複フラグ']||'').trim()
           ? ' <span class="pill dupflag">重複の可能性</span>' : '';
