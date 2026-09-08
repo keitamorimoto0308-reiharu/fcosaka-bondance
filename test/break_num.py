@@ -143,7 +143,10 @@ CASES = [
          "  const src = 'function numCount_(t){return Number(t);}'"
          " + 'function numAmount_(t){return Number(t);}'"
          " + 'function numWhy_(t){return String(t);}';"),
-    ], '模擬が gas/Num.gs を読んでいません'),
+    # 2026-09-08、ほかの箱にも rd('Num.gs') を足したところ、
+    # 「どこかに 'Num.gs' の字があるか」を見る検査が別の理由で通るようになった。
+    # **NUM の箱の中**を切り出して見る形に変えたので、文言もそちらに合わせる
+    ], 'NUM の箱が gas/Num.gs を読んでいません'),
 ]
 
 

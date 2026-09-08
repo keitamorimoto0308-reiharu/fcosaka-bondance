@@ -86,7 +86,8 @@ function load(opts) {
 
   const src = read('Admin.gs');
   for (const marker of ['function recordHistory_', 'function applicantEditable_', 'function adminApplicantFields_',
-                        'function adminApplicantUpdate_', 'function adminUpdate_']) {
+                        'function adminApplicantUpdate_', 'function adminUpdate_',
+                        'function adminBulkStatus_']) {
     const start = src.indexOf(marker);
     assert.ok(start >= 0, 'gas/Admin.gs に ' + marker + ' がありません');
     const end = src.indexOf('\n}\n', start) + 3;
@@ -311,5 +312,105 @@ describe('検証役の指摘（同日）に対する守り', () => {
     assert.strictEqual(r.ok, false, '履歴に残せなくても成功として返しています');
     assert.strictEqual(r.error, 'history_failed');
     assert.ok(/変更履歴/.test(r.message), '何が起きたのかが伝わりません');
+  });
+});
+
+/*
+ * ■ 複数まとめてステータスを変える（けいた指示・2026-09-08）
+ *
+ *   出店者一覧で選んだ相手に、メール送信だけでなくステータス変更もできるように。
+ *
+ * ■ 一斉メールとは守りの重さを変える
+ *   メール送信は**取り消せない**ので、一度きりの札・プレビュー必須・40件上限を
+ *   置いた。ステータス変更は**変更履歴に前の値ごと残り、戻せる**。
+ *   同じ重さの守りを掛けると、人は迂回路（シートを直接いじる）を探す。
+ *
+ * ■ 規則を写さない
+ *   1件ずつの adminUpdate_ が持っている規則
+ *   （変えてよい項目・値の妥当性・理由が要るステータス・変更履歴）を
+ *   **そのまま通す**。ここに写しを作ると、片方だけ緩くなる。
+ */
+describe('まとめてステータスを変える', () => {
+  const bulk = (A, payload) => plain(A.adminBulkStatus_(ME, payload));
+
+  test('選んだ全員のステータスが変わる', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007'], status: '採択' });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.deepStrictEqual(r.done, ['SB-0007']);
+    assert.ok(HISTORY.length >= 1, '変更履歴に残っていません');
+  });
+
+  test('知らないステータスは、1件も変えない', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007'], status: 'でたらめ' });
+    assert.strictEqual(r.ok, false,
+      '知らないステータスを、先に断っていません（1件ずつの結果で返しています）：'
+      + JSON.stringify(r));
+    assert.strictEqual(HISTORY.length, 0, '弾いたのに書いています');
+  });
+
+  /*
+   * 1件ずつのときは「不採択・辞退・キャンセル・重複」に理由が要る。
+   * まとめてのときだけ要らない、では筋が通らない
+   * （むしろ、まとめて変えるほうが影響が大きい）。
+   */
+  test('理由が要るステータスは、まとめてでも理由が要る', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007'], status: '不採択' });
+    assert.strictEqual(r.ok, false,
+      '理由が要るステータスなのに、先に断っていません（1件ずつの結果で返しています）：'
+      + JSON.stringify(r));
+    assert.ok(/理由/.test(r.message || ''), r.message);
+    assert.strictEqual(HISTORY.length, 0, '理由が無いのに書いています');
+  });
+
+  test('理由があれば、理由が要るステータスにも変えられる', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007'], status: '不採択',
+                        reason: '出店形態が募集の対象外のため' });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+  });
+
+  test('相手を1件も選んでいなければ、何もしない', () => {
+    const A = load();
+    const r = bulk(A, { ids: [], status: '採択' });
+    assert.strictEqual(r.ok, false, JSON.stringify(r));
+    assert.strictEqual(HISTORY.length, 0);
+  });
+
+  /*
+   * **値の検査は、1件目に触る前に済ませる。**
+   * 途中で気づく形だと、前半だけ変わって後半が変わらない状態が残り、
+   * 何が起きたのか誰にも分からなくなる。
+   */
+  test('値が不正なときは、実在する相手が混ざっていても1件も変えない', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007', 'SB-9999'], status: 'でたらめ' });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(HISTORY.length, 0, '1件でも書いています');
+  });
+
+  /*
+   * 同じ相手が2回入っていると、2回書いて**変更履歴が二重に増える**。
+   * 画面のチェック欄では起きにくいが、通信を細工すれば起きる
+   * （守りはサーバー側だけ・引き継ぎ書 §4）。
+   */
+  test('同じ受付IDが2回入っていても、1回だけ変える', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007', 'SB-0007'], status: '採択' });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.deepStrictEqual(r.done, ['SB-0007'],
+      '同じ相手を2回変えています：' + JSON.stringify(r.done));
+    assert.strictEqual(HISTORY.length, 1,
+      '変更履歴が二重に増えています：' + HISTORY.length);
+  });
+
+  test('見つからない相手は、変えた相手と分けて返す', () => {
+    const A = load();
+    const r = bulk(A, { ids: ['SB-0007', 'SB-9999'], status: '採択' });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.deepStrictEqual(r.done, ['SB-0007']);
+    assert.deepStrictEqual((r.failed || []).map(x => x.id), ['SB-9999']);
   });
 });

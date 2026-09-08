@@ -600,9 +600,12 @@ CASES = [
     ], 'が、通信の失敗を生のまま出しています'),
 
     # 判定を画面に写すと、サーバーと規則がズレる
+    # 2026-09-08、取り込みに replace を足したときに目印がずれた。
+    # **引数まで含めた目印は、引数が増えると必ず壊れる。**
+    # action の名前だけを目印にする
     ('直したあとの見直しを、画面でやるようにする', [
-        (A, "  api('adminSchedImportRead', { rows: rows }).then(function(r){",
-            "  api('adminSched', {}).then(function(r){"),
+        (A, "  api('adminSchedImportRead', { rows: rows,",
+            "  api('adminSched', { rows: rows,"),
     ], '直したあとの見直しを、画面でやっています'),
 
     # 下見を直しただけで台帳が書き換わってはいけない

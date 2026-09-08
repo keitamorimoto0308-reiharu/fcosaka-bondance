@@ -633,6 +633,77 @@ function EDITABLE_() {
   return [COL.status, COL.memo, COL.inAt, COL.outAt, COL.dayStatus, COL.mainType];
 }
 
+/**
+ * 選んだ相手のステータスを、まとめて変える（けいた指示・2026-09-08）。
+ *
+ * ■ 規則を写さない
+ *   変えてよい項目・値の妥当性・理由が要るステータス・変更履歴は、
+ *   1件ずつの `adminUpdate_` が持っている。**そのまま通す。**
+ *   ここに写しを作ると、片方だけ緩くなる（この案件が繰り返し避けてきた形）。
+ *
+ * ■ 一斉メールとは、守りの重さを変える
+ *   メール送信は**取り消せない**ので、一度きりの札・プレビュー必須・40件上限を
+ *   置いた。ステータス変更は**変更履歴に前の値ごと残り、戻せる**。
+ *   同じ重さの守りを掛けると、人は迂回路（シートを直接いじる）を探す。
+ *
+ * ■ 値の検査は、1件目に触る前に済ませる
+ *   途中で気づく形だと、前半だけ変わって後半が変わらない状態が残り、
+ *   何が起きたのか誰にも分からなくなる。
+ *   ステータスと理由は全員で同じなので、先にまとめて確かめられる。
+ */
+function adminBulkStatus_(auth, payload) {
+  var ids = (payload && Array.isArray(payload.ids)) ? payload.ids : [];
+  var status = String((payload && payload.status) || '').trim();
+  var reason = String((payload && payload.reason) || '');
+
+  // 重複を落とす。**素の {} にしない**（constructor というIDで「もう見た」になる）
+  var seen = Object.create(null);
+  var list = [];
+  ids.forEach(function (x) {
+    var id = String(x == null ? '' : x).trim();
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    list.push(id);
+  });
+  if (!list.length) {
+    return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
+  }
+
+  if (STATUS_LIST_().indexOf(status) < 0) {
+    return { ok: false, error: 'bad_value', message: 'ステータスの値が不正です' };
+  }
+  // 1件ずつのときに理由が要るものは、まとめてでも要る。
+  // むしろ、まとめて変えるほうが影響が大きい
+  if (STATUS_NEEDS_REASON_.indexOf(status) >= 0 && reason.trim().length < 5) {
+    return { ok: false, error: 'reason_required',
+      message: '「' + status + '」に変更する理由を、5文字以上でご記入ください。' };
+  }
+
+  var done = [], failed = [];
+  var patch = {};
+  patch[COL.status] = status;
+
+  list.forEach(function (id) {
+    var r;
+    try {
+      r = adminUpdate_(auth, { id: id, patch: patch, reason: reason });
+    } catch (e) {
+      logError_('adminBulkStatus_:' + id, e);
+      r = { ok: false, message: String((e && e.message) || e).slice(0, 120) };
+    }
+    if (r && r.ok) done.push(id);
+    else failed.push({ id: id, reason: (r && (r.message || r.error)) || '変えられませんでした' });
+  });
+
+  return {
+    ok: true,
+    done: done,
+    failed: failed,
+    message: done.length + '件を「' + status + '」に変えました。'
+      + (failed.length ? '（' + failed.length + '件が変えられませんでした）' : ''),
+  };
+}
+
 function adminUpdate_(auth, payload) {
   var id = String((payload && payload.id) || '').trim();
   var patch = (payload && payload.patch) || {};
@@ -1782,6 +1853,9 @@ function adminDispatch_(payload) {
     case 'adminList':     return adminList_(auth);
     case 'adminDetail':   return adminDetail_(auth, payload);
     case 'adminUpdate':   return adminUpdate_(auth, payload);
+    // まとめてステータスを変える。1件ずつと同じ権限（**adminOnly には入れない**）。
+    // 一般もステータスは変えられる（引き継ぎ書§9の権限の表）
+    case 'adminBulkStatus': return adminBulkStatus_(auth, payload);
     case 'adminSpaces':   return adminSpaces_(auth);
     case 'adminAssign':   return adminAssign_(auth, payload);
     case 'adminUnassign': return adminUnassign_(auth, payload);

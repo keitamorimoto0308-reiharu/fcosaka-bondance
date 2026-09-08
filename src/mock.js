@@ -1451,6 +1451,43 @@ function handle(payload) {
                  .map(f => ({ key: f.key, label: f.label, sheet: f.sheet,
                               unit: f.aggregate.unit, min: f.min, max: f.max })) };
     }
+    /*
+     * まとめてステータスを変える。
+     *
+     * **模擬に規則の写しを増やさない。** 下の adminUpdate を呼び回す。
+     * 本番（gas/Admin.gs の adminBulkStatus_）も 1件ずつの adminUpdate_ を
+     * そのまま通しているので、構造もそろう。
+     */
+    case 'adminBulkStatus': {
+      const seen = Object.create(null);
+      const ids = (Array.isArray(payload.ids) ? payload.ids : [])
+        .map(x => String(x == null ? '' : x).trim())
+        .filter(id => id && !seen[id] && (seen[id] = true));
+      if (!ids.length) {
+        return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
+      }
+      const st = String(payload.status || '').trim();
+      if (!STATUSES.includes(st)) {
+        return { ok: false, error: 'bad_value', message: 'ステータスの値が不正です' };
+      }
+      const NEEDS = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+      if (NEEDS.includes(st) && String(payload.reason || '').trim().length < 5) {
+        return { ok: false, error: 'reason_required',
+          message: '「' + st + '」に変更する理由を、5文字以上でご記入ください。' };
+      }
+      const done = [], failed = [];
+      ids.forEach(id => {
+        const r = handle(Object.assign({}, payload, {
+          action: 'adminUpdate', id: id, patch: { 'ステータス': st },
+        }));
+        if (r && r.ok) done.push(id);
+        else failed.push({ id: id, reason: (r && (r.message || r.error)) || '変えられませんでした' });
+      });
+      return { ok: true, done, failed,
+        message: done.length + '件を「' + st + '」に変えました。'
+          + (failed.length ? '（' + failed.length + '件が変えられませんでした）' : '') };
+    }
+
     case 'adminUpdate': {
       // 本番は検査を全部通してから1バイトも書かない。ここも同じ順序にする
       {

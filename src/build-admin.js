@@ -282,6 +282,8 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
   flex:1 1 190px;min-width:190px}
 .pickmsg small{font-size:11.5px;color:var(--muted)}
 .pickn{white-space:nowrap}
+.picksel{display:flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap}
+.picksel select{font-size:13px;padding:5px 8px}
 .pickmsg em{font-style:normal;font-weight:700;color:var(--error);font-size:12.5px}
 /* 「本文の1行が抜ける」話は、「その相手に届かない」話と色を分ける。
    同じ色で並べたせいで正反対に読まれた（2026-09-08 の検証） */
@@ -1499,6 +1501,9 @@ function loadList(){
     var mine = r.rows.filter(function(x){ return x['FC大阪担当社員'] === S.person; });
     if (mine.length) $('#fMine').checked = true;
     fillFilters();
+    // まとめて変えるときの選択肢も、**サーバーが返す一覧から**作る（写しを持たない）
+    $('#pickStatus').innerHTML = '<option value="">選ぶ…</option>'
+      + (r.statuses || []).map(function(x){ return '<option>' + esc(x) + '</option>'; }).join('');
     loadShow();              // 覚えている列。無ければ既定の並び
     renderColumnPicker();
     if (S.role === '管理者') loadPurgeBox();
@@ -1821,9 +1826,13 @@ function renderList(){
   $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
   var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
   $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
-  // 一斉メールの相手を選ぶ欄。管理者だけに出す
-  //（一斉メールの送信そのものが管理者のみ・仕様書 §6-2）
-  var canPick = S.role === '管理者';
+  /*
+   * 選ぶ欄。**一般にも出す。**
+   * ステータスの変更は一般でもできる操作なので（引き継ぎ書§9の権限の表）、
+   * 選ぶこと自体を管理者に限る理由がない。
+   * メールを書くボタンだけ、管理者に絞る（.admin-only）。
+   */
+  var canPick = !!S.role;
 
   /*
    * ■ 選択は、**いま画面に出ている行だけ**に剪定する
@@ -1923,12 +1932,61 @@ function renderList(){
   renderPickBar();
 }
 
+/**
+ * 選んだ相手のステータスを、まとめて変える（けいた指示・2026-09-08）。
+ *
+ * ■ メール送信より守りを軽くしている
+ *   メールは**取り消せない**ので、一度きりの札とプレビューを必須にした。
+ *   ステータスは**変更履歴に前の値ごと残り、戻せる**ので、確認1回で足りる。
+ *   過剰な守りは、人に迂回路を探させる。
+ *
+ * ■ 理由は、要るときだけ聞く
+ *   何を選んでも理由を聞かれると、人は意味のない文字を打つようになる。
+ *   1件ずつのときと同じ規則（サーバーが持っている）に合わせる。
+ */
+var STATUS_NEEDS_REASON = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+
+function bulkStatus(){
+  var sel = $('#pickStatus');
+  var st = sel.value;
+  if (!st) return;
+  sel.value = '';                       // 選びっぱなしにしない
+
+  var ids = bcPickIds();
+  if (!ids.length) return;
+
+  var reason = '';
+  var NL = String.fromCharCode(10);
+  if (STATUS_NEEDS_REASON.indexOf(st) >= 0){
+    reason = prompt(ids.length + '社を「' + st + '」に変えます。' + NL
+      + '理由を5文字以上でご記入ください（変更履歴に残ります）。');
+    if (reason === null) return;
+  } else if (!confirm(ids.length + '社のステータスを「' + st + '」に変えます。' + NL
+      + '変更履歴に残るので、あとから戻せます。' + NL + NL + 'よろしいですか？')){
+    return;
+  }
+
+  sel.disabled = true;
+  api('adminBulkStatus', { ids: ids, status: st, reason: reason }).then(function(r){
+    sel.disabled = false;
+    if (!r || !r.ok){ toast((r && r.message) || '変えられませんでした', true); return; }
+    toast(r.message || '変えました');
+    if ((r.failed || []).length){
+      toast(r.failed.length + '社は変えられませんでした：'
+        + r.failed.map(function(f){ return f.id; }).join('、'), true);
+    }
+    // 変えたあとは選択を捨てる。**続けて押せる形にしない**
+    bcPickClear();
+    loadList();
+  }, function(e){ sel.disabled = false; netFail(e, 'ステータスを変えられませんでした'); });
+}
+
 /** 表の下に出す「選んだ○社へメールを書く」 */
 function renderPickBar(){
   var bar = $('#pickBar');
   if (!bar) return;
   var n = bcPickIds().length;
-  bar.hidden = (S.role !== '管理者') || n === 0;
+  bar.hidden = !S.role || n === 0;
   var lbl = $('#pickCount');
   if (lbl) lbl.textContent = n + ' 社';
   // 40社の上限を、**選んでいる最中に**出す。
@@ -4360,6 +4418,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // ── 一斉メール
   $('#pickMail').addEventListener('click', bcStart);
   $('#pickNone').addEventListener('click', function(){ bcPickClear(); renderList(); });
+  $('#pickStatus').addEventListener('change', bulkStatus);
   $('#bcPreview').addEventListener('click', bcDoPreview);
   $('#bcSend').addEventListener('click', bcDoSend);
   // 文面を1文字でも直したら、確認と送信を隠してやり直させる。
@@ -7387,7 +7446,9 @@ function html() {
       <!-- 一斉メールの相手は、ここで選ぶ（メール送信タブに絞り込みを作らない）。
            上の絞り込みは6種類あり、写すと必ずズレる。
            絞り込みを変えると選択は消える（見えていない行が残らないように） -->
-      <div class="pickbar admin-only" id="pickBar" hidden>
+      <!-- 選ぶ欄は**一般にも出す**。ステータスの変更は一般でもできる操作なので
+           （引き継ぎ書§9の権限の表）。メールを書くボタンだけ管理者に絞る -->
+      <div class="pickbar" id="pickBar" hidden>
         <span class="pickmsg">
           <span class="pickn"><b id="pickCount">0 社</b>を選んでいます</span>
           <em id="pickOver" hidden>一度に送れるのは40社までです</em>
@@ -7396,9 +7457,12 @@ function html() {
           <small>※ 検索や絞り込みを変えると、この選択は消えます</small>
         </span>
         <button class="ghost" id="pickNone">選択をやめる</button>
+        <label class="picksel">ステータスを
+          <select id="pickStatus"><option value="">選ぶ…</option></select>
+        </label>
         <!-- 「メールを送る」だと、押した瞬間に飛ぶように読める。
              実際はタブを移って文面を書く画面に行くだけ -->
-        <button class="print" id="pickMail">選んだ出店者へメールを書く</button>
+        <button class="print admin-only" id="pickMail">選んだ出店者へメールを書く</button>
       </div>
 
       <!-- テストデータの一括削除。設定でONにしたときだけ出る（管理者のみ）。
