@@ -159,6 +159,27 @@ var BROADCAST_HEAD = ['送信ID', '送信日時', '送信者', '件名', '本文
 var BROADCAST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * 履歴シートを返す。**まだ無ければ null**（例外にしない）。
+ *
+ * ■ なぜ例外のままにしないか
+ *   反映の順番は GAS → けいたが `setup()` → ページ公開（引き継ぎ書 §3）。
+ *   その途中で「メール送信」タブを開く人がいる。
+ *   `sheet_` は「setup() を実行してください」という良い文言を投げるが、
+ *   **`gas/Api.gs` が例外を文言なしの `server_error` に潰す**ので、
+ *   使う人には理由の出ないエラーだけが見える。
+ *
+ *   ここで null にしておき、呼ぶ側が「相手は見せる／送信は断る」を
+ *   それぞれ判断する（`gas/Notify.gs` が台帳の列不足でしている処理と同じ形）。
+ */
+function broadcastSheetOrNull_() {
+  try {
+    return sheet_(SHEET.BROADCAST);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * 履歴の送信日時を、比べられる数にする。
  *
  * シートの値は、書いた直後は Date だが、
@@ -190,7 +211,7 @@ function broadcastRecent_(subject, ids) {
   });
 
   var empty = { ids: [], sentAt: '', sendId: '' };
-  var sh = sheet_(SHEET.BROADCAST);
+  var sh = broadcastSheetOrNull_();
   if (!sh || sh.getLastRow() < 2) return empty;
 
   var grid = sh.getDataRange().getValues();
@@ -571,8 +592,13 @@ function adminBroadcastPreview_(auth, payload) {
 
   var sendIds = picked.rows.map(function (r) { return r.id; });
 
+  // 履歴シートが無いと、送った記録が残せない。**相手と見本は見せる**が、
+  // 送れないので札は出さない（押せるのに送れない画面を作らない）
+  var historyReady = !!broadcastSheetOrNull_();
+
   return {
     ok: true,
+    historyReady: historyReady,
     rows: picked.rows.map(function (r) {
       return { id: r.id, company: r.company, shopName: r.shopName,
                person: r.person, email: r.email, status: r.status,
@@ -598,8 +624,9 @@ function adminBroadcastPreview_(auth, payload) {
     drafts: BROADCAST_DRAFTS_(),
     // 差出人の設定が壊れていると、事業者に別のアドレスから届く。送る前に見せる
     mail: diagnoseMail(),
-    // 文面に問題があるうちは札を出さない（どのみち送れない）
-    ticket: errors.length ? '' : broadcastTicket_(subject, body, sendIds),
+    // 文面に問題があるうち、履歴シートが無いうちは札を出さない（どのみち送れない）
+    ticket: (errors.length || !historyReady)
+      ? '' : broadcastTicket_(subject, body, sendIds),
   };
 }
 
@@ -629,6 +656,21 @@ function adminBroadcastSend_(auth, payload) {
   if (errs.length) {
     return { ok: false, error: 'bad_template', errors: errs,
       message: '文面に問題があるため、1通も送っていません：' + errs.join(' ／ ') };
+  }
+
+  /*
+   * 履歴シートが無ければ、**1通も送らない**。
+   *
+   * 送った記録が残せない状態で送ると、問い合わせに答えられず、
+   * 二重送信の照合（broadcastRecent_）も働かない。
+   * ロックを取る前に確かめる（持ったまま抜けないように）。
+   */
+  var sh = broadcastSheetOrNull_();
+  if (!sh) {
+    return { ok: false, error: 'no_sheet',
+      message: '台帳に「一斉メール履歴」シートがありません。'
+             + 'Apps Script から setup() を1回実行してください。'
+             + '（送った記録が残せないため、1通も送っていません）' };
   }
 
   var lock = LockService.getScriptLock();
@@ -682,8 +724,8 @@ function adminBroadcastSend_(auth, payload) {
     }
 
     // ■ 記録してから送る（gas/Notify.gs とは逆。broadcastLog_ の説明を参照）
+    //   sh はロックを取る前に取ってある（無ければここまで来ない）
     var now = new Date();
-    var sh = sheet_(SHEET.BROADCAST);
     var sendId = broadcastSendId_(sh, now);
     var logRow = broadcastLog_(sh, sendId, now, auth && auth.person,
                                subject, body, sendIds);

@@ -265,6 +265,21 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
   padding:8px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer}
 .mailkind label:has(input:checked){border-color:var(--ink);background:var(--subtle);
   font-weight:700}
+/* 一斉メール。相手は「出店者一覧」で選ぶ（この画面に絞り込みは作らない） */
+.pickcol{width:34px;text-align:center}
+.pickcol input{width:17px;height:17px;cursor:pointer}
+.pickbar{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;
+  margin-top:10px;padding:11px 14px;background:var(--white);
+  border:1px solid var(--ink);border-radius:9px;font-size:13.5px;
+  box-shadow:0 -2px 10px rgba(0,0,0,.07);z-index:5}
+.pickbar b{font-size:15px}
+.pickbar button{margin-left:0}
+.bcdrafts{margin:0 0 12px;font-size:12.5px;color:#6B6259;
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.minitable{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+.minitable th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:400;
+  border-bottom:1px solid var(--border);padding:6px 8px;white-space:nowrap}
+.minitable td{border-bottom:1px solid var(--border);padding:7px 8px}
 /* レンタル品目 */
 .rental table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
 .rental th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:400;
@@ -1556,6 +1571,29 @@ function renderColumnPicker(){
 // ticket は、その集合に対してサーバーが出した引換券
 var PURGE = { ids: null, ticket: '' };
 
+/**
+ * 一斉メールに送る相手として選んだ受付ID。
+ *
+ * ■ 端末に覚えさせない（SHOW とは違う）
+ *   列の選択は覚えてよいが、これは覚えてはいけない。
+ *   翌日この画面を開いた人が、**自分が選んだ覚えのない相手**を
+ *   選択済みの状態で見ることになる。
+ *
+ * ■ 絞り込みを変えたら捨てる
+ *   見えていない行が選ばれたまま残るのが、この機能でいちばん危ない形。
+ *   画面に出ている行だけが選択の対象、という約束にする。
+ */
+var BCPICK = Object.create(null);
+
+function bcPickIds(){
+  return Object.keys(BCPICK);
+}
+
+/** 選択を捨てる。絞り込みが変わったときに必ず呼ぶ */
+function bcPickClear(){
+  BCPICK = Object.create(null);
+}
+
 function loadPurgeBox(){
   // 設定でONのときだけ入口が開く。OFFなら箱ごと出さない。
   // **ここでは PURGE を触らない**。入口の開け閉めだけが仕事
@@ -1712,13 +1750,24 @@ function renderList(){
   $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
   var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
   $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
-  var head = '<tr>' + cols.map(function(c){
+  // 一斉メールの相手を選ぶ欄。管理者だけに出す
+  //（一斉メールの送信そのものが管理者のみ・仕様書 §6-2）
+  var canPick = S.role === '管理者';
+
+  var head = '<tr>'
+    + (canPick ? '<th class="pickcol"><input type="checkbox" id="pickAll"'
+                 + ' title="表示中の行をすべて選ぶ／解除する"></th>' : '')
+    + cols.map(function(c){
     var cls = S.sort.col === c ? (S.sort.dir > 0 ? 'asc' : 'desc') : '';
     return '<th data-sort="'+esc(c)+'" class="'+cls+'">'+esc(c)+'</th>';
   }).join('') + '</tr>';
 
   var body = rows.map(function(x){
-    return '<tr data-id="'+esc(x['受付ID'])+'">' + cols.map(function(c){
+    var id = String(x['受付ID'] || '');
+    return '<tr data-id="'+esc(id)+'">'
+      + (canPick ? '<td class="pickcol" data-l="選ぶ"><input type="checkbox" data-pick="'
+                   + esc(id) + '"' + (BCPICK[id] ? ' checked' : '') + '></td>' : '')
+      + cols.map(function(c){
       var v = x[c] || '';
       // スマホでは表を1件1カードに組み替えるので、見出しを各セルに持たせる
       var lbl = ' data-l="'+esc(c)+'"';
@@ -1749,10 +1798,47 @@ function renderList(){
     var sx = 0, sy = 0;
     tr.addEventListener('pointerdown', function(e){ sx = e.clientX; sy = e.clientY; });
     tr.addEventListener('click', function(e){
+      // 選ぶ欄を押しただけで詳細が開くと、
+      // 「選ぼうとしたのに窓が出る」画面になる
+      if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-pick')) return;
       if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) return;
       openDetail(tr.getAttribute('data-id'));
     });
   });
+
+  if (canPick){
+    $$('#listBody input[data-pick]').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var id = cb.getAttribute('data-pick');
+        if (cb.checked) BCPICK[id] = true; else delete BCPICK[id];
+        renderPickBar();
+      });
+    });
+    // 「すべて選ぶ」は、**いま表示されている行だけ**が対象。
+    // 絞り込みの外まで選べると、見ていない相手にメールが飛ぶ
+    var all = $('#pickAll');
+    if (all){
+      var shown = rows.map(function(x){ return String(x['受付ID'] || ''); });
+      all.checked = shown.length > 0 && shown.every(function(id){ return BCPICK[id]; });
+      all.addEventListener('change', function(){
+        shown.forEach(function(id){
+          if (all.checked) BCPICK[id] = true; else delete BCPICK[id];
+        });
+        renderList();
+      });
+    }
+  }
+  renderPickBar();
+}
+
+/** 表の下に出す「選んだ○社にメールを送る」 */
+function renderPickBar(){
+  var bar = $('#pickBar');
+  if (!bar) return;
+  var n = bcPickIds().length;
+  bar.hidden = (S.role !== '管理者') || n === 0;
+  var lbl = $('#pickCount');
+  if (lbl) lbl.textContent = n + ' 社';
 }
 
 function jumpToList(spec){
@@ -2441,7 +2527,9 @@ function showTab(name, keepHash){
   // メール送信だけは毎回読み直す。他のタブは一度読んだら使い回すが、
   // ここは「いま送る対象が何件か」を見せる画面なので、
   // 古い件数を見せたまま送信させると、見せた覚えのない相手に届く。
-  if (name === 'mail'){ loadNotify(); loadTemplate(); }
+  // 一斉メールは、タブを開いた時点の選択で読み直す。
+  // 一覧で選び直してからタブを切り替えた人が、古い相手を見ないように
+  if (name === 'mail'){ loadNotify(); loadTemplate(); bcOnTab(); }
   // 資料置き場も毎回読み直す。誰かが足したものが見えないと意味がない
   if (name === 'docs') loadDocs();
   if (!keepHash && location.hash.slice(1).split('/')[0] !== name){
@@ -3084,6 +3172,337 @@ function sendNotify(){
   }, function(){
     btn.disabled = false;
     $('#mailMsg').textContent = '';
+    toast('送信できませんでした（通信）', true);
+  });
+}
+
+/* ─────────────────────────────── 一斉メール
+ *
+ * ■ 相手は「出店者一覧」で選ぶ
+ *   この画面に絞り込みを作らない。一覧の絞り込みは6種類あり、
+ *   写すと必ずズレる（引き継ぎ書 §4「実装を2つにすると必ずズレる」）。
+ *
+ * ■ 札（ticket）
+ *   プレビューが出す一度きりの引換券。**画面で見たものしか送れない**
+ *   ように、件名・本文・宛先の指紋と結びついている。
+ *   だから文面を1文字でも直したら、3・4段目を隠してプレビューからやり直す。
+ *   （直したまま送ろうとしてもサーバーが断るが、
+ *     押せてしまう画面にすると「押したのに送れない」になる）
+ */
+var BC = { ids: [], pre: null, ticket: '' };
+
+/** 一覧から「選んだ出店者にメールを送る」で来たとき */
+function bcStart(){
+  BC = { ids: bcPickIds(), pre: null, ticket: '' };
+  showTab('mail');   // ここで bcOnTab() が走り、いまの選択で読み直す
+  var p = $('#bcPanel');
+  if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * メール送信タブを開いたとき。
+ *
+ * **選択が変わっていたら読み直す。** 一覧で選び直してからタブを
+ * 切り替えた人が、古い相手の一覧を見たまま送るのを防ぐ。
+ * 文面を書きかけのときに毎回消えると困るので、
+ * 相手が同じなら何もしない。
+ */
+function bcOnTab(){
+  var now = bcPickIds();
+  if (now.join(',') === BC.ids.join(',') && BC.pre) return;
+  BC = { ids: now, pre: null, ticket: '' };
+  bcLoad();
+}
+
+/** 相手・下書き・差し込みの一覧を取りに行く（件名も本文も空のまま呼べる） */
+function bcLoad(){
+  bcHideFrom(3);
+  $('#bcResult').hidden = true;
+  if (!BC.ids.length){
+    $('#bcIntro').innerHTML =
+      '送る相手は<b>「出店者一覧」で選びます</b>。'
+      + '一覧で絞り込んでから、行の左の欄にチェックを入れて、'
+      + '下の「選んだ出店者にメールを送る」を押してください。';
+    $('#bcStep1').hidden = true;
+    $('#bcStep2').hidden = true;
+    return;
+  }
+  $('#bcStep1').hidden = false;
+  $('#bcIntro').textContent = '読み込んでいます…';
+  $('#bcTargets').innerHTML = '';
+
+  api('adminBroadcastPreview', { ids: BC.ids, subject: '', body: '' }).then(function(r){
+    if (!r || !r.ok){
+      $('#bcIntro').textContent = (r && r.message) || '相手を取得できませんでした。';
+      return;
+    }
+    BC.pre = r;
+    BC.ticket = '';
+    bcRenderTargets(r);
+    bcRenderComposer(r);
+  }, function(e){ netFail(e, '一斉メールの相手を読み込めませんでした'); });
+}
+
+/** 3段目より下を隠す。文面を直したら必ず呼ぶ */
+function bcHideFrom(n){
+  if (n <= 3) $('#bcStep3').hidden = true;
+  if (n <= 4) $('#bcStep4').hidden = true;
+  BC.ticket = '';
+}
+
+function bcRenderTargets(r){
+  var rows = r.rows || [];
+  $('#bcIntro').innerHTML =
+    '出店者一覧で選んだ <b>' + BC.ids.length + ' 社</b> が対象です。'
+    + '相手を変えるには、<b>出店者一覧に戻って選び直して</b>ください。';
+
+  var out = '';
+  if (rows.length){
+    out += '<table class="minitable"><thead><tr><th>受付ID</th><th>企業名</th>'
+         + '<th>ご担当</th><th>宛先</th><th>区画</th></tr></thead><tbody>'
+         + rows.map(function(x){
+             return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.company)
+               + '</td><td>' + esc(x.person) + '</td><td>' + esc(x.email)
+               + '</td><td>' + esc(x.block || '—') + '</td></tr>';
+           }).join('')
+         + '</tbody></table>';
+  }
+
+  // 送れない行は、**理由ごとに分けて**出す。
+  // まとめて「送れません」だと、何をすればよいか分からない
+  var bad = '';
+  if ((r.blocked || []).length){
+    bad += '<p class="pwarn"><b>' + r.blocked.length + '社は対象から外しました</b>'
+      + '（ステータスが辞退・キャンセル・重複のため）：'
+      + r.blocked.map(function(x){
+          return esc(x.id) + ' ' + esc(x.company) + '（' + esc(x.status) + '）';
+        }).join(' / ') + '</p>';
+  }
+  if ((r.invalid || []).length){
+    bad += '<p class="pwarn"><b>' + r.invalid.length + '社は宛先が正しくありません</b>'
+      + '（この方には届きません）：'
+      + r.invalid.map(function(x){
+          return esc(x.id) + ' ' + esc(x.company) + '（' + esc(x.email || '空欄') + '）';
+        }).join(' / ')
+      + '<br>宛先は「出店者一覧」で行を開き、「応募内容を修正する」から直せます。</p>';
+  }
+  if ((r.missing || []).length){
+    bad += '<p class="pwarn"><b>台帳に見当たらない受付ID</b>：'
+      + r.missing.map(esc).join(' / ') + '</p>';
+  }
+  if (!rows.length){
+    bad += '<p class="perr"><b>送れる相手が1社もありません。</b>'
+      + '出店者一覧に戻って、選び直してください。</p>';
+  }
+  /*
+   * 台帳に「一斉メール履歴」シートがまだ無い（＝ setup() をしていない）。
+   * **相手と見本は見せるが、送れない。**
+   * ここで理由と直し方を出さないと、押せないボタンの前で
+   * 「なぜ送れないのか」が誰にも分からない
+   */
+  if (r.historyReady === false){
+    bad += '<p class="perr"><b>台帳に「一斉メール履歴」シートがありません。</b>'
+      + '送った記録が残せないため、いまは送信できません。'
+      + '<br>台帳の Apps Script から <b>setup()</b> を1回実行してから、'
+      + 'この画面を開き直してください。</p>';
+  }
+  if (r.tooMany){
+    bad += '<p class="perr"><b>一度に送れるのは ' + r.batchMax + ' 社までです</b>（いま '
+      + rows.length + ' 社）。出店者一覧で絞り込んで、分けてお送りください。</p>';
+  }
+  $('#bcTargets').innerHTML = out + bad;
+  $('#bcStep2').hidden = !rows.length || !!r.tooMany;
+}
+
+function bcRenderComposer(r){
+  // 下書き。押すと件名と本文が入る（保存はしない。この場で直して送る）
+  $('#bcDrafts').innerHTML = '<b>下書き</b>'
+    + (r.drafts || []).map(function(d, i){
+        return ' <button type="button" class="ghost bcdraft" data-i="' + i + '">'
+             + esc(d.name) + '</button>';
+      }).join('');
+  $$('#bcDrafts .bcdraft').forEach(function(b){
+    b.addEventListener('click', function(){
+      var d = (BC.pre.drafts || [])[Number(b.getAttribute('data-i'))];
+      if (!d) return;
+      if (($('#bcSubject').value || $('#bcBody').value)
+          && !confirm('いま書いている件名と本文を、下書きで置き換えます。よろしいですか？')) return;
+      $('#bcSubject').value = d.subject;
+      $('#bcBody').value = d.body;
+      bcHideFrom(3);
+    });
+  });
+
+  $('#bcVars').innerHTML = (r.vars || []).map(function(v){
+    return '<button type="button" class="ghost bcvar" data-v="' + esc(v) + '">{{'
+         + esc(v) + '}}</button>';
+  }).join(' ');
+  $$('#bcVars .bcvar').forEach(function(b){
+    b.addEventListener('click', function(){
+      var ta = $('#bcBody');
+      var t = '{{' + b.getAttribute('data-v') + '}}';
+      var s = ta.selectionStart, e = ta.selectionEnd;
+      ta.value = ta.value.slice(0, s) + t + ta.value.slice(e);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = s + t.length;
+      bcHideFrom(3);
+    });
+  });
+}
+
+/** 2段目 → 3段目。ここで札を受け取る */
+function bcDoPreview(){
+  var subject = $('#bcSubject').value;
+  var body = $('#bcBody').value;
+  $('#bcErr').hidden = true;
+  $('#bcMsg').textContent = '確かめています…';
+
+  api('adminBroadcastPreview', { ids: BC.ids, subject: subject, body: body })
+    .then(function(r){
+      $('#bcMsg').textContent = '';
+      if (!r || !r.ok){
+        toast((r && r.message) || '確かめられませんでした', true);
+        return;
+      }
+      BC.pre = r;
+      bcRenderTargets(r);
+
+      if ((r.errors || []).length){
+        $('#bcErr').hidden = false;
+        $('#bcErr').innerHTML = '<b>この文面では送れません。</b><br>'
+          + r.errors.map(esc).join('<br>');
+        bcHideFrom(3);
+        return;
+      }
+      // 札が出ていないときは送れない（履歴シートが無い等）。
+      // 理由は bcRenderTargets が上に出しているので、ここでは段を出さない
+      if (!r.ticket){ bcHideFrom(3); return; }
+      BC.ticket = r.ticket || '';
+      bcRenderPreview(r);
+    }, function(){
+      $('#bcMsg').textContent = '';
+      toast('確かめられませんでした（通信）', true);
+    });
+}
+
+function bcRenderPreview(r){
+  var notes = '';
+
+  /*
+   * 差し込みが空になって落ちた行を、**受付IDまで**出す。
+   * 50社ぶんの本文は目で追えないので、機械が数えて見せないと
+   * 「区画番号の無い当日案内」が黙って届く。
+   */
+  (r.dropped || []).forEach(function(d){
+    notes += '<p class="pwarn"><b>{{' + esc(d.name) + '}} が空の ' + d.ids.length
+      + '社では、その行が消えます</b>：' + d.ids.map(esc).join(' / ')
+      + '<br>先に値を入れるか、この差し込みを使わない文面にしてください。</p>';
+  });
+
+  // 24時間以内に同じ件名を送っている。**止めない。人に決めてもらう**
+  var rec = r.recent || {};
+  if ((rec.ids || []).length){
+    notes += '<p class="pwarn"><b>この件名は、'
+      + esc(rec.sentAt) + ' に同じ方へ送っています</b>（' + rec.ids.length + '社：'
+      + rec.ids.map(esc).join(' / ') + '）。'
+      + '<br>催促の再送でしたらそのままで結構です。'
+      + '心当たりが無ければ、「変更履歴」でご確認ください。</p>';
+  }
+
+  var m = r.mail || {};
+  if (!m.aliasRegistered){
+    notes += '<p class="pwarn"><b>差出人の設定が未完了です。</b>'
+      + '事業者には ' + esc(m.from || '') + ' から届きます。</p>';
+  }
+
+  $('#bcNotes').innerHTML = notes;
+  var s = r.sample || {};
+  $('#bcFrom').textContent = m.from || '';
+  $('#bcTo').textContent = (s.to || '') + '（' + (s.company || '') + ' さま宛の例）';
+  $('#bcPrevSubject').textContent = s.subject || '';
+  $('#bcPrevBody').textContent = s.body || '';
+
+  $('#bcStep3').hidden = false;
+  $('#bcStep4').hidden = false;
+  $('#bcSendLabel').textContent = (r.rows || []).length + '社に送信する';
+  $('#bcStep3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function bcDoSend(){
+  var r = BC.pre || {};
+  var rows = r.rows || [];
+  if (!rows.length || !BC.ticket) return;
+
+  // \\n と1つだけ書くと、書き出しの時点で本物の改行になり、
+  // 生成された admin.html の中で文字列が途中で切れる（引き継ぎ書 §8）
+  var NL = String.fromCharCode(10);
+  // **差し込みを解決した件名**を見せる。原文のままだと
+  // 「件名：【当日のご案内】{{イベント名}}（受付ID：{{受付ID}}）」と出て、
+  // 押す人は実際に届く件名を確かめられない（2026-09-08、画面を見て気づいた）
+  var shown = (r.sample && r.sample.subject) || $('#bcSubject').value;
+  if (!confirm(rows.length + '社に一斉メールを送信します。' + NL + NL
+      + '件名：' + shown + NL
+      + '（1社目の例。差し込みは1社ずつ置き換わります）' + NL + NL
+      + '送信したメールは取り消せません。よろしいですか？')) return;
+
+  var btn = $('#bcSend');
+  btn.disabled = true;
+  $('#bcSendMsg').textContent = '送信しています…';
+
+  api('adminBroadcastSend', {
+    confirm: true,
+    ids: rows.map(function(x){ return x.id; }),
+    subject: $('#bcSubject').value,
+    body: $('#bcBody').value,
+    ticket: BC.ticket,
+  }).then(function(res){
+    $('#bcSendMsg').textContent = '';
+    // 札は一度きり。結果がどうであれ、同じ札では二度と送れない。
+    // 画面にも残さない（押せるように見えるのに送れない、を作らない）
+    BC.ticket = '';
+    if (!res || !res.ok){
+      btn.disabled = false;
+      toast((res && res.message) || '送信できませんでした', true);
+      bcHideFrom(3);
+      // 相手が変わっていた場合は、取り直してから見せ直す
+      if (res && res.error === 'changed') bcLoad();
+      return;
+    }
+    $('#bcResult').hidden = false;
+    $('#bcResult').innerHTML =
+      '<p class="ok"><b>' + (res.sent || []).length + '社に送信しました。</b>'
+      + '（送信ID：' + esc(res.sendId || '') + '）</p>'
+      + ((res.failed || []).length
+          ? '<p class="pwarn"><b>' + res.failed.length + '社が失敗しています。</b>'
+            + res.failed.map(function(f){
+                return esc(f.id) + ' ' + esc(f.company || '') + '（' + esc(f.reason || '') + '）';
+              }).join(' / ')
+            + '<br>宛先などを直してから、その方だけ選び直して送れます。</p>'
+          : '')
+      + '<p class="pnote">送った内容は、台帳の「一斉メール履歴」シートに'
+      + '本文ごと残しています。</p>';
+    $('#bcStep1').hidden = true;
+    $('#bcStep2').hidden = true;
+    $('#bcStep3').hidden = true;
+    $('#bcStep4').hidden = true;
+    /*
+     * 送り終えた相手を選んだままにしない。
+     *
+     * **一覧の描き直しまでやる。** 選択を捨てるだけだと、
+     * 出店者一覧に戻ったときにチェックが入ったまま・選択バーも出たままで、
+     * 「選んだ出店者にメールを送る」がもう一度押せてしまう
+     * （2026-09-08、実際に画面を見て気づいた。送った直後がいちばん
+     *   二重送信を起こしやすい場面なので、押せる形にしておかない）。
+     */
+    bcPickClear();
+    BC.ids = [];
+    if (S.list) renderList();
+    $('#bcResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, function(){
+    btn.disabled = false;
+    $('#bcSendMsg').textContent = '';
+    BC.ticket = '';
+    bcHideFrom(3);
     toast('送信できませんでした（通信）', true);
   });
 }
@@ -3757,6 +4176,18 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#todoCancel').addEventListener('click', function(){ $('#todoForm').hidden = true; });
   $('#setSave').addEventListener('click', saveSettings);
   $('#mailSend').addEventListener('click', sendNotify);
+
+  // ── 一斉メール
+  $('#pickMail').addEventListener('click', bcStart);
+  $('#pickNone').addEventListener('click', function(){ bcPickClear(); renderList(); });
+  $('#bcPreview').addEventListener('click', bcDoPreview);
+  $('#bcSend').addEventListener('click', bcDoSend);
+  // 文面を1文字でも直したら、確認と送信を隠してやり直させる。
+  // 札は「見たもの」と結びついているので、直したまま押しても
+  // サーバーが断る。**押せるように見えるほうが悪い**
+  ['bcSubject','bcBody'].forEach(function(id){
+    $('#'+id).addEventListener('input', function(){ bcHideFrom(3); });
+  });
   $('#docsInput').addEventListener('change', function(){
     uploadDocs(this.files);
     this.value = '';   // 同じファイルをもう一度選べるようにする
@@ -3782,9 +4213,17 @@ document.addEventListener('DOMContentLoaded', function(){
   ['dOnlyAssigned','dFire'].forEach(function(id){
     $('#'+id).addEventListener('change', renderDay);
   });
+  /*
+   * 絞り込みを変えたら、一斉メールの選択は**捨てる**。
+   *
+   * 残したままだと、絞り込みの外に出た行が選ばれたまま残り、
+   * **画面に出ていない相手にメールが飛ぶ**。
+   * 選び直す手間より、そちらのほうがずっと高くつく。
+   */
   ['fQ','fStatus','fType','fSize','fDay','fMine','fDup'].forEach(function(id){
-    $('#'+id).addEventListener('input', renderList);
-    $('#'+id).addEventListener('change', renderList);
+    var redraw = function(){ bcPickClear(); renderList(); };
+    $('#'+id).addEventListener('input', redraw);
+    $('#'+id).addEventListener('change', redraw);
   });
   $('#dClose').addEventListener('click', closeDetail);
   $('.drawer').addEventListener('click', function(e){ if (e.target === $('.drawer')) closeDetail(); });
@@ -6383,6 +6822,35 @@ const HOWTO = {
                      + 'その方だけもう一度送れます。'
                      + '宛先は「出店者一覧」で行を開き、'
                      + '「応募内容を修正する」から直せます。'],
+    // ここから一斉メール（§6-2）。選考結果とは前提が逆で、**相手を人が選ぶ**
+    ['一斉メールとは', 'この画面の下半分です。**選んだ出店者さまへ、その場で書いた文面を'
+                    + 'お送りします。** 提出物の催促や、当日のご案内にお使いください。'],
+    ['相手の選びかた', '**「出店者一覧」タブで選びます。**'
+                    + '絞り込んでから、行の左のチェック欄を入れ、'
+                    + '下に出る「選んだ出店者にメールを送る」を押してください。'
+                    + '**絞り込みを変えると選択は消えます**'
+                    + '（画面に出ていない方に送ってしまわないように、わざとそうしています）。'],
+    ['下書き', '「当日のご案内」などを押すと、件名と本文が入ります。'
+             + 'そのまま直してお送りください。**下書き自体は変わりません。**'],
+    ['差し込み', '{{区画番号}} や {{搬入予定時刻}} も使えます。'
+               + '**値が入っていない方では、その行ごと消えます。**'
+               + '誰が消えるかは「本文を確認する」を押すと受付IDまで出ます。'],
+    ['送れない相手', 'ステータスが**辞退・キャンセル・重複**の方には送りません。'
+                  + '選んでいても自動で外し、画面に理由を出します。'],
+    ['二度送らないしくみ', '「本文を確認する」を押すと、'
+                       + '**そのとき見えていた相手と文面**にだけ有効な引換券が出ます。'
+                       + '文面を直すと引換券は無効になるので、'
+                       + 'もう一度「本文を確認する」を押してください。'
+                       + '同じ引換券では二度送れないので、'
+                       + '二度押しやボタン連打で2通届くことはありません。'],
+    ['続けて同じ件名を送るとき', '24時間以内に同じ件名を同じ方へ送っていると、'
+                            + '**画面でお知らせします**（止めはしません）。'
+                            + '催促の再送でしたら、そのままお進みください。'],
+    ['一度に送れる数', '40社までです。超えるときは、'
+                    + '出店者一覧で絞り込んで分けてお送りください。'],
+    ['送ったものの記録', '台帳の**「一斉メール履歴」シート**に、'
+                     + 'いつ・誰が・誰に・どんな文面を送ったかが**本文ごと**残ります。'
+                     + '変更履歴にも1行残ります。'],
   ]],
   people: ['FC大阪の担当者の見かた', [
     ['応募フォーム', '応募フォームの「FC大阪の担当社員」プルダウンに、その方を出すか。'
@@ -6660,6 +7128,15 @@ function html() {
         <div class="empty" id="listEmpty">該当する応募はありません。</div>
       </div>
 
+      <!-- 一斉メールの相手は、ここで選ぶ（メール送信タブに絞り込みを作らない）。
+           上の絞り込みは6種類あり、写すと必ずズレる。
+           絞り込みを変えると選択は消える（見えていない行が残らないように） -->
+      <div class="pickbar admin-only" id="pickBar" hidden>
+        <span><b id="pickCount">0 社</b> を選んでいます</span>
+        <button class="ghost" id="pickNone">選択をやめる</button>
+        <button class="print" id="pickMail">選んだ出店者にメールを送る</button>
+      </div>
+
       <!-- テストデータの一括削除。設定でONにしたときだけ出る（管理者のみ）。
            取り返しのつかない操作なので、3段階で押させる -->
       <!-- 入れる側。削除と対の道具なので、同じ場所・同じ鍵にする。
@@ -6925,6 +7402,68 @@ function html() {
         </div>
 
         <div id="mailResult" hidden></div>
+      </div>
+
+      <!-- ── 一斉メール（§6-2）
+           選考結果の一括送信とは前提が逆で、**相手を人が選ぶ**。
+           相手は「出店者一覧」で選ぶ（絞り込みを2つ持つとズレるため）。
+           採択通知にある「送信日時の列」という二重送信の歯止めが無いので、
+           プレビューが出す一度きりの札で守っている。 -->
+      <div class="panel" id="bcPanel">
+        <h3>一斉メール</h3>
+        <p class="pnote" id="bcIntro"></p>
+
+        <div class="mail-step" id="bcStep1">
+          <h4>1. 送る相手</h4>
+          <div id="bcTargets"></div>
+        </div>
+
+        <div class="mail-step" id="bcStep2" hidden>
+          <h4>2. 文面をつくる</h4>
+          <p class="pnote">
+            <b>下書き</b>を選ぶと、件名と本文がここに入ります。そのまま直せます。
+            <b>差し込み</b>（{{お名前}} など）は、送るときに1社ずつの値に置き換わります。
+          </p>
+          <div class="bcdrafts" id="bcDrafts"></div>
+          <label class="tpll">件名
+            <input id="bcSubject" maxlength="200" placeholder="例：【当日のご案内】…"></label>
+          <label class="tpll">本文
+            <textarea id="bcBody" rows="16" spellcheck="false"></textarea></label>
+          <div class="tplvars">
+            <b>差し込み</b>（押すと本文に入ります）
+            <div id="bcVars"></div>
+          </div>
+          <p class="perr" id="bcErr" hidden></p>
+          <div class="pbtns">
+            <button class="print" id="bcPreview">本文を確認する</button>
+            <span class="msg" id="bcMsg"></span>
+          </div>
+        </div>
+
+        <div class="mail-step" id="bcStep3" hidden>
+          <h4>3. 届く形を確かめる</h4>
+          <div id="bcNotes"></div>
+          <div class="mail-prev">
+            <div class="mp-h"><b>差出人</b><span id="bcFrom"></span></div>
+            <div class="mp-h"><b>宛先</b><span id="bcTo"></span></div>
+            <div class="mp-h"><b>件名</b><span id="bcPrevSubject"></span></div>
+            <pre id="bcPrevBody"></pre>
+          </div>
+        </div>
+
+        <div class="mail-step" id="bcStep4" hidden>
+          <h4>4. 送信する</h4>
+          <p class="pwarn"><b>送信したメールは取り消せません。</b>
+            上の相手と本文をご確認のうえ、進めてください。</p>
+          <div class="pbtns">
+            <button class="danger" id="bcSend">
+              <span id="bcSendLabel">送信する</span>
+            </button>
+            <span class="msg" id="bcSendMsg"></span>
+          </div>
+        </div>
+
+        <div id="bcResult" hidden></div>
       </div>
     </section>
 

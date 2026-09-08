@@ -140,16 +140,35 @@ describe('作り替えても、事業者に届く文が変わっていないこ�
       '足した2文以外のところが変わりました');
   });
 
+  /*
+   * ■ 記号だけが残る行の検査は、**2つ書く**
+   *
+   *   「　▼ {{素材アップロードURL}}」は、空になると「　▼ 」と**末尾が空白**になる。
+   *   2026-09-08 に足した「差し込みが落ちた行で、末尾が空白なら落とす」規則が
+   *   先に捕まえてしまうので、この入力だけだと
+   *   **記号の規則を消しても検査が通ってしまう**（実際に break_mailtpl.py が
+   *   20/21 になって気づいた。振る舞いは正しいまま、守りだけが無検査になる形）。
+   *
+   *   箇条書きの「・{{…}}」は、空になると「・」で終わり、末尾が空白にならない。
+   *   **記号の規則だけが効く入力**なので、こちらを足して独立に見張る。
+   */
   test('記号だけが残る行も、消える', () => {
     // 使う人が「　▼ {{素材アップロードURL}}」と1行に書くことはある。
     // URLが空だと「　▼」だけが宙に浮いた行として届く
     const box2 = makeBox();
+    const NL = String.fromCharCode(10);
     const out = box2.mailtplRender_(
-      'まえ' + String.fromCharCode(10)
-      + '　▼ {{素材アップロードURL}}' + String.fromCharCode(10) + 'あと',
+      'まえ' + NL + '　▼ {{素材アップロードURL}}' + NL + 'あと',
       box2.mailtplVars_('accept', ROW, { confirm: 'x', upload: '' }));
-    assert.strictEqual(out, 'まえ' + String.fromCharCode(10) + 'あと',
+    assert.strictEqual(out, 'まえ' + NL + 'あと',
       '記号だけの行が残りました：' + JSON.stringify(out));
+
+    // 箇条書き。**末尾が空白にならない**ので、記号の規則だけが効く
+    const out2 = box2.mailtplRender_(
+      'まえ' + NL + '・{{素材アップロードURL}}' + NL + 'あと',
+      box2.mailtplVars_('accept', ROW, { confirm: 'x', upload: '' }));
+    assert.strictEqual(out2, 'まえ' + NL + 'あと',
+      '記号だけの行が残りました（箇条書き）：' + JSON.stringify(out2));
   });
 
   test('不採択の既定に、リンクもトークンも入っていない', () => {

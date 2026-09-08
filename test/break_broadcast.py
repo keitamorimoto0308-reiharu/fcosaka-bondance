@@ -166,6 +166,32 @@ CASES = [
         (BC, '  if (payload.confirm !== true) {', '  if (false) {'),
     ], '確認が無いのに送っています'),
 
+    # ── setup() の前に開かれたとき ─────────────────────
+    # 反映の順番は GAS → けいたが setup() → ページ公開。その途中で開く人がいる
+    ('履歴シートが無くても送れるようにする（記録の残らない送信）', [
+        (BC, '''  var sh = broadcastSheetOrNull_();
+  if (!sh) {''', '''  var sh = broadcastSheetOrNull_();
+  if (false) {'''),
+    # 札が偽物なので送信そのものは札で止まる（守りは二重）。
+    # この歯止めの役目は**直し方を伝えること**——消すと
+    # 「プレビューで確認したものと違います」としか出ず、setup() に辿り着けない
+    ], '直し方（setup() の実行）を伝えていません'),
+
+    ('履歴シートが無いことを画面に伝えない', [
+        (BC, '  var historyReady = !!broadcastSheetOrNull_();',
+             '  var historyReady = true;'),
+    ], '履歴シートの不在を伝えていません'),
+
+    # gas/Api.gs は例外を文言なしの server_error に潰すので、
+    # ここで受けないと「理由の出ないエラー」だけが画面に出る
+    ('履歴シートの不在で、プレビューごと落ちるようにする', [
+        (BC, '''  try {
+    return sheet_(SHEET.BROADCAST);
+  } catch (e) {
+    return null;
+  }''', '  return sheet_(SHEET.BROADCAST);'),
+    ], 'シートが見つかりません'),
+
     # ── 権限。ここが外れると、一般権限が50社にメールを送れる ────────
     # ⚠ 目印に行末の `];` を含めない。
     #   含めると、adminOnly の一覧に別の action を足しただけで目印が消え、

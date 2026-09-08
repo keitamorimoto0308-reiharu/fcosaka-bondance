@@ -50,6 +50,11 @@ function makeBox(opts) {
    * 本番では列がずれて値が黙って消える（引き継ぎ書 §5「台帳の列の整合」）。
    */
   const sheetFor = name => {
+    // setup() を実行する前の状態を作る。本物の sheet_ は
+    // 「シートが見つかりません（setup() を実行してください）」を投げる
+    if (opts.noHistorySheet && name === '一斉メール履歴') {
+      throw new Error('シートが見つかりません: ' + name + '（setup() を実行してください）');
+    }
     if (!sheets[name]) {
       const head = name === 'メール文面'
         ? ['種類', '件名', '本文', '更新日時', '更新者']
@@ -203,6 +208,49 @@ describe('差し込みの解決（broadcastBuild_）', () => {
 
     assert.deepStrictEqual(built.dropped, ['区画番号'],
       '空になった差し込みの名前を返していません');
+  });
+
+  /*
+   * ■ 画面を実際に見て見つけた（2026-09-08）
+   *
+   *   プレビューは「{{搬入予定時刻}} が空の2社では、その行が消えます」と
+   *   正しく警告していたのに、**本文では消えていなかった**：
+   *
+   *       　出店名　　唐揚げキッチン
+   *       　区画番号　3
+   *       　搬入時刻　          ← 見出しだけが宙に浮いて残る
+   *
+   *   mailtplRender_ の「値が空なら行ごと落とす」規則は、
+   *   `出店名：` のようにコロンで終わる行と記号だけの行しか見ていない。
+   *   この案件のメールは**全角スペースで桁を揃える**書き方なので網から漏れた。
+   *
+   *   `dropped` に名前は正しく入っていたので、**検査は全部通っていた**。
+   *   「警告は出る／実際は消えない」は、画面を見るまで分からなかった。
+   */
+  test('見出しを全角スペースで揃えた行も、値が空なら消える', () => {
+    const box = makeBox();
+    const built = call(box, 'broadcastBuild_',
+      row('SB-0001', { shopName: '唐揚げキッチン', block: '3', inAt: '' }),
+      '件名',
+      '　出店名　　{{出店名}}' + NL
+      + '　区画番号　{{区画番号}}' + NL
+      + '　搬入時刻　{{搬入予定時刻}}');
+
+    assert.ok(built.body.indexOf('搬入時刻') < 0,
+      '見出しだけが残っています：' + JSON.stringify(built.body));
+    assert.ok(built.body.indexOf('　区画番号　3') >= 0, built.body);
+    assert.ok(built.body.indexOf('　出店名　　唐揚げキッチン') >= 0, built.body);
+  });
+
+  test('値が行の途中にあるときは、行を消さない（消しすぎない）', () => {
+    const box = makeBox();
+    const built = call(box, 'broadcastBuild_',
+      row('SB-0001', { shopName: '' }),
+      '件名',
+      '{{出店名}} さまのご出店をお待ちしております。');
+
+    assert.ok(built.body.indexOf('さまのご出店をお待ちしております。') >= 0,
+      '値の後ろに文が続く行まで消しています：' + JSON.stringify(built.body));
   });
 
   test('区画番号と搬入予定時刻が差し込める', () => {
@@ -701,5 +749,49 @@ describe('送信（adminBroadcastSend_）', () => {
     const r = run([L('SB-0001'), L('SB-0002')], ['SB-0001', 'SB-0002']);
     assert.strictEqual(r.box.__history.length, 1,
       '変更履歴の行数が送信ごとに1行になっていません：' + r.box.__history.length);
+  });
+
+  /*
+   * ■ setup() を実行する前の状態
+   *
+   *   反映の順番は GAS → けいたが setup() → ページ公開（引き継ぎ書 §3）。
+   *   その途中で「メール送信」タブを開く人がいる。
+   *
+   *   **gas/Api.gs は例外を文言なしの server_error に潰す**ので、
+   *   ここで受けないと「理由の出ないエラー」だけが画面に出る
+   *   （gas/Notify.gs が台帳の列不足で同じ処理をしている）。
+   */
+  test('履歴シートがまだ無くても、プレビューは相手と見本を出せる', () => {
+    const box = makeBox({ noHistorySheet: true });
+    box.readLedger_ = () => ({ headers: LH, rows: [L('SB-0001')].map(r => LH.map(h => r[h])) });
+    const pre = call(box, 'adminBroadcastPreview_', { person: '小谷' },
+      { ids: ['SB-0001'], subject: '件名', body: '{{お名前}} 様' });
+
+    assert.strictEqual(pre.ok, true, JSON.stringify(pre));
+    assert.strictEqual((pre.rows || []).length, 1, '相手が出ていません');
+    assert.ok(pre.sample, '見本が出ていません');
+  });
+
+  test('履歴シートが無いことを、直し方つきで画面に伝える', () => {
+    const box = makeBox({ noHistorySheet: true });
+    box.readLedger_ = () => ({ headers: LH, rows: [L('SB-0001')].map(r => LH.map(h => r[h])) });
+    const pre = call(box, 'adminBroadcastPreview_', { person: '小谷' },
+      { ids: ['SB-0001'], subject: '件名', body: '{{お名前}} 様' });
+
+    assert.strictEqual(pre.historyReady, false, '履歴シートの不在を伝えていません');
+    assert.strictEqual(pre.ticket, '', '送れないのに札を出しています');
+  });
+
+  test('履歴シートが無ければ、1通も送らない（記録が残せないため）', () => {
+    const box = makeBox({ noHistorySheet: true });
+    box.readLedger_ = () => ({ headers: LH, rows: [L('SB-0001')].map(r => LH.map(h => r[h])) });
+    const res = call(box, 'adminBroadcastSend_', { person: '小谷' },
+      { confirm: true, ids: ['SB-0001'], subject: '件名', body: '{{お名前}} 様',
+        ticket: 'x' });
+
+    assert.deepStrictEqual(box.__sentTo, [], '記録できない状態で送っています');
+    assert.strictEqual(res.ok, false);
+    assert.ok(/setup\(\)/.test(res.message || ''),
+      '直し方（setup() の実行）を伝えていません：' + res.message);
   });
 });
