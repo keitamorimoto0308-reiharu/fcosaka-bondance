@@ -244,10 +244,15 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
   flex:1 1 190px;min-width:190px}
 .pickmsg small{font-size:11.5px;color:var(--muted)}
 .pickn{white-space:nowrap}
+.picksel{display:flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap}
+.picksel select{font-size:13px;padding:5px 8px}
 .pickmsg em{font-style:normal;font-weight:700;color:var(--error);font-size:12.5px}
 /* 「本文の1行が抜ける」話は、「その相手に届かない」話と色を分ける。
    同じ色で並べたせいで正反対に読まれた（2026-09-08 の検証） */
 .pnote.drop{border-left:3px solid var(--border);padding-left:10px;margin:8px 0}
+/* 置き換えは、いまの内容を全部消す。ふつうの取り込みと見た目を変える */
+.sch-imp-rep{color:var(--error);font-weight:700}
+.sch-imp-note{font-size:11.5px;color:var(--muted)}
 .bcdrafts{margin:0 0 12px;font-size:12.5px;color:#6B6259;
   display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .minitable{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
@@ -1014,7 +1019,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   <main>
     <!-- ① 制作スケジュール表 -->
     <section class="view" id="v-sched">
-      <details class="howto"><summary>制作スケジュール表の見かた</summary><dl><dt>この画面は何か</dt><dd>本番（10/24）までに<b>何を・誰が・いつまでに</b>やるかを、1本の時間軸に並べたものです。<b>打ち合わせの宿題もここに入ります</b>（以前の「確認事項」タブはここに一本化しました）。</dd><dt>並び</dt><dd>上から「遅れている」「今週」「来週」「それ以降」の順です。<b>遅れているものは、週に関係なくいちばん上に集まります。</b></dd><dt>色の意味</dt><dd><b>赤っぽい行</b>は期日を過ぎてまだ終わっていないもの、<b>黄色っぽい行</b>はあと数日で期日が来て、まだ手が付いていないものです。左端の縦線でも見分けられます。</dd><dt>終わったもの</dt><dd>既定では隠れています。ボタンに<b>隠れている件数</b>が出るので、見たいときに押してください。「終わったもの」＝<b>期日を過ぎて決着した</b>（完了・見送り）もの、終わった期間、過ぎたマイルストーンです。<b>先の予定を早めに終わらせたものは隠れません。</b></dd><dt>ステータス</dt><dd><b>未着手／進行中／確認中／完了／停滞中／見送り</b>の6つです。「停滞中」は、着手したが<b>こちら側では動かせない</b>もの（先方の返事待ちなど）に付けます。「見送り」は、やらないと決めたものです。<b>行は残ります。</b></dd><dt>書き換え</dt><dd>行を押すと右から編集の画面が出ます。ステータスだけなら、行の中の丸いボタンを押せば変えられます。</dd><dt>誰が触れるか</dt><dd><b>全員です。</b>追加も編集も削除もできます。代わりに、誰が入れて誰が最後に触ったかが必ず残ります。<b>削除したものは「変更履歴」タブに全文が残ります</b>が、戻すには手で入れ直すことになります。</dd><dt>担当の丸い印</dt><dd>会社の頭文字です。Ⓞ＝FC大阪、Ⓤ＝UPDATER、Ⓛ＝LOP。<b>点線の丸</b>は、会社だけ決まっていて担当者が未定のものです。</dd><dt>Excelで直すとき</dt><dd>かならず<b>先に「Excelで保存」</b>を押して、出てきたファイルを直してください。直したら「Excelから取り込む」で戻します。<b>いちばん右のID列は消さないでください。</b>いまある行を見分けるための番号です。</dd><dt>行を増やすとき</dt><dd>Excelで行をコピーすると、<b>ID列まで一緒にコピーされます。</b>増やした行は、ID列を空にしてください。空になっていれば、新しい行として足されます。</dd><dt>Excelで消しても、台帳からは消えません</dt><dd>取り込みでできるのは「足す」と「書き換える」だけです。消したい行は、取り込んだあとにこの画面から1件ずつ消してください。</dd><dt>取り込めない行が出たら</dt><dd>その行を押すと、<b>理由と直し方</b>が出ます。ほとんどはこの画面で直せますが、ID がおかしい行だけは、Excelに戻ってID列を空にする必要があります。</dd></dl></details>
+      <details class="howto"><summary>制作スケジュール表の見かた</summary><dl><dt>この画面は何か</dt><dd>本番（10/24）までに<b>何を・誰が・いつまでに</b>やるかを、1本の時間軸に並べたものです。<b>打ち合わせの宿題もここに入ります</b>（以前の「確認事項」タブはここに一本化しました）。</dd><dt>並び</dt><dd>上から「遅れている」「今週」「来週」「それ以降」の順です。<b>遅れているものは、週に関係なくいちばん上に集まります。</b></dd><dt>色の意味</dt><dd><b>赤っぽい行</b>は期日を過ぎてまだ終わっていないもの、<b>黄色っぽい行</b>はあと数日で期日が来て、まだ手が付いていないものです。左端の縦線でも見分けられます。</dd><dt>終わったもの</dt><dd>既定では隠れています。ボタンに<b>隠れている件数</b>が出るので、見たいときに押してください。「終わったもの」＝<b>期日を過ぎて決着した</b>（完了・見送り）もの、終わった期間、過ぎたマイルストーンです。<b>先の予定を早めに終わらせたものは隠れません。</b></dd><dt>ステータス</dt><dd><b>未着手／進行中／確認中／完了／停滞中／見送り</b>の6つです。「停滞中」は、着手したが<b>こちら側では動かせない</b>もの（先方の返事待ちなど）に付けます。「見送り」は、やらないと決めたものです。<b>行は残ります。</b></dd><dt>書き換え</dt><dd>行を押すと右から編集の画面が出ます。ステータスだけなら、行の中の丸いボタンを押せば変えられます。</dd><dt>誰が触れるか</dt><dd><b>全員です。</b>追加も編集も削除もできます。代わりに、誰が入れて誰が最後に触ったかが必ず残ります。<b>削除したものは「変更履歴」タブに全文が残ります</b>が、戻すには手で入れ直すことになります。</dd><dt>担当の丸い印</dt><dd>会社の頭文字です。Ⓞ＝FC大阪、Ⓤ＝UPDATER、Ⓛ＝LOP。<b>点線の丸</b>は、会社だけ決まっていて担当者が未定のものです。</dd><dt>Excelで直すとき</dt><dd>かならず<b>先に「Excelで保存」</b>を押して、出てきたファイルを直してください。直したら「Excelから取り込む」で戻します。<b>いちばん右のID列は消さないでください。</b>いまある行を見分けるための番号です。</dd><dt>行を増やすとき</dt><dd>Excelで行をコピーすると、<b>ID列まで一緒にコピーされます。</b>増やした行は、ID列を空にしてください。空になっていれば、新しい行として足されます。</dd><dt>Excelで消しても、いまの制作スケジュールからは消えません</dt><dd>取り込みでできるのは「足す」と「書き換える」だけです。消したい行は、取り込んだあとにこの画面から1件ずつ消してください。</dd><dt>取り込めない行が出たら</dt><dd>その行を押すと、<b>理由と直し方</b>が出ます。ほとんどはこの画面で直せますが、ID がおかしい行だけは、Excelに戻ってID列を空にする必要があります。</dd></dl></details>
       <div class="sch-terms" id="schTerms" hidden></div>
       <!-- 最後に誰がいつ触ったか（けいた指示・2026-09-07）。
            大きく目立たせない。一応確認できればよい -->
@@ -1166,7 +1171,9 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
       <!-- 一斉メールの相手は、ここで選ぶ（メール送信タブに絞り込みを作らない）。
            上の絞り込みは6種類あり、写すと必ずズレる。
            絞り込みを変えると選択は消える（見えていない行が残らないように） -->
-      <div class="pickbar admin-only" id="pickBar" hidden>
+      <!-- 選ぶ欄は**一般にも出す**。ステータスの変更は一般でもできる操作なので
+           （引き継ぎ書§9の権限の表）。メールを書くボタンだけ管理者に絞る -->
+      <div class="pickbar" id="pickBar" hidden>
         <span class="pickmsg">
           <span class="pickn"><b id="pickCount">0 社</b>を選んでいます</span>
           <em id="pickOver" hidden>一度に送れるのは40社までです</em>
@@ -1175,9 +1182,12 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
           <small>※ 検索や絞り込みを変えると、この選択は消えます</small>
         </span>
         <button class="ghost" id="pickNone">選択をやめる</button>
+        <label class="picksel">ステータスを
+          <select id="pickStatus"><option value="">選ぶ…</option></select>
+        </label>
         <!-- 「メールを送る」だと、押した瞬間に飛ぶように読める。
              実際はタブを移って文面を書く画面に行くだけ -->
-        <button class="print" id="pickMail">選んだ出店者へメールを書く</button>
+        <button class="print admin-only" id="pickMail">選んだ出店者へメールを書く</button>
       </div>
 
       <!-- テストデータの一括削除。設定でONにしたときだけ出る（管理者のみ）。
@@ -1644,7 +1654,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
   </div>
 </div>
 
-<div class="drawer">
+<div class="drawer" id="vendorDrawer">
   <div class="sheet">
     <div class="head">
       <span class="id" id="dId"></span>
@@ -1721,6 +1731,17 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 var GAS_URL = "https://script.google.com/macros/s/AKfycbwWrbDS3BxTNj5qQiYCFjsiA19lF4oVQrFByzApAK61S9EzWmCUy7tckvvTySXTW-MMMQ/exec";
 var KEY = 'bondance.admin.session';
 // 紙の見出しに使う。src/content.js が正（ここに書き写さない）
+/*
+ * 希望区画の短い呼び方。台帳には応募者が選んだ長い文言がそのまま入っている：
+ *   「間口1.5間×奥行2間（1区画／約2.7m×3.6m）」
+ * 一覧の列や絞り込みでは長すぎて読めないので、ここでは「1区画」と出す
+ * （けいた指示・2026-09-08）。
+ *
+ * **対応表は src/schema.js の units から機械的に作る。**
+ * ここに書き写すと、選択肢を足したときに片方だけ古くなる。
+ * 台帳の値そのものは変えない（応募者が選んだ記録なので、詳細ではフルで出す）。
+ */
+var BOOTH_SHORT = {"間口1.5間×奥行2間（1区画／約2.7m×3.6m）":"1区画","間口3間×奥行2間（2区画／約5.4m×3.6m）":"2区画"};
 var EV_NAME  = "夕照祭2026 FC大阪 秋のサステナ盆踊り";
 var EV_DATE  = "2026年10月24日（土）";
 var EV_VENUE = "東大阪市花園ラグビー場（場外エリア）";
@@ -1908,8 +1929,12 @@ function signOut(msg){
   // 閉じないと、入室画面の後ろに事業者さまの氏名・メール・電話が見えたまま残る
   // （2026-09-03 の検証で指摘）
   try {
-    var dw = document.querySelector('.drawer');
+    // **名指しで閉じる。** クラスだけで掴むと文書の最初の1枚（#schDrawer）に
+    // 当たるので、出店者の詳細は開いたまま残る（2026-09-08 に発覚）
+    var dw = document.querySelector('#vendorDrawer');
     if (dw) dw.classList.remove('on');
+    var sd = document.querySelector('#schDrawer');
+    if (sd) sd.classList.remove('on');
   } catch(e2){}
   S.token=''; S.person=''; S.role='';
   $('.app').classList.remove('on');
@@ -2013,6 +2038,25 @@ function bindJumps(root){
       jumpToList(to);
     });
   });
+}
+
+/**
+ * 希望区画を短く呼ぶ。台帳の値は変えず、**出すときだけ**縮める
+ * （「間口1.5間×奥行2間（1区画／約2.7m×3.6m）」→「1区画」）。
+ *
+ * 対応表に無い値（古い応募・文言を変えたあと）は、**そのまま出す**。
+ * 縮められないものを空にすると、値が消えたように見える。
+ */
+function booth(v){
+  var s = String(v == null ? '' : v).trim();
+  return BOOTH_SHORT[s] || s;
+}
+
+/** 集計の見出しだけを短くする（件数はそのまま） */
+function shortKeys(obj){
+  var out = {};
+  Object.keys(obj || {}).forEach(function(k){ out[booth(k)] = obj[k]; });
+  return out;
 }
 
 function bars(obj, order){
@@ -2134,7 +2178,7 @@ function loadSummary(){
     $('#breakdown').innerHTML = [
       ['ステータス別', bars(c.byStatus, ['未確認','審査中','採択','不採択','辞退','キャンセル','重複（無効）'])],
       ['出店形態別（延べ）', bars(c.byType)],
-      ['希望区画別', bars(c.bySize)],
+      ['希望区画別', bars(shortKeys(c.bySize))],
       ['電源', bars(c.byPower)],
       ['担当社員別', bars(c.byStaff)],
       ['レンタル備品', bars(Object.assign(
@@ -2168,6 +2212,9 @@ function loadList(){
     var mine = r.rows.filter(function(x){ return x['FC大阪担当社員'] === S.person; });
     if (mine.length) $('#fMine').checked = true;
     fillFilters();
+    // まとめて変えるときの選択肢も、**サーバーが返す一覧から**作る（写しを持たない）
+    $('#pickStatus').innerHTML = '<option value="">選ぶ…</option>'
+      + (r.statuses || []).map(function(x){ return '<option>' + esc(x) + '</option>'; }).join('');
     loadShow();              // 覚えている列。無ければ既定の並び
     renderColumnPicker();
     if (S.role === '管理者') loadPurgeBox();
@@ -2189,14 +2236,22 @@ function fillFilters(){
     });
     return Object.keys(set).sort();
   };
-  var opts = function(el, label, list){
+  /*
+   * 第4引数「show」を渡すと、**見せ方だけ**を変える。
+   * 値（value）は台帳の文言のままにする——絞り込みは値で照合しているので、
+   * ここを短くすると**何も選べなくなる**
+   */
+  var opts = function(el, label, list, show){
     var cur = $(el).value;
     $(el).innerHTML = '<option value="">' + label + '</option>'
-      + list.map(function(v){ return '<option>' + esc(v) + '</option>'; }).join('');
+      + list.map(function(v){
+          return '<option value="' + esc(v) + '">'
+               + esc(show ? show(v) : v) + '</option>';
+        }).join('');
     if (list.indexOf(cur) >= 0) $(el).value = cur;
   };
   opts('#fType', '出店形態（すべて）', uniq('出店形態', true));
-  opts('#fSize', '希望区画（すべて）', uniq('希望区画'));
+  opts('#fSize', '希望区画（すべて）', uniq('希望区画'), booth);
   opts('#fDay',  '当日ステータス（すべて）', S.list.dayStatuses);
 }
 
@@ -2482,9 +2537,13 @@ function renderList(){
   $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
   var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
   $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
-  // 一斉メールの相手を選ぶ欄。管理者だけに出す
-  //（一斉メールの送信そのものが管理者のみ・仕様書 §6-2）
-  var canPick = S.role === '管理者';
+  /*
+   * 選ぶ欄。**一般にも出す。**
+   * ステータスの変更は一般でもできる操作なので（引き継ぎ書§9の権限の表）、
+   * 選ぶこと自体を管理者に限る理由がない。
+   * メールを書くボタンだけ、管理者に絞る（.admin-only）。
+   */
+  var canPick = !!S.role;
 
   /*
    * ■ 選択は、**いま画面に出ている行だけ**に剪定する
@@ -2523,6 +2582,8 @@ function renderList(){
       // スマホでは表を1件1カードに組み替えるので、見出しを各セルに持たせる
       var lbl = ' data-l="'+esc(c)+'"';
       if (c === 'ステータス') return '<td'+lbl+'><span class="pill '+esc(v)+'">'+esc(v||'未確認')+'</span></td>';
+      // 一覧では長すぎて読めない（けいた指示・2026-09-08）。詳細ではフルのまま出す
+      if (c === '希望区画') return '<td'+lbl+'>'+esc(booth(v))+'</td>';
       if (c === '企業名'){
         var d = String(x['重複フラグ']||'').trim()
           ? ' <span class="pill dupflag">重複の可能性</span>' : '';
@@ -2582,12 +2643,61 @@ function renderList(){
   renderPickBar();
 }
 
+/**
+ * 選んだ相手のステータスを、まとめて変える（けいた指示・2026-09-08）。
+ *
+ * ■ メール送信より守りを軽くしている
+ *   メールは**取り消せない**ので、一度きりの札とプレビューを必須にした。
+ *   ステータスは**変更履歴に前の値ごと残り、戻せる**ので、確認1回で足りる。
+ *   過剰な守りは、人に迂回路を探させる。
+ *
+ * ■ 理由は、要るときだけ聞く
+ *   何を選んでも理由を聞かれると、人は意味のない文字を打つようになる。
+ *   1件ずつのときと同じ規則（サーバーが持っている）に合わせる。
+ */
+var STATUS_NEEDS_REASON = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+
+function bulkStatus(){
+  var sel = $('#pickStatus');
+  var st = sel.value;
+  if (!st) return;
+  sel.value = '';                       // 選びっぱなしにしない
+
+  var ids = bcPickIds();
+  if (!ids.length) return;
+
+  var reason = '';
+  var NL = String.fromCharCode(10);
+  if (STATUS_NEEDS_REASON.indexOf(st) >= 0){
+    reason = prompt(ids.length + '社を「' + st + '」に変えます。' + NL
+      + '理由を5文字以上でご記入ください（変更履歴に残ります）。');
+    if (reason === null) return;
+  } else if (!confirm(ids.length + '社のステータスを「' + st + '」に変えます。' + NL
+      + '変更履歴に残るので、あとから戻せます。' + NL + NL + 'よろしいですか？')){
+    return;
+  }
+
+  sel.disabled = true;
+  api('adminBulkStatus', { ids: ids, status: st, reason: reason }).then(function(r){
+    sel.disabled = false;
+    if (!r || !r.ok){ toast((r && r.message) || '変えられませんでした', true); return; }
+    toast(r.message || '変えました');
+    if ((r.failed || []).length){
+      toast(r.failed.length + '社は変えられませんでした：'
+        + r.failed.map(function(f){ return f.id; }).join('、'), true);
+    }
+    // 変えたあとは選択を捨てる。**続けて押せる形にしない**
+    bcPickClear();
+    loadList();
+  }, function(e){ sel.disabled = false; netFail(e, 'ステータスを変えられませんでした'); });
+}
+
 /** 表の下に出す「選んだ○社へメールを書く」 */
 function renderPickBar(){
   var bar = $('#pickBar');
   if (!bar) return;
   var n = bcPickIds().length;
-  bar.hidden = (S.role !== '管理者') || n === 0;
+  bar.hidden = !S.role || n === 0;
   var lbl = $('#pickCount');
   if (lbl) lbl.textContent = n + ' 社';
   // 40社の上限を、**選んでいる最中に**出す。
@@ -2651,7 +2761,7 @@ function openDetail(id){
     $('#eOut').value = d['撤収予定時刻'] || '';
     $('#dSave').setAttribute('data-id', id);
     $('#dMsg').textContent = '';
-    $('.drawer').classList.add('on');
+    $('#vendorDrawer').classList.add('on');
   }, function(e){ netFail(e, 'この出店者の詳細を読み込めませんでした'); });
 }
 
@@ -2772,7 +2882,7 @@ function renderCountEntry(fields, cf, id){
   });
 }
 
-function closeDetail(){ $('.drawer').classList.remove('on'); }
+function closeDetail(){ $('#vendorDrawer').classList.remove('on'); }
 
 /** 後戻りしにくいステータス。サーバー側（Admin.gs の STATUS_NEEDS_REASON_）と同じ並び */
 var NEEDS_REASON = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
@@ -5019,6 +5129,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // ── 一斉メール
   $('#pickMail').addEventListener('click', bcStart);
   $('#pickNone').addEventListener('click', function(){ bcPickClear(); renderList(); });
+  $('#pickStatus').addEventListener('change', bulkStatus);
   $('#bcPreview').addEventListener('click', bcDoPreview);
   $('#bcSend').addEventListener('click', bcDoSend);
   // 文面を1文字でも直したら、確認と送信を隠してやり直させる。
@@ -5072,7 +5183,7 @@ document.addEventListener('DOMContentLoaded', function(){
     $('#'+id).addEventListener('change', redraw);
   });
   $('#dClose').addEventListener('click', closeDetail);
-  $('.drawer').addEventListener('click', function(e){ if (e.target === $('.drawer')) closeDetail(); });
+  $('#vendorDrawer').addEventListener('click', function(e){ if (e.target === $('#vendorDrawer')) closeDetail(); });
   $('#dSave').addEventListener('click', saveDetail);
   bindSched();
   bindTimetable();
@@ -5283,12 +5394,28 @@ function schImpRender(){
     + '取り込めます ' + (c.add + c.update + c.same) + '件'
     + '（足す ' + c.add + '・書き換える ' + c.update + '・変わらない ' + c.same + '）'
     + (c.bad ? ' ／ <b>直すもの ' + c.bad + '件</b>' : '') + '</p>'
-    // 「消さない」は、件数がゼロでも必ず言う。**逆に読まれると事故になる**
-    + '<p class="sch-imp-sum"><b>Excelで行を消しても、台帳からは消えません。</b>'
-    + (c.missing
-        ? 'Excelに無い行が ' + c.missing + '件 ありますが、台帳にはそのまま残ります。'
+    /*
+     * 「消さない」は、件数がゼロでも必ず言う。**逆に読まれると事故になる**。
+     * 置き換えを選んでいるときは、逆のことが起きるので**逆のことを言う**。
+     */
+    + (IMP.replace
+        ? '<p class="sch-imp-sum sch-imp-rep"><b>いまの制作スケジュールを'
+          + '全部消して、この内容に置き換えます。</b>'
+          + '消した内容は変更履歴に残ります。</p>'
+        : '<p class="sch-imp-sum"><b>Excelで行を消しても、'
+          + 'いまの制作スケジュールからは消えません。</b>'
+          + (c.missing
+              ? 'Excelに無い行が ' + c.missing + '件 ありますが、そのまま残ります。'
+              : '')
+          + '消したい行は、取り込んだあとに画面から1件ずつ消してください。</p>')
+    // 置き換えの入口。**管理者だけ**に出す（全部消す操作なので）
+    + (S.role === '管理者'
+        ? '<p class="sch-imp-sum"><label><input type="checkbox" id="schImpRep"'
+          + (IMP.replace ? ' checked' : '') + '> '
+          + '<b>いまの制作スケジュールを全部消して、この内容に置き換える</b></label>'
+          + '<br><span class="sch-imp-note">Excelを「正」にしたいときにお使いください。'
+          + 'ID列が古くて取り込めない行も、新しい行として入ります。</span></p>'
         : '')
-    + '消したい行は、取り込んだあとに画面から1件ずつ消してください。</p>'
     + (c.bad
         ? '<p class="sch-imp-warn">' + c.bad + '行は取り込めません。'
           + 'その行を押すと、理由と直し方が出ます。'
@@ -5303,9 +5430,22 @@ function schImpRender(){
     + '<div class="pbtns"><span class="sp"></span>'
     + '<button class="ghost" id="schImpCancel">やめる</button>'
     // ボタンの名前で、押したら何が起きるかが分かるようにする
-    + '<button class="print" id="schImpGo">台帳に書き込む（足す ' + c.add
-    + '・書き換える ' + c.update + '）</button></div>';
+    + (IMP.replace
+        ? '<button class="danger" id="schImpGo">全部消して、この ' + c.add
+          + '件に置き換える</button></div>'
+        : '<button class="print" id="schImpGo">書き込む（足す ' + c.add
+          + '・書き換える ' + c.update + '）</button></div>');
   box.hidden = false;
+
+  // 置き換えの切り替え。押したら**サーバーに読み直させる**
+  // （画面で判定を写すと、サーバーと規則がズレる）
+  var rep = $('#schImpRep');
+  if (rep){
+    rep.addEventListener('change', function(){
+      IMP.replace = rep.checked;
+      schImpApplyEdit();
+    });
+  }
 
   // **赤があるあいだと、送っている最中は押せない**
   // busy を IMP に持たせているのは、ここで作り直しても消えないようにするため
@@ -5317,6 +5457,7 @@ function schImpRender(){
 function schImpClose(){
   IMP.items = []; IMP.counts = null; IMP.missing = []; IMP.fileName = '';
   IMP.busy = false;
+  IMP.replace = false;
   // 閉じたあとに届く古い返事で、下見が復活しないようにする
   IMP.seq++;
   $('#schImp').hidden = true;
@@ -5370,7 +5511,7 @@ function schImpPick(file){
 function schImpApplyEdit(item){
   var rows = IMP.items.map(function(x){ return x.raw; });
   var seq = ++IMP.seq;
-  api('adminSchedImportRead', { rows: rows }).then(function(r){
+  api('adminSchedImportRead', { rows: rows, replace: !!IMP.replace }).then(function(r){
     // 取り込みが済んで下見を閉じたあとに届いた返事で、下見を開き直さない
     if (seq !== IMP.seq || !IMP.items.length) return;
     if (!r || !r.ok){ toast((r && r.message) || '見直せませんでした', true); return; }
@@ -5400,11 +5541,28 @@ function schImpGo(){
     + '　（書き換える前の中身は、変更履歴に残ります）\n'
     + (c.missing ? '・Excelに無い ' + c.missing + '件は、そのまま残ります\n' : '')
     + '\nよろしいですか？')) return;
+  /*
+   * 置き換えは**全部消す**ので、一括削除と同じ守りにする（けいた指示・2026-09-08）：
+   * いま何件あるかを人に打ってもらう。サーバー側でも件数を突き合わせる。
+   */
+  var count = null;
+  if (IMP.replace){
+    var now = (S.sched && S.sched.rows) ? S.sched.rows.length : 0;
+    var typed = prompt('いまの制作スケジュール ' + now + '件を全部消して、'
+      + c.add + '件に置き換えます。' + String.fromCharCode(10)
+      + '消した内容は変更履歴に残りますが、画面からは戻せません。'
+      + String.fromCharCode(10) + String.fromCharCode(10)
+      + 'よろしければ、いまの件数「' + now + '」をご入力ください。');
+    if (typed === null) return;
+    count = typed;
+  }
+
   var rows = IMP.items.map(function(x){ return x.raw; });
   // 送信中は IMP に持つ。描き直されてもボタンは押せないまま
   IMP.busy = true;
   $('#schImpGo').disabled = true;
-  api('adminSchedImportApply', { rows: rows }).then(function(r){
+  api('adminSchedImportApply', { rows: rows, replace: !!IMP.replace, count: count })
+    .then(function(r){
     IMP.busy = false;
     try { $('#schImpGo').disabled = false; } catch(e){}
     if (!r || !r.ok){
@@ -5412,7 +5570,8 @@ function schImpGo(){
       if (r && r.items){ IMP.items = r.items; IMP.counts = r.counts; schImpRender(); }
       return;
     }
-    toast('取り込みました（追加' + r.added + '件 ／ 更新' + r.updated + '件）');
+    toast(IMP.replace ? ('置き換えました（' + r.added + '件）')
+                     : ('取り込みました（追加' + r.added + '件 ／ 更新' + r.updated + '件）'));
     schImpClose();
     loadSched();
   }, function(e){
