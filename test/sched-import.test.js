@@ -943,3 +943,87 @@ describe('置き換えの実行', () => {
       '消した中身が変更履歴に残っていません：' + h);
   });
 });
+
+/**
+ * 置き換えの下見が、**「置き換える」を受け取っているか。**
+ *
+ * ■ けいたが本番で踏んだ不具合（2026-09-10）
+ *   「いまの制作スケジュールを全部消して、この内容に置き換える」に印を付けても、
+ *   33行すべてが「ID列を空にしてください」で赤くなり、
+ *   **「全部消して、この 0件に置き換える」ボタンが押せないまま**だった。
+ *
+ * ■ なぜ起きたか
+ *   実行側（adminSchedImportApply_）は schedImportPlan_ に
+ *   `{ replace: replace }` を渡していたのに、
+ *   **下見側（adminSchedImportRead_）が渡していなかった。**
+ *   画面は replace を送っていたが、サーバーが読み捨てていた。
+ *
+ * ■ なぜテストが緑だったか
+ *   検査は schedImportPlan_ を**直接**呼んで {replace:true} を渡していた。
+ *   **action の経路を一度も通っていなかった。**
+ *   さらに src/mock.js は正しく渡していたので、
+ *   **模擬で試すと動くのに、本番でだけ動かない**状態だった。
+ */
+describe('置き換えの下見（action の経路を通す）', () => {
+
+  function readAs(b, rows, opts) {
+    b.box.__auth = { person: '小谷', role: (opts && opts.role) || '管理者' };
+    b.box.__payload = { rows: rows, replace: !!(opts && opts.replace) };
+    return JSON.parse(JSON.stringify(
+      vm.runInContext('adminSchedImportRead_(__auth, __payload)', b.box) || null));
+  }
+
+  /** 台帳に無いIDを持つ行（＝書き出したあと一括削除した、けいたの状況） */
+  const STALE = [
+    { __row: 2, 種類: 'タスク', 日付: '2026-10-01', 領域: '制作',
+      タスク名: '横断幕の入稿', ID: 'gone0001' },
+    { __row: 3, 種類: 'タスク', 日付: '2026-10-02', 領域: '制作',
+      タスク名: '看板の入稿', ID: 'gone0002' },
+  ];
+
+  test('ふつうの取り込みでは、台帳に無いIDは赤くなる（これは正しい）', () => {
+    const b = makeBox({ ledger: [] });
+    const r = readAs(b, STALE, { replace: false });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.strictEqual(r.counts.bad, 2,
+      '台帳から消えた行を、黙って追加しようとしています');
+  });
+
+  /*
+   * **ここが本体。**
+   * 置き換えは「全部消して入れ直す」なので、IDを見る意味がない。
+   * 見てしまうと、書き出す → 一括削除 → 置き換える、という
+   * いちばん自然な使い方で**1行も通らなくなる**。
+   */
+  test('置き換えなら、台帳に無いIDでも通る', () => {
+    const b = makeBox({ ledger: [] });
+    const r = readAs(b, STALE, { replace: true });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.strictEqual(r.counts.bad, 0,
+      '置き換えなのに、IDを見て赤くしています。'
+      + '画面の「全部消して、この 0件に置き換える」が押せなくなります：'
+      + JSON.stringify(r.items.map(x => x.problems)));
+    assert.strictEqual(r.counts.add, 2,
+      '置き換えでは、全部が新しい行になるはずです：' + JSON.stringify(r.counts));
+  });
+
+  /*
+   * 下見と実行で判定が違うと、**下見で通ったのに実行で弾かれる**（またはその逆）。
+   * 同じ入力を両方に通して、赤の数が一致することを見る。
+   */
+  test('下見と実行で、赤の数が一致する', () => {
+    const b = makeBox({ ledger: [] });
+    const preview = readAs(b, STALE, { replace: true });
+
+    const b2 = makeBox({ ledger: [] });
+    b2.box.__rows = STALE;
+    const plan = JSON.parse(JSON.stringify(vm.runInContext(
+      'schedImportPlan_(__rows, schedPeople_(), { replace: true })', b2.box)));
+
+    assert.strictEqual(preview.counts.bad, plan.counts.bad,
+      '下見と実行で、赤の数が違います（下見 ' + preview.counts.bad
+      + ' / 実行 ' + plan.counts.bad + '）');
+    assert.strictEqual(preview.counts.add, plan.counts.add,
+      '下見と実行で、追加の数が違います');
+  });
+});

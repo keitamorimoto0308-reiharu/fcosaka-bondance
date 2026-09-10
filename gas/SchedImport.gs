@@ -666,8 +666,41 @@ function schedImportFindRow_(sh, id) {
  * 画面側に判定を写すと、サーバーとズレる（この案件が繰り返し避けてきた形）。
  */
 function adminSchedImportRead_(auth, payload) {
-  // 直したあとの見直し。ファイルは読まない
+  /*
+   * **下見も「置き換える」を受け取る。**
+   *
+   * 2026-09-10、けいたが本番で踏んだ：
+   * 「全部消して置き換える」に印を付けても33行すべてが
+   * 「ID列を空にしてください」で赤くなり、**ボタンが押せないまま**だった。
+   *
+   * 原因は、実行側（adminSchedImportApply_）が `{ replace: replace }` を
+   * 渡しているのに、**こちらが渡していなかった**こと。
+   * 画面は送っていたが、サーバーが読み捨てていた。
+   *
+   * 置き換えは「全部消して入れ直す」のでIDを見る意味がない。
+   * 見てしまうと、**書き出す → 一括削除 → 置き換える**という
+   * いちばん自然な使い方で1行も通らなくなる。
+   *
+   * ⚠ 下見と実行で判定を変えないこと。**下見で通ったものは、実行でも通る。**
+   */
+  // ※ 変数名を `replace` にしない。**adminSchedImportApply_ に同じ行があり、
+  //   壊し検査の目印が別の関数に当たる**（引き継ぎ書の失敗パターン4）。
+  //   2026-09-10 に実際に踏んだ。名前を変えて、1行のまま一意にする
+  var wantReplace = !!(payload && payload.replace);
+
+  /*
+   * ■ 行を集める道は2本あるが、**下見を作るのは1か所にまとめる**
+   *   （貼り直しの経路＝画面が持っている行／ファイルの経路＝xlsx を読む）
+   *
+   *   以前は道ごとに `schedImportPlan_` を呼んでいた。**2か所あると、
+   *   片方だけ直る。**実際 2026-09-10 の不具合はその形で、
+   *   壊し検査でも「片方は落ちるのに、もう片方は落ちない」状態になった。
+   *   呼ぶ場所が1つなら、そもそも食い違えない。
+   */
+  var rows, leftover = false, emptyMsg = '';
+
   if (payload && Array.isArray(payload.rows)) {
+    // 直したあとの見直し。ファイルは読まない。
     // 見直しの入口にも同じ上限を置く。ここだけ素通しだと、
     // 画面を通さずに何万行でも送れる（①は一般権限でも呼べる）
     if (payload.rows.length > SCHED_IMPORT_ROWS_MAX) {
@@ -675,15 +708,22 @@ function adminSchedImportRead_(auth, payload) {
         message: '一度に取り込めるのは' + SCHED_IMPORT_ROWS_MAX + '行までです（'
                + payload.rows.length + '行）。' };
     }
-    var again = schedImportPlan_(payload.rows, schedPeople_());
-    return { ok: true, items: again.items, counts: again.counts,
-             missing: again.missing, leftover: false, message: '' };
+    rows = payload.rows;
+  } else {
+    var got = schedImportRead_(payload && payload.base64, payload && payload.fileName);
+    if (!got.ok) return got;
+    rows = got.rows;
+    leftover = got.leftover;
+    // **0件でも「0件でした」と返す。**黙って正常を作らない
+    emptyMsg = got.rows.length ? '' : 'Excelに行がありませんでした。';
   }
-  var got = schedImportRead_(payload && payload.base64, payload && payload.fileName);
-  if (!got.ok) return got;
-  var plan = schedImportPlan_(got.rows, schedPeople_());
-  return { ok: true, items: plan.items, counts: plan.counts, missing: plan.missing,
-           leftover: got.leftover,
-           // **0件でも「0件でした」と返す。**黙って正常を作らない
-           message: got.rows.length ? '' : 'Excelに行がありませんでした。' };
+
+  /*
+   * ※ 変数名を `plan` にしない。**adminSchedImportApply_ に同じ行があり、
+   *   壊し検査の目印が別の関数に当たってしまう**（引き継ぎ書の失敗パターン4）。
+   *   2026-09-10 に実際に踏んだ：下見を壊したつもりで実行側を壊していた。
+   */
+  var preview = schedImportPlan_(rows, schedPeople_(), { replace: wantReplace });
+  return { ok: true, items: preview.items, counts: preview.counts,
+           missing: preview.missing, leftover: leftover, message: emptyMsg };
 }
