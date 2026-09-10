@@ -222,6 +222,29 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .colopt{display:flex;align-items:center;gap:6px;font-size:12.5px;
   color:var(--ink);cursor:pointer;min-height:28px}
 .colbox #colReset{margin:0 14px 12px}
+/* 搬入の時間割。colbox と同じ見た目にそろえる（同じ「畳める箱」なので） */
+.loadinbox{margin:0 0 10px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.loadinbox>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:700;
+  list-style:none}
+.loadinbox>summary::-webkit-details-marker{display:none}
+.loadinbox>summary::before{content:'▸';margin-right:7px;color:var(--muted)}
+.loadinbox[open]>summary::before{content:'▾'}
+.loadinbox .cnum{margin-left:8px;font-weight:400;color:var(--muted)}
+.loadinbox>.pnote{margin:0;padding:10px 14px;border-top:1px solid var(--border)}
+.loadinbox #loadinRows{padding:4px 14px 10px}
+.lirow{display:flex;align-items:center;gap:10px;min-height:30px;padding:2px 6px;
+  border-radius:6px;cursor:pointer;font-size:12.5px}
+.lirow:hover{background:#f4f6f8}
+.lirow.on{background:#e8f1fb;box-shadow:inset 0 0 0 1px #9cc2ea}
+.lirow.out{cursor:default}
+.lirow.out:hover{background:transparent}
+.lit{flex:0 0 46px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.libarwrap{flex:1 1 auto;height:12px;background:#eef1f4;border-radius:6px;overflow:hidden}
+.libar{display:block;height:100%;background:#7ba7d4;border-radius:6px}
+.lirow.over .libar{background:#d98a5a}
+.lirow.undec .libar{background:#c9ced4}
+.lin{flex:0 0 92px;color:var(--ink);font-variant-numeric:tabular-nums}
+.liwarn{flex:0 0 auto;color:#a4500f;font-weight:700}
 /* 送る種類の切り替え。採択と不採択を取り違えないよう、はっきり分ける */
 .mailkind{display:flex;gap:18px;margin:0 0 12px}
 .mailkind label{display:flex;align-items:center;gap:7px;font-size:13.5px;
@@ -1049,7 +1072,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
     <!-- ② タイムスケジュール（当日の時間割）。当日運営タブとは別物で、
          あちらは出店者の一覧、こちらは進行・音響・司会が見る時間割 -->
     <section class="view" id="v-tt">
-      <details class="howto"><summary>タイムスケジュールの見かた</summary><dl><dt>この画面は何か</dt><dd>当日（10/24）の<b>進行の時間割</b>です。「11:00 オープニングセレモニー」のような、進行・音響・司会が見る表をここで組みます。<b>「当日運営」タブとは別物です。</b>あちらは出店者の一覧（搬入時間・現場責任者）です。</dd><dt>印刷して配るには</dt><dd>上の「<b>印刷する（A4縦）</b>」を押してください。時刻と3本の列がそのまま表になった、A4・1枚の紙が出ます。PDFにしたいときは、印刷の画面で「PDFに保存」を選んでください。<b>当日はこの紙を見ます。</b>この画面は前日までに組むためのものです。</dd><dt>保存のしかた</dt><dd>画面の右上の「<b>保存する</b>」が、台帳に書き込むボタンです。<b>数分おきに自動でも保存します。</b>左上に「たった今保存しました」「保存していません（変更◯件）」と出ます。<b>予定の窓にある「この予定を反映」は、表に反映するだけ</b>で、まだ台帳には書き込まれていません。</dd><dt>「変更◯件」とは</dt><dd>保存してからあとに、あなたが加えた<b>操作の数</b>です。「読み込み直す」を押すと、<b>この変更は消えます</b>（確認が出ます）。消したくないときは、先に「保存する」を押してください。</dd><dt>3本の列</dt><dd><b>全体／イベント（ステージ）／備考</b>の3本です。ステージを使うもの（リハーサルを含む）はイベント、ステージを使わないもの（会場入り・音響チェック・来賓到着）は備考に入れます。</dd><dt>予定の作りかた</dt><dd><b>空いているところを押す</b>と、その時刻で30分の予定ができます。<b>縦にドラッグ</b>すれば、その長さで作れます。スマホは右下の＋からでも作れます。</dd><dt>動かす・伸ばす</dt><dd>予定を<b>つかんで動かす</b>と、時刻が変わります（横に動かせば列も変わります）。<b>下のふちを引っぱる</b>と長さが変わり、<b>すぐ後ろに続いている予定も一緒にずれます</b>。つかんで動かしたときは、後ろはずれません。直前の1手は Ctrl＋Z（Macは⌘Z）で取り消せます。</dd><dt>出演者</dt><dd>○○市長・△△バンドなど、<b>その予定に出る人</b>です。自由に書けます。関係者リスト（主催側の担当者）とは別のものです。</dd><dt>詳細（メモ）</dt><dd>予定の窓の「詳細（メモ）を書く」から書けます。<b>枠に余裕があるときだけ表に出ます</b>が、<b>印刷には必ず出ます</b>。当日の申し送りはここに書いてください。</dd><dt>鍵（ロック）</dt><dd><b>うっかり動かさないための印</b>です。鍵の付いた予定は、ほかの予定を伸ばしても押し出されません。動かすときと長さを変えるときに、確認が出ます。<b>動かせないわけではありません。</b></dd><dt>重なったとき</dt><dd>同じ列で時間が重なると、<b>半分の幅で並んで</b>表示され、上に黄色い帯が出ます。<b>帯のその行を押す</b>と、「このままにする／後ろにずらす／別の列へ移す／削除する」から選べます。<b>列が違うもの（イベントと備考など）は重なりとして見ません。</b></dd><dt>ほかの人が先に保存したとき</dt><dd><b>赤い帯</b>が出て、その方のお名前と、あなたが加えていた変更の一覧が並びます。「最新を読み込む」を押すと最新が入り、<b>一覧は帯に残る</b>ので、それを見ながら入れ直せます。</dd><dt>誰が触れるか</dt><dd><b>全員です。</b>制作スケジュールと同じで、追加も編集も削除もできます。保存のたびに、誰が何件にしたかが「変更履歴」タブに残ります。<b>元に戻したいときは、スプレッドシートの「版の履歴」</b>から戻せます。</dd></dl></details>
+      <details class="howto"><summary>タイムスケジュールの見かた</summary><dl><dt>この画面は何か</dt><dd>当日（10/24）の<b>進行の時間割</b>です。「11:00 オープニングセレモニー」のような、進行・音響・司会が見る表をここで組みます。<b>「当日運営」タブとは別物です。</b>あちらは出店者の一覧（搬入時間・現場責任者）です。</dd><dt>印刷して配るには</dt><dd>上の「<b>印刷する（A4縦）</b>」を押してください。時刻と3本の列がそのまま表になった、A4・1枚の紙が出ます。PDFにしたいときは、印刷の画面で「PDFに保存」を選んでください。<b>当日はこの紙を見ます。</b>この画面は前日までに組むためのものです。</dd><dt>保存のしかた</dt><dd>画面の右上の「<b>保存する</b>」が、タイムスケジュールに書き込むボタンです。<b>数分おきに自動でも保存します。</b>左上に「たった今保存しました」「保存していません（変更◯件）」と出ます。<b>予定の窓にある「この予定を反映」は、表に反映するだけ</b>で、まだタイムスケジュールには書き込まれていません。</dd><dt>「変更◯件」とは</dt><dd>保存してからあとに、あなたが加えた<b>操作の数</b>です。「読み込み直す」を押すと、<b>この変更は消えます</b>（確認が出ます）。消したくないときは、先に「保存する」を押してください。</dd><dt>3本の列</dt><dd><b>全体／イベント（ステージ）／備考</b>の3本です。ステージを使うもの（リハーサルを含む）はイベント、ステージを使わないもの（会場入り・音響チェック・来賓到着）は備考に入れます。</dd><dt>予定の作りかた</dt><dd><b>空いているところを押す</b>と、その時刻で30分の予定ができます。<b>縦にドラッグ</b>すれば、その長さで作れます。スマホは右下の＋からでも作れます。</dd><dt>動かす・伸ばす</dt><dd>予定を<b>つかんで動かす</b>と、時刻が変わります（横に動かせば列も変わります）。<b>下のふちを引っぱる</b>と長さが変わり、<b>すぐ後ろに続いている予定も一緒にずれます</b>。つかんで動かしたときは、後ろはずれません。直前の1手は Ctrl＋Z（Macは⌘Z）で取り消せます。</dd><dt>出演者</dt><dd>○○市長・△△バンドなど、<b>その予定に出る人</b>です。自由に書けます。関係者リスト（主催側の担当者）とは別のものです。</dd><dt>詳細（メモ）</dt><dd>予定の窓の「詳細（メモ）を書く」から書けます。<b>枠に余裕があるときだけ表に出ます</b>が、<b>印刷には必ず出ます</b>。当日の申し送りはここに書いてください。</dd><dt>鍵（ロック）</dt><dd><b>うっかり動かさないための印</b>です。鍵の付いた予定は、ほかの予定を伸ばしても押し出されません。動かすときと長さを変えるときに、確認が出ます。<b>動かせないわけではありません。</b></dd><dt>重なったとき</dt><dd>同じ列で時間が重なると、<b>半分の幅で並んで</b>表示され、上に黄色い帯が出ます。<b>帯のその行を押す</b>と、「このままにする／後ろにずらす／別の列へ移す／削除する」から選べます。<b>列が違うもの（イベントと備考など）は重なりとして見ません。</b></dd><dt>ほかの人が先に保存したとき</dt><dd><b>赤い帯</b>が出て、その方のお名前と、あなたが加えていた変更の一覧が並びます。「最新を読み込む」を押すと最新が入り、<b>一覧は帯に残る</b>ので、それを見ながら入れ直せます。</dd><dt>誰が触れるか</dt><dd><b>全員です。</b>制作スケジュールと同じで、追加も編集も削除もできます。保存のたびに、誰が何件にしたかが「変更履歴」タブに残ります。<b>元に戻したいときは、スプレッドシートの「版の履歴」</b>から戻せます。</dd></dl></details>
       <div class="tt-banner" id="ttBanner" hidden></div>
       <div class="tt-warn" id="ttWarn" hidden></div>
       <div class="tt-bar">
@@ -1163,6 +1186,24 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         <div class="colpick" id="colPick"></div>
         <button class="ghost" id="colReset">最初の並びに戻す</button>
       </details>
+
+      <!-- 搬入の時間割（2026-09-09）。
+           搬入は 9:30〜10:30 の**1時間**に最大50社。
+           1社ずつ詳細を開いて打つやり方では、50回くり返しても
+           **全体の混み具合が一度も見えない**。ここが、その唯一の見える場所。
+           絞り込みではなく**全件**を数える（絞り込んだ画面で
+           「空いている」と読めてしまうのが、いちばん危ない） -->
+      <details class="loadinbox" id="loadinBox">
+        <summary>搬入の時間割を見る<span class="cnum" id="loadinNum"></span></summary>
+        <p class="pnote" id="loadinSum"></p>
+        <div id="loadinRows"></div>
+        <p class="pnote">
+          棒の長さは<b>車両の台数</b>です（社数ではありません）。
+          大きい車が集まると、社数が少なくても現場は詰まります。<br>
+          時刻の行を押すと、その枠の出店者だけに絞り込みます（<b>もう一度押すと解除</b>）。
+          <b>混んでいても操作は止めません</b>——当日の事情で寄せることはあるためです。
+        </p>
+      </details>
       <div class="tablewrap">
         <table class="list"><thead id="listHead"></thead><tbody id="listBody"></tbody></table>
         <div class="empty" id="listEmpty">該当する応募はありません。</div>
@@ -1185,6 +1226,9 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
         <label class="picksel">ステータスを
           <select id="pickStatus"><option value="">選ぶ…</option></select>
         </label>
+        <!-- 搬入時刻も**一般に出す**。当日の誘導は一般権限の営業がやる仕事なので
+             （ステータス変更と同じ扱い。決定は decisions_pending I6 と別） -->
+        <button class="ghost" id="pickLoadIn">搬入時刻をまとめて入れる</button>
         <!-- 「メールを送る」だと、押した瞬間に飛ぶように読める。
              実際はタブを移って文面を書く画面に行くだけ -->
         <button class="print admin-only" id="pickMail">選んだ出店者へメールを書く</button>
@@ -1215,7 +1259,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
           <b>完全に消します</b>。<b>元に戻せません。</b>
           受付IDも SB-0001 から採り直しになります。
           公開前の掃除にだけお使いください。<br>
-          消す直前に、台帳を丸ごと複製した控えをDriveに作ります
+          消す直前に、いまの記録をまるごと複製した控えをDriveに作ります
           （控えを作れなかったときは、削除を行いません）。
         </p>
         <button class="ghost" id="purgeCheck">消える対象を確かめる</button>
@@ -1234,7 +1278,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- 当日運営：区画番号順・1行1社・印刷して持ち歩ける -->
     <section class="view" id="v-day">
-      <details class="howto"><summary>当日運営の見かた</summary><dl><dt>この画面</dt><dd>当日、現場で開くための一覧です。印刷にも耐える形にしてあります。</dd><dt>当日は電波が切れます</dt><dd><b>前日までに印刷して持ってください。</b></dd><dt>搬入・撤収</dt><dd><b>主催が決めた時刻</b>です（出店者一覧で行を開くと直せます）。まだ決めていないときは、事業者からの希望を「希望 9:30〜10:00」の形で出します。</dd><dt>現場責任者・現場の携帯</dt><dd><b>当日その場にいる方</b>です。出店確定情報フォームでご記入いただいた内容で、未提出のときは「（未提出）」と出ます。携帯が未提出のときは、応募時のお電話番号を出します。</dd><dt>応募時の連絡先</dt><dd>応募フォームでご記入いただいたご担当者の番号です。会社にいらっしゃることがあるので、当日は現場の携帯を先にお使いください。</dd><dt>はじめの絞り込み</dt><dd>「区画が決まっている分だけ」に<b>最初からチェックが入っています</b>。全社を見るときは外してください。</dd></dl></details>
+      <details class="howto"><summary>当日運営の見かた</summary><dl><dt>この画面</dt><dd>当日、現場で開くための一覧です。印刷にも耐える形にしてあります。</dd><dt>当日は電波が切れます</dt><dd><b>前日までに印刷して持ってください。</b></dd><dt>搬入・撤収</dt><dd><b>主催が決めた時刻</b>です（出店者一覧で行を開くと直せます）。まだ決めていないときは、事業者からの希望を「希望 9:30〜9:45」の形で出します。</dd><dt>現場責任者・現場の携帯</dt><dd><b>当日その場にいる方</b>です。出店確定情報フォームでご記入いただいた内容で、未提出のときは「（未提出）」と出ます。携帯が未提出のときは、応募時のお電話番号を出します。</dd><dt>応募時の連絡先</dt><dd>応募フォームでご記入いただいたご担当者の番号です。会社にいらっしゃることがあるので、当日は現場の携帯を先にお使いください。</dd><dt>はじめの絞り込み</dt><dd>「区画が決まっている分だけ」に<b>最初からチェックが入っています</b>。全社を見るときは外してください。</dd></dl></details>
       <div class="toolbar">
         <span class="daycount" id="dayCount"></span>
         <label style="font-size:13px"><input type="checkbox" id="dOnlyAssigned" checked> 区画が決まっている分だけ</label>
@@ -1278,7 +1322,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
 
     <!-- ── 変更履歴 ─────────────────────────── -->
     <section class="view" id="v-history">
-      <details class="howto"><summary>変更履歴の見かた</summary><dl><dt>記録されるもの</dt><dd>誰が・いつ・どの項目を・何から何に変えたか。事業者ご本人による修正も残ります。</dd><dt>消せません</dt><dd>あとから書き換えられない台帳です。「言った・言わない」を防ぐためのものなので、編集機能は用意していません。</dd></dl></details>
+      <details class="howto"><summary>変更履歴の見かた</summary><dl><dt>記録されるもの</dt><dd>誰が・いつ・どの項目を・何から何に変えたか。事業者ご本人による修正も残ります。</dd><dt>消せません</dt><dd>あとから書き換えられない記録です。「言った・言わない」を防ぐためのものなので、編集機能は用意していません。</dd></dl></details>
       <div class="toolbar">
         <input id="hQ" placeholder="受付ID・項目・操作者で絞り込み" style="min-width:240px">
         <span class="pcount" id="hCount"></span>
@@ -1376,7 +1420,7 @@ table.day .tel{color:var(--brand-deep);font-weight:700;white-space:nowrap}
          取り消せない操作なので、対象一覧 → プレビュー → 送信 の3段にする。
          段を飛ばせないよう、次の段は前の段を通らないと出さない。 -->
     <section class="view" id="v-mail">
-      <details class="howto"><summary>メール送信の見かた</summary><dl><dt>この画面ですること</dt><dd><b>採択のご連絡</b>と<b>不採択のご連絡</b>を、一斉にお送りします。画面の上で種類をお選びください。</dd><dt>3つの段階</dt><dd>①送る相手を確かめる → ②本文を読む → ③送る。②まではメールは飛びません。</dd><dt>1通ずつ送ります</dt><dd>1社ずつ別々にお送りするので、他社のメールアドレスが相手に見えることはありません。</dd><dt>文面を直す</dt><dd>「文面を編集する」を開くと、件名と本文をここで直せます（管理者のみ）。<b>{{お名前}} のような差し込み</b>は、送るときに1社ずつの値に置き換わります。直したら必ず「本文を確認する」で、実際に届く形をご覧ください。「はじめの文面に戻す」でいつでも元に戻せます。</dd><dt>文面で断られたら</dt><dd><b>うっかり事故を防ぐために、断っている場合があります。</b><b>不採択にリンクは入れられません</b>（その方が出店確定情報フォームを開けてしまうため）。<b>採択からリンクは外せません</b>（次に何をすればよいか伝わらないため）。差し込みの綴りが違うときも断ります（そのまま送るとメールに {{名前}} と出てしまうため）。</dd><dt>不採択のご連絡</dt><dd>件名に「不採択」とは書きません（受信箱の一覧に出ないように）。<b>理由は書かず、リンクも載せません。</b>確定情報フォームのURLが未設定でも送れます。</dd><dt>送ったあと</dt><dd>取り消せません。同じ方に二度送らないよう、送信済みの方は次から対象に出ません。</dd><dt>行き違いを防ぐしくみ</dt><dd>採択のご連絡を送ったあとにステータスを不採択へ直しても、その方は<b>一斉送信の対象から自動で外れます</b>。画面に理由が出るので、お電話などで事情をお伝えください。</dd><dt>届かなかったら</dt><dd>結果に失敗として出ます。原因（宛先違いなど）を直して、その方だけもう一度送れます。宛先は「出店者一覧」で行を開き、「応募内容を修正する」から直せます。</dd><dt>一斉メールとは</dt><dd>この画面の下半分です。<b>選んだ出店者さまへ、その場で書いた文面をお送りします。</b> 提出物の催促や、当日のご案内にお使いください。</dd><dt>相手の選びかた</dt><dd><b>「出店者一覧」タブで選びます。</b>絞り込んでから、行の左の「選ぶ」欄にチェックを入れ、下に出る「選んだ出店者へメールを書く」を押してください。<b>押してもまだ送りません。</b>この画面に移って、文面を書きます。<b>検索や絞り込みを変えると、選択は消えます</b>（画面に出ていない方に送ってしまわないように、わざとそうしています）。</dd><dt>出店が決まっていない方にも送れます</dt><dd>送らないのは<b>辞退・キャンセル・重複</b>の方だけです。<b>不採択・審査中・未確認の方には届きます</b>（催促やご連絡でお使いいただくためです）。「1. 送る相手」の表に<b>ステータスの列</b>があります。出店が決まっていない方が混ざっていると、表の下に<b>赤い注意</b>が出ます。「当日のご案内」など、出店が決まった方向けの内容のときはご注意ください。</dd><dt>下書き</dt><dd>「当日のご案内」などを押すと、件名と本文が入ります。そのまま直してお送りください。<b>下書き自体は変わりません。</b></dd><dt>差し込み</dt><dd>{{区画番号}} や {{搬入予定時刻}} も使えます。値が入っていない方には、<b>メールは届きますが、その1行だけが抜けたまま届きます</b>（その方が送られなくなるのではありません）。誰の何が抜けるかは、「本文を確認する」を押すと受付IDまで出ます。</dd><dt>送れない相手</dt><dd>ステータスが<b>辞退・キャンセル・重複</b>の方、メールアドレスが正しくない方には送りません。選んでいても自動で外し、<b>理由ごとに分けて</b>画面に出します。</dd><dt>二度送らないしくみ</dt><dd><b>「本文を確認する」を押した時点の相手と文面が、そのまま送られます。</b>文面を直すと3・4の段がいったん閉じるので、もう一度「本文を確認する」を押してください。<b>ボタンを連打しても、同じ方に2通届くことはありません。</b></dd><dt>続けて同じ件名を送るとき</dt><dd>24時間以内に同じ件名を同じ方へ送っていると、<b>画面でお知らせします</b>（止めはしません）。催促の再送でしたら、そのままお進みください。</dd><dt>一度に送れる数</dt><dd><b>40社までです。</b>41社以上を選ぶと、出店者一覧の下のバーにその場で赤く出ます。超えるときは、絞り込んで分けてお送りください。</dd><dt>送ったものの記録</dt><dd>台帳の<b>「一斉メール履歴」シート</b>に、いつ・誰が・誰に・どんな文面を送ったかが<b>本文ごと</b>残ります。変更履歴にも1行残ります。</dd></dl></details>
+      <details class="howto"><summary>メール送信の見かた</summary><dl><dt>この画面ですること</dt><dd><b>採択のご連絡</b>と<b>不採択のご連絡</b>を、一斉にお送りします。画面の上で種類をお選びください。</dd><dt>3つの段階</dt><dd>①送る相手を確かめる → ②本文を読む → ③送る。②まではメールは飛びません。</dd><dt>1通ずつ送ります</dt><dd>1社ずつ別々にお送りするので、他社のメールアドレスが相手に見えることはありません。</dd><dt>文面を直す</dt><dd>「文面を編集する」を開くと、件名と本文をここで直せます（管理者のみ）。<b>{{お名前}} のような差し込み</b>は、送るときに1社ずつの値に置き換わります。直したら必ず「本文を確認する」で、実際に届く形をご覧ください。「はじめの文面に戻す」でいつでも元に戻せます。</dd><dt>文面で断られたら</dt><dd><b>うっかり事故を防ぐために、断っている場合があります。</b><b>不採択にリンクは入れられません</b>（その方が出店確定情報フォームを開けてしまうため）。<b>採択からリンクは外せません</b>（次に何をすればよいか伝わらないため）。差し込みの綴りが違うときも断ります（そのまま送るとメールに {{名前}} と出てしまうため）。</dd><dt>不採択のご連絡</dt><dd>件名に「不採択」とは書きません（受信箱の一覧に出ないように）。<b>理由は書かず、リンクも載せません。</b>確定情報フォームのURLが未設定でも送れます。</dd><dt>送ったあと</dt><dd>取り消せません。同じ方に二度送らないよう、送信済みの方は次から対象に出ません。</dd><dt>行き違いを防ぐしくみ</dt><dd>採択のご連絡を送ったあとにステータスを不採択へ直しても、その方は<b>一斉送信の対象から自動で外れます</b>。画面に理由が出るので、お電話などで事情をお伝えください。</dd><dt>届かなかったら</dt><dd>結果に失敗として出ます。原因（宛先違いなど）を直して、その方だけもう一度送れます。宛先は「出店者一覧」で行を開き、「応募内容を修正する」から直せます。</dd><dt>一斉メールとは</dt><dd>この画面の下半分です。<b>選んだ出店者さまへ、その場で書いた文面をお送りします。</b> 提出物の催促や、当日のご案内にお使いください。</dd><dt>相手の選びかた</dt><dd><b>「出店者一覧」タブで選びます。</b>絞り込んでから、行の左の「選ぶ」欄にチェックを入れ、下に出る「選んだ出店者へメールを書く」を押してください。<b>押してもまだ送りません。</b>この画面に移って、文面を書きます。<b>検索や絞り込みを変えると、選択は消えます</b>（画面に出ていない方に送ってしまわないように、わざとそうしています）。</dd><dt>出店が決まっていない方にも送れます</dt><dd>送らないのは<b>辞退・キャンセル・重複</b>の方だけです。<b>不採択・審査中・未確認の方には届きます</b>（催促やご連絡でお使いいただくためです）。「1. 送る相手」の表に<b>ステータスの列</b>があります。出店が決まっていない方が混ざっていると、表の下に<b>赤い注意</b>が出ます。「当日のご案内」など、出店が決まった方向けの内容のときはご注意ください。</dd><dt>下書き</dt><dd>「当日のご案内」などを押すと、件名と本文が入ります。そのまま直してお送りください。<b>下書き自体は変わりません。</b></dd><dt>差し込み</dt><dd>{{区画番号}} や {{搬入予定時刻}} も使えます。値が入っていない方には、<b>メールは届きますが、その1行だけが抜けたまま届きます</b>（その方が送られなくなるのではありません）。誰の何が抜けるかは、「本文を確認する」を押すと受付IDまで出ます。</dd><dt>送れない相手</dt><dd>ステータスが<b>辞退・キャンセル・重複</b>の方、メールアドレスが正しくない方には送りません。選んでいても自動で外し、<b>理由ごとに分けて</b>画面に出します。</dd><dt>二度送らないしくみ</dt><dd><b>「本文を確認する」を押した時点の相手と文面が、そのまま送られます。</b>文面を直すと3・4の段がいったん閉じるので、もう一度「本文を確認する」を押してください。<b>ボタンを連打しても、同じ方に2通届くことはありません。</b></dd><dt>続けて同じ件名を送るとき</dt><dd>24時間以内に同じ件名を同じ方へ送っていると、<b>画面でお知らせします</b>（止めはしません）。催促の再送でしたら、そのままお進みください。</dd><dt>一度に送れる数</dt><dd><b>40社までです。</b>41社以上を選ぶと、出店者一覧の下のバーにその場で赤く出ます。超えるときは、絞り込んで分けてお送りください。</dd><dt>送ったものの記録</dt><dd><b>「一斉メール履歴」</b>に、いつ・誰が・誰に・どんな文面を送ったかが<b>本文ごと</b>残ります。変更履歴にも1行残ります。</dd></dl></details>
       <div class="panel">
         <h3>選考結果の一括送信</h3>
         <div class="mailkind">
@@ -2268,6 +2312,28 @@ function filtered(){
     if (dy && (x['当日ステータス'] || '未着') !== dy) return false;
     if (mine && x['FC大阪担当社員'] !== S.person) return false;
     if (dup && !String(x['重複フラグ']||'').trim()) return false;
+    /*
+     * 搬入の時間割で押した枠。**検索欄は使わない。**
+     * 検索欄に時刻を入れると、搬入希望時刻がたまたま一致した社まで混ざり、
+     * 「その時間に来る社」を見ているつもりで別のものを見ることになる。
+     */
+    if (S.loadinAt != null){
+      /*
+       * **時間割が数えていない相手は、絞り込みでも出さない。**
+       * 時間割は来ない相手（不採択・辞退・キャンセル・重複）を数えていないので、
+       * ここで数えると「未定 0社」と出ている枠を押して1社出る、という形になる。
+       * 引き継ぎ書の一斉メールの事故と同じ——**報せる側と、実際にやる側がずれる。**
+       * （2026-09-09、画面で押して見つけた。検査は両方とも緑だった）
+       */
+      if (LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) >= 0) return false;
+      var lt = hhmmToMin(x['搬入予定時刻']);
+      if (S.loadinAt === ''){
+        if (lt !== null) return false;          // 「未定」の枠
+      } else {
+        var la = hhmmToMin(S.loadinAt);
+        if (lt === null || lt < la || lt >= la + LOADIN.step) return false;
+      }
+    }
     if (q){
       var hay = Object.keys(x).map(function(k){ return x[k]; }).join(' ').toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -2464,7 +2530,7 @@ function purgeCheck(){
     }).join('') + '</table></div>';
     $('#purgeWarn').textContent = 'この ' + items.length + ' 件を完全に消します（元に戻せません）。'
       + '出店確定情報・変更履歴・区画の割当・提出物のフォルダも一緒に消えます。'
-      + '消す直前に、台帳を丸ごと複製した控えをDriveに作ります。'
+      + '消す直前に、いまの記録をまるごと複製した控えをDriveに作ります。'
       + (r.ticketMin ? '（確かめてから' + r.ticketMin + '分を過ぎると、やり直しになります）' : '')
       + (r.tooMany ? '（一度に消せるのは ' + r.max + ' 件までです）' : '');
     $('#purgeCount').value = '';
@@ -2535,6 +2601,8 @@ function renderList(){
   if (!SHOW.length) loadShow();
   var rows = filtered();
   $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
+  // 時間割は**絞り込みに関係なく全件**を数える（絞った画面で「空いている」と読ませない）
+  renderLoadIn();
   var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
   $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
   /*
@@ -2704,6 +2772,277 @@ function renderPickBar(){
   // 文面を書き上げてから「40社までです」と言われるのでは遅い
   var over = $('#pickOver');
   if (over) over.hidden = n <= 40;
+}
+
+/* ─────────────────────────── 搬入の時間割（2026-09-09）
+ *
+ * ■ なぜ要るか
+ *   搬入は 9:30〜10:30 の**1時間**に最大50社。
+ *   1社ずつ詳細を開いて打つと、50回くり返しても**全体の混み具合が見えない**。
+ *
+ * ■ 数えるのは「絞り込み後」ではなく**全件**
+ *   絞り込んだ画面で「空いている」と読めてしまうのが、いちばん危ない形。
+ *
+ * ■ 時刻は src/content.js が正。ここに書き写さない
+ *   （test/times.test.js が全部の置き場所の一致を見張っている）
+ */
+var LOADIN = {
+  from: "9:30",
+  to:   "10:30",
+  step: 10,   // きざみ（分）
+  cap:  8,    // 1枠に入れてよい車両の台数
+};
+
+/* 来ない相手は数えない。未確認・審査中は「まだ分からない」ので数に入れる */
+var LOADIN_SKIP = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+
+/*
+ * 下の塊は src/loadin.js から書き出したもの。
+ * **画面と検査が、同じコードを呼ぶ**（写しを2つ持つと必ずズレる）。
+ * 中身の検査は test/loadin.test.js。
+ */
+function loadinToMin(t) {
+  var s = String(t == null ? '' : t).trim();
+  var i = s.indexOf(':');
+  if (i < 1) return null;
+  var hs = s.slice(0, i), ms = s.slice(i + 1);
+  if (hs.length > 2 || ms.length !== 2) return null;
+  // Number('') は 0 になる。空を 0 時と読ませない
+  if (hs.length === 0) return null;
+  var h = Number(hs), m = Number(ms);
+  if (!isFinite(h) || !isFinite(m)) return null;
+  // '1e1' のような書き方を弾く（Number は通してしまう）
+  if (String(Number(hs)) !== String(hs).replace(/^0(?=[0-9])/, '')) return null;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
+function loadinToHhmm(n) {
+  var v = Math.floor(Number(n));
+  var h = Math.floor(v / 60), m = v % 60;
+  return h + ':' + (m < 10 ? '0' + m : String(m));
+}
+
+function loadinCarsOf(row) {
+  var n = Number((row || {})['確定：搬入車両台数']);
+  return (isFinite(n) && n > 0) ? Math.floor(n) : 1;
+}
+
+function loadinBuckets(rows, fromMin, toMin, stepMin, capPerSlot) {
+  var slots = [], i;
+  for (i = fromMin; i < toMin; i += stepMin) {
+    slots.push({ at: i, hhmm: loadinToHhmm(i), n: 0, cars: 0, over: false });
+  }
+  var undecided = { n: 0, cars: 0 };
+  var outside = { n: 0, cars: 0 };
+
+  (rows || []).forEach(function (x) {
+    var cars = loadinCarsOf(x);
+    var t = loadinToMin(x['搬入予定時刻']);
+    if (t === null) { undecided.n++; undecided.cars += cars; return; }
+    if (t < fromMin || t >= toMin) { outside.n++; outside.cars += cars; return; }
+    var k = Math.floor((t - fromMin) / stepMin);
+    if (k < 0 || k >= slots.length) { outside.n++; outside.cars += cars; return; }
+    slots[k].n++; slots[k].cars += cars;
+  });
+
+  var cars = undecided.cars + outside.cars;
+  slots.forEach(function (s) {
+    s.over = s.cars > capPerSlot;
+    cars += s.cars;
+  });
+
+  return {
+    slots: slots, undecided: undecided, outside: outside,
+    cap: slots.length * capPerSlot, cars: cars,
+  };
+}
+
+function loadinPlan(rows, fromMin, stepMin, capPerSlot) {
+  var list = (rows || []).slice();
+
+  list.sort(function (a, b) {
+    var sa = Number(a['割当開始区画']), sb = Number(b['割当開始区画']);
+    var na = isFinite(sa) && sa > 0, nb = isFinite(sb) && sb > 0;
+    if (na && nb) {
+      if (sa !== sb) return sa - sb;
+      return String(a['受付ID']).localeCompare(String(b['受付ID']));
+    }
+    if (na) return -1;
+    if (nb) return 1;
+    return String(a['受付ID']).localeCompare(String(b['受付ID']));
+  });
+
+  var out = [], at = fromMin, used = 0;
+  list.forEach(function (x) {
+    var cars = loadinCarsOf(x);
+    // used > 0 の条件が要る。これが無いと、1社で上限を超える車が来たとき
+    // **空の枠を延々と飛ばし続ける**
+    if (used > 0 && used + cars > capPerSlot) { at += stepMin; used = 0; }
+    out.push({ id: x['受付ID'], at: loadinToHhmm(at), name: x['企業名'] || x['受付ID'] });
+    used += cars;
+  });
+  return out;
+}
+
+/* 画面から呼ぶときの、短い名前 */
+function hhmmToMin(t){ return loadinToMin(t); }
+function minToHhmm(n){ return loadinToHhmm(n); }
+function loadinCars(x){ return loadinCarsOf(x); }
+
+function loadinTargets(){
+  if (!S.list) return [];
+  return S.list.rows.filter(function(x){
+    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
+  });
+}
+
+function renderLoadIn(){
+  var box = $('#loadinRows');
+  if (!box) return;
+  var rows = loadinTargets();
+  var from = hhmmToMin(LOADIN.from), to = hhmmToMin(LOADIN.to);
+
+  // 数え方は src/loadin.js が持つ（検査は test/loadin.test.js）
+  var B = loadinBuckets(rows, from, to, LOADIN.step, LOADIN.cap);
+  var slots = B.slots, undecided = B.undecided, outside = B.outside;
+
+  var maxCars = 1;
+  slots.forEach(function(s){ if (s.cars > maxCars) maxCars = s.cars; });
+
+  var html = slots.map(function(s){
+    var over = s.over;
+    var w = Math.round((s.cars / maxCars) * 100);
+    var mine = (S.loadinAt === minToHhmm(s.at));
+    return '<div class="lirow' + (over ? ' over' : '') + (mine ? ' on' : '')
+      + '" data-at="' + esc(minToHhmm(s.at)) + '">'
+      + '<span class="lit">' + esc(minToHhmm(s.at)) + '</span>'
+      + '<span class="libarwrap"><span class="libar" style="width:' + w + '%"></span></span>'
+      + '<span class="lin">' + s.n + '社 ' + s.cars + '台</span>'
+      + (over ? '<span class="liwarn">多い</span>' : '')
+      + '</div>';
+  }).join('');
+
+  if (outside.n){
+    html += '<div class="lirow out"><span class="lit">窓の外</span>'
+      + '<span class="libarwrap"></span>'
+      + '<span class="lin">' + outside.n + '社 ' + outside.cars + '台</span>'
+      + '<span class="liwarn">' + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + ' の外です</span></div>';
+  }
+  // 「未定」は必ず一番下。ここが減っていくのが、この作業の進み具合そのもの
+  html += '<div class="lirow undec' + (S.loadinAt === '' ? ' on' : '') + '" data-at=""><span class="lit">未定</span>'
+    + '<span class="libarwrap"><span class="libar"></span></span>'
+    + '<span class="lin">' + undecided.n + '社</span></div>';
+
+  box.innerHTML = html;
+
+  /*
+   * **枠ごとの混雑だけ見せると、全体が無理でも気づけない。**
+   * のべ何台まで入るかと、いま何台あるかを、先に1行で出す。
+   */
+  var cap = slots.length * LOADIN.cap;
+  var have = 0;
+  slots.forEach(function(s){ have += s.cars; });
+  have += undecided.cars + outside.cars;
+  var sum = $('#loadinSum');
+  if (sum){
+    sum.innerHTML = '出店予定 <b>' + rows.length + '社</b>（およそ <b>' + have + '台</b>）。'
+      + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + ' は '
+      + slots.length + '枠 × ' + LOADIN.cap + '台 ＝ <b>のべ' + cap + '台</b>まで。'
+      + (have > cap
+          ? ' <b class="liwarn">全体で入りきりません。</b>搬入の時間を延ばすか、'
+            + '前日搬入をご相談ください。'
+          : '');
+  }
+  var num = $('#loadinNum');
+  if (num) num.textContent = undecided.n ? '未定 ' + undecided.n + ' 社' : 'すべて決まりました';
+}
+
+/**
+ * 選んだ相手に、搬入予定時刻をまとめて入れる。
+ *
+ * ■ 配る順は**区画番号の順**
+ *   搬入は会場の入口から順に埋めるのが現実の動き。受付ID順に配ると、
+ *   隣どうしの区画がばらばらの時間に来て、車両がすれ違う。
+ *
+ * ■ 押す前に、**誰が何時になるか**を必ず見せる
+ *   まとめて変えるものは、見えないまま入るのがいちばん怖い。
+ *
+ * ■ 既に入っている時刻は、既定では**上書きしない**
+ *   個別に調整した結果を、まとめ操作が黙って潰さないため。
+ */
+function bulkLoadIn(){
+  var ids = bcPickIds();
+  if (!ids.length) return;
+  var NL = String.fromCharCode(10);
+
+  var start = prompt('搬入予定時刻を、まとめて入れます。' + NL
+    + '始める時刻をご記入ください（例：' + LOADIN.from + '）。' + NL
+    + LOADIN.step + '分ごとに、1枠 ' + LOADIN.cap + '台まで詰めていきます。',
+    LOADIN.from);
+  if (start === null) return;
+  var from = hhmmToMin(start);
+  if (from === null){
+    toast('時刻は「9:30」の形でご記入ください', true);
+    return;
+  }
+
+  var byId = {};
+  (S.list ? S.list.rows : []).forEach(function(x){ byId[x['受付ID']] = x; });
+
+  var picked = ids.map(function(id){ return byId[id]; })
+                  .filter(function(x){ return !!x; });
+
+  var already = picked.filter(function(x){ return hhmmToMin(x['搬入予定時刻']) !== null; });
+  var overwrite = false;
+  if (already.length){
+    overwrite = confirm(already.length + '社には、すでに搬入予定時刻が入っています。' + NL
+      + '「OK」を押すと**上書き**します。' + NL
+      + '「キャンセル」を押すと、その ' + already.length + '社は**そのまま**にして、'
+      + '残りだけ入れます。');
+  }
+  var todo = overwrite ? picked
+    : picked.filter(function(x){ return hhmmToMin(x['搬入予定時刻']) === null; });
+  if (!todo.length){
+    toast('入れる相手がいません（全員すでに時刻が入っています）', true);
+    return;
+  }
+
+  // 区画の順に並べて、枠に詰める。中身は src/loadin.js
+  // （端の場合が多いので、形を見る検査ではなく test/loadin.test.js で見ている）
+  var assign = loadinPlan(todo, from, LOADIN.step, LOADIN.cap);
+
+  var last = assign.length ? assign[assign.length - 1].at : '';
+  var lines = assign.slice(0, 12).map(function(a){
+    return '　' + a.at + '　' + a.name;
+  }).join(NL);
+  var more = assign.length > 12 ? NL + '　…ほか ' + (assign.length - 12) + '社' : '';
+
+  if (!confirm(assign.length + '社に、搬入予定時刻を入れます。' + NL
+      + '最後の社は ' + last + ' です。' + NL + NL
+      + lines + more + NL + NL
+      + '変更履歴に前の値ごと残るので、あとから戻せます。' + NL + NL
+      + 'よろしいですか？')) return;
+
+  var btn = $('#pickLoadIn');
+  if (btn) btn.disabled = true;
+  api('adminBulkLoadIn', {
+    assign: assign.map(function(a){ return { id: a.id, at: a.at }; }),
+  }).then(function(r){
+    if (btn) btn.disabled = false;
+    if (!r || !r.ok){ toast((r && r.message) || '入れられませんでした', true); return; }
+    toast(r.message || '入れました');
+    if ((r.failed || []).length){
+      toast(r.failed.length + '社は入れられませんでした：'
+        + r.failed.map(function(f){ return f.id; }).join('、'), true);
+    }
+    // 入れたあとは選択を捨てる。**続けて押せる形にしない**
+    bcPickClear();
+    loadList();
+  }, function(e){
+    if (btn) btn.disabled = false;
+    netFail(e, '搬入予定時刻を入れられませんでした');
+  });
 }
 
 function jumpToList(spec){
@@ -3893,9 +4232,9 @@ function loadTemplate(keepMsg){
     // 「はじめの文面のまま」と出すと、保存した文面が消えたように見えるうえ、
     // 実際には既定の文面が送られる（2026-09-04 の点検で指摘）
     if (r.headBroken){
-      $('#tplState').textContent = '（台帳のシートが壊れています）';
+      $('#tplState').textContent = '（メール文面のシートが壊れています）';
       $('#tplErr').hidden = false;
-      $('#tplErr').innerHTML = '<b>台帳の「メール文面」シートを直してください。</b><ul><li>'
+      $('#tplErr').innerHTML = '<b>「メール文面」を直してください。</b><ul><li>'
         + mdBold(r.headBrokenMessage || '') + '</li></ul>';
     } else {
       $('#tplState').textContent = r.isDefault
@@ -4196,7 +4535,7 @@ function bcRenderTargets(r){
       + '<br>宛先は「出店者一覧」で行を開き、「応募内容を修正する」から直せます。</p>';
   }
   if ((r.missing || []).length){
-    bad += '<p class="pwarn"><b>台帳に見当たらない受付ID</b>：'
+    bad += '<p class="pwarn"><b>応募一覧に見当たらない受付ID</b>：'
       + r.missing.map(esc).join(' / ') + '</p>';
   }
   if (!rows.length){
@@ -4211,12 +4550,12 @@ function bcRenderTargets(r){
    */
   if (r.historyReady === false){
     // setup() は営業担当には実行できない。**人が取れる次の一手**を先に書く
-    bad += '<p class="perr"><b>台帳の準備ができていないため、いまは送信できません。</b>'
+    bad += '<p class="perr"><b>送信の記録を残す場所が、まだ用意できていないため、いまは送信できません。</b>'
       + '送った記録が残せない状態です。'
       + '<br><b>事務局にご連絡ください</b>'
       + '（連絡先は「設定」タブの「事務局の連絡先」に出ています）。'
       + '「一斉メールの準備をお願いします」とお伝えいただければ通じます。'
-      + '<br><small>［技術メモ：台帳の Apps Script から setup() を1回実行し、'
+      + '<br><small>［技術メモ：スプレッドシートの Apps Script から setup() を1回実行し、'
       + 'この画面を開き直してください］</small></p>';
   }
   if (r.tooMany){
@@ -4428,7 +4767,7 @@ function bcDoSend(){
       + (res.bookkeeping
           ? '<p class="pwarn"><b>ただし、記録の書き込みに失敗しました。</b>'
             + esc(res.bookkeeping) + '</p>'
-          : '<p class="pnote">送った内容は、台帳の「一斉メール履歴」シートに'
+          : '<p class="pnote">送った内容は、「一斉メール履歴」に'
             + '本文ごと残しています。</p>');
     $('#bcStep1').hidden = true;
     $('#bcStep2').hidden = true;
@@ -5130,6 +5469,17 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#pickMail').addEventListener('click', bcStart);
   $('#pickNone').addEventListener('click', function(){ bcPickClear(); renderList(); });
   $('#pickStatus').addEventListener('change', bulkStatus);
+  $('#pickLoadIn').addEventListener('click', bulkLoadIn);
+  // 時刻の行を押したら、その枠の出店者だけに絞る。
+  // 「混んでいる」と分かった直後に、**誰が混んでいるのか**へ行けるように
+  $('#loadinRows').addEventListener('click', function(e){
+    var row = e.target.closest ? e.target.closest('.lirow') : null;
+    if (!row || row.className.indexOf('out') >= 0) return;
+    var at = row.getAttribute('data-at');
+    // もう一度押したら解除。**入れたきり戻せない絞り込みを作らない**
+    S.loadinAt = (S.loadinAt === at) ? null : at;
+    renderList();
+  });
   $('#bcPreview').addEventListener('click', bcDoPreview);
   $('#bcSend').addEventListener('click', bcDoSend);
   // 文面を1文字でも直したら、確認と送信を隠してやり直させる。
@@ -5535,7 +5885,7 @@ function schImpGo(){
    * 「削除する」には確認があるのに、こちらには無かった（検証役 2026-09-07）。
    */
   if (c.update && !confirm(
-      '台帳に書き込みます。\n\n'
+      '制作スケジュールに書き込みます。\n\n'
     + '・新しく ' + c.add + '件 ふえます\n'
     + '・いまある ' + c.update + '件を、Excelの内容で書き換えます\n'
     + '　（書き換える前の中身は、変更履歴に残ります）\n'
@@ -5608,7 +5958,7 @@ function schImpWhy(x){
           + '（ID列は、いまある行を見分けるための番号です。'
           + '行をコピーすると番号まで一緒にコピーされます）</p>'
         : '<p>直したら「この行を直す」を押してください。'
-          + 'この時点では、台帳にはまだ書き込まれません。</p>');
+          + 'この時点では、制作スケジュールにはまだ書き込まれません。</p>');
   box.hidden = false;
 }
 
