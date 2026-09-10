@@ -462,7 +462,29 @@ const KIT = {
   },
 };
 
+/**
+ * 時刻を、機械が読める形でも持つ。
+ *
+ * ■ なぜ足したか（2026-09-09）
+ *   時刻はこれまで**文章の中にだけ**あった（FACTS の note、OUTLINE の表）。
+ *   搬入の時間割を描くには「9:30 から 10:30 まで」を数として要るが、
+ *   文章から拾うのは壊れやすいし、画面側に直書きすると**7か所目**ができる。
+ *
+ * ■ ここは「写し」ではなく「同じもの」でなければならない
+ *   `test/times.test.js` が、この値と FACTS・OUTLINE・gas/Mail.gs・
+ *   src/schema.js の全部が一致することを見張っている。
+ *   **ここだけ直しても、検査が落ちる。**
+ */
+const TIMES = {
+  open:      '11:00',
+  close:     '17:30',
+  loadInFrom:  '9:30',
+  loadInTo:   '10:30',
+  loadOutFrom:'18:00',
+  loadOutTo:  '19:00',
+};
+
 const CONTENT = { EVENT, NOTICE, DEADLINE, FACTS, OUTLINE, CONTACT, SITE, BRAND,
-                  PRICES, RENTAL_QTY, RENTALS, PDF, KIT };
+                  PRICES, RENTAL_QTY, RENTALS, PDF, KIT, TIMES };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = CONTENT;

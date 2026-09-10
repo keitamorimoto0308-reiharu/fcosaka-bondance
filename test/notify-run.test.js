@@ -287,7 +287,7 @@ describe('入力の型を、実際に送って確かめる', () => {
 
   const OK = { siteManagerName: '田中', siteManagerPhone: '090-1111-2222',
     vehicleCount: 1, vehicleType: '軽自動車・軽トラック', vehicleHeight: '2.1m以下',
-    parkingRequest: '希望する', loadInSlot1: '8:30〜9:00', staffCount: 2,
+    parkingRequest: '希望する', loadInSlot1: '9:30〜9:45', staffCount: 2,
     // 数を集める項目（2026-09-03 追加）。必須なので、通る例には必ず入れる
     passCount: 2, parkingPassCount: 1, ticketCount: 0,
     rainPolicy: '雨天でも出店する', boothTypes: [] };

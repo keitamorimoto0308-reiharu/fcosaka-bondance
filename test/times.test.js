@@ -103,14 +103,75 @@ describe('時刻が、すべての置き場所で揃っているか', () => {
     });
   });
 
+  test('content.js の TIMES が、文章側と同じ値になっている', () => {
+    /*
+     * 2026-09-09 に足した機械可読の値（搬入の時間割を描くのに要る）。
+     * **写しが1つ増えたということ**なので、必ずここで縛る。
+     * これが無いと、TIMES だけ直して文章が古いまま、が起こる。
+     */
+    assert.ok(C.TIMES, 'content.js が TIMES を持っていません');
+    assert.strictEqual(C.TIMES.loadInFrom,  TIMES.inFrom,  'TIMES の搬入開始が違います');
+    assert.strictEqual(C.TIMES.loadInTo,    TIMES.inTo,    'TIMES の搬入終了が違います');
+    assert.strictEqual(C.TIMES.loadOutFrom, TIMES.outFrom, 'TIMES の搬出開始が違います');
+    assert.strictEqual(C.TIMES.loadOutTo,   TIMES.outTo,   'TIMES の搬出終了が違います');
+    assert.strictEqual(C.TIMES.open,        TIMES.open,    'TIMES の営業開始が違います');
+    assert.strictEqual(C.TIMES.close,       TIMES.close,   'TIMES の営業終了が違います');
+  });
+
   test('古い時刻が、どこにも残っていない', () => {
-    // 「新しい値がある」だけでは、古い値が別の行に残っていても通ってしまう
+    /*
+     * 「新しい値がある」だけでは、古い値が別の行に残っていても通ってしまう。
+     *
+     * ⚠ 2026-09-09：**この検査には6か所目が抜けていた。**
+     *   `src/schema.js` を見ていなかったため、出店確定情報フォームの
+     *   - 「搬入は8:30〜10:30です。」（説明文）
+     *   - 搬入希望時間帯の選択肢が 8:30〜 から始まる（**窓の外の時刻を選ばせていた**）
+     *   - 「17:30より前の撤収」（撤収は18:00〜19:00）
+     *   の3件が、1週間以上そのままになっていた。**出店者に直接届く文言。**
+     *
+     *   教訓：「n か所」と数えた地図は、必ず古くなる。
+     *   **項目を足す場所（schema.js）は、いちばん増えやすい。**
+     */
     const hay = [
       JSON.stringify(C.FACTS), JSON.stringify(C.OUTLINE),
       read('gas/Mail.gs'), read('gas/Notify.gs'),
+      read('src/schema.js'),
     ].join('\n');
-    ['8:30〜10:30', '17:30〜19:30', '16:30〜'].forEach(old => {
+    ['8:30〜10:30', '17:30〜19:30', '16:30〜',
+     '8:30〜9:00', '9:00〜9:30', '17:30より前'].forEach(old => {
       assert.ok(!hay.includes(old), '古い時刻が残っています：' + old);
     });
+  });
+
+  test('搬入希望の選択肢が、搬入の窓の中に収まっている', () => {
+    /*
+     * 選択肢そのものを見る。「古い値が無い」だけでは、
+     * 次に誰かが窓の外の時刻を**新しく足した**ときに素通りする。
+     */
+    const S = require('../src/schema.js');
+    const fields = (S.FIELDS || []).filter(f => /^loadInSlot/.test(f.key));
+    assert.ok(fields.length >= 1, '搬入希望の項目が見つかりません');
+
+    const toMin = t => {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
+      return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+    };
+    const from = toMin(TIMES.inFrom);
+    const to = toMin(TIMES.inTo);
+
+    for (const f of fields) {
+      for (const opt of (f.options || [])) {
+        if (opt === '指定なし') continue;
+        const parts = opt.split('〜');
+        assert.strictEqual(parts.length, 2, f.label + ' の選択肢の形が違います：' + opt);
+        const a = toMin(parts[0]);
+        const b = toMin(parts[1]);
+        assert.ok(a !== null && b !== null, f.label + ' の時刻が読めません：' + opt);
+        assert.ok(a >= from && b <= to,
+          f.label + ' の「' + opt + '」が、搬入の窓（'
+          + TIMES.inFrom + '〜' + TIMES.inTo + '）の外です');
+        assert.ok(a < b, f.label + ' の「' + opt + '」が、逆順です');
+      }
+    }
   });
 });

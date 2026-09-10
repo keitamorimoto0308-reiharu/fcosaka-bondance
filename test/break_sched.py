@@ -424,11 +424,11 @@ CASES = [
     ('台帳に無いIDを、黙って追加するようにする', [
         (I, "      if (!ledger[id]) {\n"
             "        // **黙って復活させない**\n"
-            "        problems.push({ field: 'ID', why: 'この行は台帳から削除されています。'\n"
+            "        problems.push({ field: 'ID', why: 'この行は制作スケジュールから削除されています。'\n"
             "          + '新しく足すなら、ID列を空にしてください。' });\n"
             "      }",
             "      if (false) {\n"
-            "        problems.push({ field: 'ID', why: 'この行は台帳から削除されています。' });\n"
+            "        problems.push({ field: 'ID', why: 'この行は制作スケジュールから削除されています。' });\n"
             "      }"),
         # 素朴な実装は「台帳に無ければ新規」と書く。例外にはしない
         (I, "    } else {\n"

@@ -391,12 +391,12 @@ function schedImportPlan_(rows, people, opts) {
       seen[id] = true;
       if (dupInLedger[id]) {
         // 台帳のほうが壊れている。Excel を直しても直らないので、そう書く
-        problems.push({ field: 'ID', why: '台帳に同じIDの行が2つあります。'
+        problems.push({ field: 'ID', why: '制作スケジュールに同じIDの行が2つあります。'
           + '先にスプレッドシートで片方のID列を空にしてください。' });
       }
       if (!ledger[id]) {
         // **黙って復活させない**
-        problems.push({ field: 'ID', why: 'この行は台帳から削除されています。'
+        problems.push({ field: 'ID', why: 'この行は制作スケジュールから削除されています。'
           + '新しく足すなら、ID列を空にしてください。' });
       }
     }

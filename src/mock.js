@@ -180,7 +180,7 @@ const DB = {
       backupPhone: '06-6000-0000',
       vehicleCount: 1, vehicleType: '軽トラック', vehicleHeight: '2.0m',
       vehiclePlate: '1234', parkingRequest: '希望する',
-      loadInSlot1: '9:30〜10:00', loadInSlot2: '10:00〜10:30',
+      loadInSlot1: '9:30〜9:45', loadInSlot2: '10:00〜10:15',
       staffCount: 4, rainPolicy: '実施する', notes: '発電機は持参します。',
       passCount: 4, parkingPassCount: 1, ticketCount: 6,
     } },
@@ -1486,6 +1486,47 @@ function handle(payload) {
       return { ok: true, done, failed,
         message: done.length + '件を「' + st + '」に変えました。'
           + (failed.length ? '（' + failed.length + '件が変えられませんでした）' : '') };
+    }
+
+    /*
+     * まとめて搬入予定時刻を入れる。
+     *
+     * **模擬に規則の写しを増やさない。** adminBulkStatus と同じく adminUpdate を呼び回す。
+     * 本番（gas/Admin.gs の adminBulkLoadIn_）と**同じ順序**にすること：
+     *   ① 重複を落とす → ② 書式を全部見る → ③ 1件目に触る
+     * ここを緩めると「模擬で通るのに本番で落ちる」になる。
+     */
+    case 'adminBulkLoadIn': {
+      const seen = Object.create(null);
+      const list = [];
+      (Array.isArray(payload.assign) ? payload.assign : []).forEach(r => {
+        const id = String((r && r.id) == null ? '' : r.id).trim();
+        const at = String((r && r.at) == null ? '' : r.at).trim();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        list.push({ id, at });
+      });
+      if (!list.length) {
+        return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
+      }
+      const bad = list.filter(x => x.at !== '' && !/^([0-9]|[01][0-9]|2[0-3]):[0-5][0-9]$/.test(x.at))
+                      .map(x => x.id + '（' + x.at + '）');
+      if (bad.length) {
+        return { ok: false, error: 'bad_value',
+          message: '時刻の書き方が「9:30」の形になっていません：' + bad.slice(0, 5).join('、')
+                 + (bad.length > 5 ? ' ほか' + (bad.length - 5) + '件' : '') };
+      }
+      const done = [], failed = [];
+      list.forEach(x => {
+        const r = handle(Object.assign({}, payload, {
+          action: 'adminUpdate', id: x.id, patch: { '搬入予定時刻': x.at },
+        }));
+        if (r && r.ok) done.push(x.id);
+        else failed.push({ id: x.id, reason: (r && (r.message || r.error)) || '入れられませんでした' });
+      });
+      return { ok: true, done, failed,
+        message: done.length + '件に搬入予定時刻を入れました。'
+          + (failed.length ? '（' + failed.length + '件が入れられませんでした）' : '') };
     }
 
     case 'adminUpdate': {

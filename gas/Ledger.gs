@@ -323,7 +323,7 @@ function rawJson_(values) {
   }).sort(function (a, b) { return String(copy[b]).length - String(copy[a]).length; });
 
   for (var i = 0; i < byLength.length; i++) {
-    copy[byLength[i]] = '（長すぎるため省略。変更履歴と台帳の各列をご覧ください）';
+    copy[byLength[i]] = '（長すぎるため省略。変更履歴と応募一覧の各欄をご覧ください）';
     omitted.push(byLength[i]);
     out = JSON.stringify(copy);
     if (out.length <= RAW_JSON_MAX) break;

@@ -72,7 +72,7 @@ function ledgerHeaders_(sh) {
 
 function indexOf_(headers, name) {
   var i = headers.indexOf(name);
-  if (i < 0) throw new Error('台帳に列がありません: ' + name);
+  if (i < 0) throw new Error('応募一覧に「' + name + '」の欄がありません');
   return i;
 }
 
@@ -701,6 +701,95 @@ function adminBulkStatus_(auth, payload) {
     failed: failed,
     message: done.length + '件を「' + status + '」に変えました。'
       + (failed.length ? '（' + failed.length + '件が変えられませんでした）' : ''),
+  };
+}
+
+/**
+ * 選んだ相手の搬入予定時刻を、まとめて入れる（2026-09-09）。
+ *
+ * ■ なぜ要るか
+ *   搬入は **9:30〜10:30 の1時間**に最大50社。1社ずつ詳細を開いて打つと
+ *   50回くり返しても**全体の混み具合が一度も見えない**。
+ *   9:30 に30社が重なっていても、画面のどこにも出ない。
+ *
+ * ■ 規則を写さない（adminBulkStatus_ と同じ）
+ *   変えてよい項目と変更履歴は `adminUpdate_` が持っている。**そのまま通す。**
+ *
+ * ■ 守りは軽くする（adminBulkStatus_ と同じ理由）
+ *   搬入時刻は変更履歴に前の値ごと残り、**戻せる**。メールと違って
+ *   取り消せない操作ではない。重い守りは人に迂回路（シート直編集）を探させる。
+ *
+ * ■ ただし**書式だけ**は確かめる
+ *   1件ずつのときは自由入力でよい（人が1つ打つだけ）。
+ *   まとめて入れるときは**間違いが50行に増幅される**ので、ここは非対称でよい。
+ *   窓（9:30〜10:30）の外は**止めない**——当日の事情で早く入れる社は現実にある。
+ *   混雑と窓外は画面が警告する。**報せるが、止めない。**
+ *
+ * ■ 割り当てそのものは画面が決める
+ *   ここへは「誰を何時にするか」の組が届く。**画面で見たものがそのまま入る。**
+ *   サーバーで配り直すと、人が見た一覧と実際に入る値がずれる。
+ */
+function adminBulkLoadIn_(auth, payload) {
+  var rows = (payload && Array.isArray(payload.assign)) ? payload.assign : [];
+
+  // 重複を落とす。**素の {} にしない**（constructor というIDで「もう見た」になる）
+  var seen = Object.create(null);
+  var list = [];
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i] || {};
+    var id = String(r.id == null ? '' : r.id).trim();
+    var at = String(r.at == null ? '' : r.at).trim();
+    if (!id || seen[id]) continue;
+    seen[id] = true;
+    list.push({ id: id, at: at });
+  }
+  // ※ 「!list.length」と書かない。adminBulkStatus_ に同じ行があり、
+  //   壊し検査の目印が**別の関数に当たってしまう**（引き継ぎ書の失敗パターン4）。
+  //   2026-09-09 に実際に踏んだ：目印が先に見つかったほうを壊し、
+  //   まったく別の守りを検査していた。
+  if (list.length === 0) {
+    return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
+  }
+
+  /*
+   * 書式は、1件目に触る前に全部見る。
+   * 途中で気づく形だと、前半だけ入って後半が入らない状態が残り、
+   * 何が起きたのか誰にも分からなくなる（adminBulkStatus_ と同じ考え方）。
+   */
+  var bad = [];
+  for (var j = 0; j < list.length; j++) {
+    var t = list[j].at;
+    if (t === '') continue;                       // 空＝時刻を消す。これは許す
+    if (!/^([0-9]|[01][0-9]|2[0-3]):[0-5][0-9]$/.test(t)) bad.push(list[j].id + '（' + t + '）');
+  }
+  if (bad.length) {
+    return { ok: false, error: 'bad_value',
+      message: '時刻の書き方が「9:30」の形になっていません：' + bad.slice(0, 5).join('、')
+             + (bad.length > 5 ? ' ほか' + (bad.length - 5) + '件' : '') };
+  }
+
+  var done = [], failed = [];
+  for (var k = 0; k < list.length; k++) {
+    var patch = {};
+    patch[COL.inAt] = list[k].at;
+    var res;
+    try {
+      res = adminUpdate_(auth, { id: list[k].id, patch: patch, reason: '' });
+    } catch (e) {
+      logError_('adminBulkLoadIn_:' + list[k].id, e);
+      res = { ok: false, message: String((e && e.message) || e).slice(0, 120) };
+    }
+    if (res && res.ok) done.push(list[k].id);
+    else failed.push({ id: list[k].id,
+      reason: (res && (res.message || res.error)) || '入れられませんでした' });
+  }
+
+  return {
+    ok: true,
+    done: done,
+    failed: failed,
+    message: done.length + '件に搬入予定時刻を入れました。'
+      + (failed.length ? '（' + failed.length + '件が入れられませんでした）' : ''),
   };
 }
 
@@ -1373,7 +1462,7 @@ var SETTING_KEYS_ = [
     help: 'ONにすると、出店者一覧に「テストデータの一括削除」が現れます。'
         + '応募・確定情報・変更履歴・区画の割当・提出物をまとめて**完全に消します**。'
         + '**元に戻せません。公開前の掃除にだけ使ってください。**'
-        + '消す直前に台帳の控えをDriveに作ります。実行すると自動でOFFに戻ります。' },
+        + '消す直前に、いまの記録をまるごと控えとしてDriveに作ります。実行すると自動でOFFに戻ります。' },
   { key: '素材の提出期限',       label: '素材（ロゴ・写真）の提出期限',
     type: 'date', allowBlank: true,
     help: '素材アップロード画面に「◯月◯日まで」と出る期限です。'
@@ -1856,6 +1945,7 @@ function adminDispatch_(payload) {
     // まとめてステータスを変える。1件ずつと同じ権限（**adminOnly には入れない**）。
     // 一般もステータスは変えられる（引き継ぎ書§9の権限の表）
     case 'adminBulkStatus': return adminBulkStatus_(auth, payload);
+    case 'adminBulkLoadIn': return adminBulkLoadIn_(auth, payload);
     case 'adminSpaces':   return adminSpaces_(auth);
     case 'adminAssign':   return adminAssign_(auth, payload);
     case 'adminUnassign': return adminUnassign_(auth, payload);

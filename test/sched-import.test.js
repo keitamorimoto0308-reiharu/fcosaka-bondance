@@ -617,8 +617,8 @@ describe('検証役の指摘（2026-09-07）', () => {
     assert.strictEqual(p.items[0].action, 'bad',
                        '同じIDが2つあるのに、そのまま更新しようとしています');
     const why = p.items[0].problems.map(x => x.why).join(' / ');
-    assert.match(why, /台帳に同じIDの行が2つあります/,
-                 '理由が「台帳のほうを直して」になっていません：' + why);
+    assert.match(why, /制作スケジュールに同じIDの行が2つあります/,
+                 '理由が「制作スケジュールのほうを直して」になっていません：' + why);
   });
 
   test('同じIDが2つあるまま取り込んでも、台帳は書き換わらない', () => {

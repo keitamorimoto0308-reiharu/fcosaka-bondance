@@ -376,7 +376,7 @@ const FIELDS = [
   {
     key: 'vehicleCount', section: 'operation', stage: 'confirm', type: 'number', required: true,
     label: '搬入車両の台数', sheet: '搬入車両台数', min: 0, max: 20, default: 0,
-    help: '搬入は8:30〜10:30です。',
+    help: '搬入は9:30〜10:30です。',
   },
   {
     key: 'vehicleType', section: 'operation', stage: 'confirm', type: 'radio', required: true,
@@ -401,20 +401,20 @@ const FIELDS = [
     options: ['希望する', '希望しない'],
   },
   {
-    // 50社を2時間でさばくには、締切後の個別調整では回らない。
+    // 50社を1時間（9:30〜10:30）でさばくには、締切後の個別調整では回らない。
     // 目的は割振りそのものより「偏りが事前に見えること」。
     key: 'loadInSlot1', section: 'operation', stage: 'confirm', type: 'radio', required: true,
     label: '搬入希望時間帯（第1希望）', sheet: '搬入希望1',
-    options: ['8:30〜9:00', '9:00〜9:30', '9:30〜10:00', '10:00〜10:30', '指定なし'],
+    options: ['9:30〜9:45', '9:45〜10:00', '10:00〜10:15', '10:15〜10:30', '指定なし'],
   },
   {
     key: 'loadInSlot2', section: 'operation', stage: 'confirm', type: 'radio', required: false,
     label: '搬入希望時間帯（第2希望）', sheet: '搬入希望2',
-    options: ['8:30〜9:00', '9:00〜9:30', '9:30〜10:00', '10:00〜10:30', '指定なし'],
+    options: ['9:30〜9:45', '9:45〜10:00', '10:00〜10:15', '10:15〜10:30', '指定なし'],
   },
   {
     key: 'loadOutEarly', section: 'operation', stage: 'confirm', type: 'radio', required: false,
-    label: '17:30より前の撤収', sheet: '早期撤収希望',
+    label: '18:00より前の撤収', sheet: '早期撤収希望',
     options: ['希望しない', '希望する（要相談）'],
   },
   {

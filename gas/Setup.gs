@@ -37,7 +37,7 @@ function setup() {
    * 成功したのか分からなくなった（実際は成功していた）。
    * 「黙って正常」を作らない、と自分で書いておきながら破っていた箇所。
    */
-  var msg = '台帳の構築が完了しました：'
+  var msg = '記録用シートの用意が完了しました：'
        + [SHEET.LEDGER, SHEET.CONFIRM, SHEET.HISTORY, SHEET.SPACES, SHEET.CONFIG,
           SHEET.PEOPLE, SHEET.RENTAL, SHEET.SCHED, SHEET.TIMETABLE,
           SHEET.MAILTPL, SHEET.BROADCAST].join(' / ');

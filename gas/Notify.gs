@@ -88,7 +88,7 @@ function ensureAcceptToken_(sheet, headers, rowNo, current) {
   if (token) return token;
 
   var col = headers.indexOf('素材トークン');
-  if (col < 0) throw new Error('台帳に「素材トークン」列がありません。setup() を実行してください。');
+  if (col < 0) throw new Error('応募一覧に「素材トークン」の欄がありません。setup() を実行してください。');
 
   token = Utilities.getUuid().replace(/-/g, '');
   sheet.getRange(rowNo, col + 1).setValue(token);
@@ -172,7 +172,7 @@ function pendingNotifyRows_(L, kind) {
   // 歯止めが黙って消えるくらいなら、止まって人に知らせる（2026-09-04 の点検で指摘）
   var otherCol = (K === NOTIFY_KINDS.accept ? NOTIFY_KINDS.reject : NOTIFY_KINDS.accept).sentCol;
   if (H.indexOf(otherCol) < 0) {
-    throw new Error('台帳に「' + otherCol + '」列がありません。setup() を実行してください。');
+    throw new Error('応募一覧に「' + otherCol + '」の欄がありません。setup() を実行してください。');
   }
   var rows = liveRows_(H, L.rows);
   var out = [];
@@ -575,7 +575,7 @@ function adminNotifySend_(auth, payload) {
 
     batch.forEach(function (r) {
       var rowNo = rowNoByReceiptId_(L, r.id);
-      if (rowNo < 0) { failed.push({ id: r.id, reason: '台帳に行が見つかりません' }); return; }
+      if (rowNo < 0) { failed.push({ id: r.id, reason: '応募一覧に行が見つかりません' }); return; }
 
       try {
         var mail;

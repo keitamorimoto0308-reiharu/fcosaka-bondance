@@ -38,9 +38,12 @@ function load(opts) {
   opts = opts || {};
   WRITES = []; HISTORY = [];
 
-  const headers = ['受付ID', '企業名', '担当者電話', '担当メモ', 'ステータス', '生データ(JSON)'];
+  // 列は**本物と同じだけ持たせる**。代役のほうが狭いと、
+  // 本番で通る道を一度も通らないまま緑になる（引き継ぎ書の学び）
+  const headers = ['受付ID', '企業名', '担当者電話', '担当メモ', 'ステータス',
+                   '搬入予定時刻', '生データ(JSON)'];
   SHEET_ROWS = [['SB-0007', RAW.companyName, RAW.contactPhone,
-                 opts.memo || '', '未確認', JSON.stringify(RAW)]];
+                 opts.memo || '', '未確認', opts.inAt || '', JSON.stringify(RAW)]];
 
   const box = vm.createContext({
     Array, Object, String, Number, JSON, RegExp, Math, Boolean, Date, isFinite,
@@ -58,6 +61,7 @@ function load(opts) {
     logError_: () => {},
     alertOperator_: () => {},
     COL: { id: '受付ID', memo: '担当メモ', status: 'ステータス',
+           inAt: '搬入予定時刻',
            dayStatus: '当日ステータス', raw: '生データ(JSON)' },
     applyFields: () => S.applyFields(),
     validate_: opts.validate || (() => []),
@@ -79,7 +83,10 @@ function load(opts) {
     safeCellText_: v => String(v == null ? '' : v),
     appendHistory: (...a) => { HISTORY.push(a); },
     STATUS_LIST_: () => ['未確認', '審査中', '採択', '不採択', '辞退', 'キャンセル', '重複（無効）'],
-    EDITABLE_: () => ['ステータス', '担当メモ', '当日ステータス'],
+    // 本物（gas/Admin.gs の EDITABLE_）と**同じ並び**にする。
+    // 代役のほうが狭いと、本番で通る道を一度も通らないまま緑になる（引き継ぎ書の学び）
+    EDITABLE_: () => ['ステータス', '担当メモ', '搬入予定時刻', '撤収予定時刻',
+                      '当日ステータス', '主形態'],
     console,
   });
   box.globalThis = box;
@@ -87,7 +94,7 @@ function load(opts) {
   const src = read('Admin.gs');
   for (const marker of ['function recordHistory_', 'function applicantEditable_', 'function adminApplicantFields_',
                         'function adminApplicantUpdate_', 'function adminUpdate_',
-                        'function adminBulkStatus_']) {
+                        'function adminBulkStatus_', 'function adminBulkLoadIn_']) {
     const start = src.indexOf(marker);
     assert.ok(start >= 0, 'gas/Admin.gs に ' + marker + ' がありません');
     const end = src.indexOf('\n}\n', start) + 3;
@@ -409,6 +416,121 @@ describe('まとめてステータスを変える', () => {
   test('見つからない相手は、変えた相手と分けて返す', () => {
     const A = load();
     const r = bulk(A, { ids: ['SB-0007', 'SB-9999'], status: '採択' });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.deepStrictEqual(r.done, ['SB-0007']);
+    assert.deepStrictEqual((r.failed || []).map(x => x.id), ['SB-9999']);
+  });
+});
+
+/**
+ * まとめて搬入予定時刻を入れる（2026-09-09）。
+ *
+ * ■ なぜ要るか
+ *   搬入は 9:30〜10:30 の**1時間**に最大50社。1社ずつ詳細を開いて打つと、
+ *   50回くり返しても**全体の混み具合が一度も見えない**。
+ *
+ * ■ 規則を写さない／守りは軽く（まとめてステータスと同じ）
+ *   搬入時刻は変更履歴に前の値ごと残り、**戻せる**。
+ *
+ * ■ ただし書式だけは非対称でよい
+ *   1件ずつは自由入力（人が1つ打つだけ）。まとめては**間違いが50行に増幅される**。
+ */
+describe('まとめて搬入予定時刻を入れる', () => {
+  const bulk = (A, payload) => plain(A.adminBulkLoadIn_(ME, payload));
+
+  test('選んだ相手に時刻が入り、変更履歴に残る', () => {
+    const A = load();
+    const r = bulk(A, { assign: [{ id: 'SB-0007', at: '9:30' }] });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.deepStrictEqual(r.done, ['SB-0007']);
+    /*
+     * **変更履歴を先に見る。**
+     * 書き込みを先に見ると、adminUpdate_ を通さず自前で書くように壊したときも
+     * 「搬入予定時刻を書いていません」で落ちてしまい、
+     * 「規則を写した」のか「列を間違えた」のか、壊し検査で見分けられない。
+     */
+    assert.ok(HISTORY.length >= 1, '変更履歴に残っていません');
+    const w = WRITES.filter(x => x.header === '搬入予定時刻').pop();
+    assert.ok(w, '搬入予定時刻を書いていません');
+    assert.strictEqual(w.value, '9:30');
+  });
+
+  /*
+   * **書式の検査は、1件目に触る前に済ませる。**
+   * 途中で気づく形だと、前半だけ入って後半が入らない状態が残る。
+   */
+  test('書式が違うものが混ざっていたら、1件も入れない', () => {
+    const A = load();
+    const r = bulk(A, { assign: [{ id: 'SB-0007', at: '9:30' },
+                                 { id: 'SB-0008', at: 'あさ' }] });
+    assert.strictEqual(r.ok, false,
+      '書式違いを先に断っていません：' + JSON.stringify(r));
+    assert.strictEqual(HISTORY.length, 0, '弾いたのに書いています');
+    assert.strictEqual(WRITES.filter(x => x.header === '搬入予定時刻').length, 0,
+      '1件でも書いています');
+  });
+
+  test('ありえない時刻（25:00・9:75）も断る', () => {
+    for (const bad of ['25:00', '9:75', '9:3', '930', ':30', '9:']) {
+      const A = load();
+      const r = bulk(A, { assign: [{ id: 'SB-0007', at: bad }] });
+      assert.strictEqual(r.ok, false, '「' + bad + '」を通しています：' + JSON.stringify(r));
+    }
+  });
+
+  /*
+   * 空は「時刻を消す」。入れ間違えたときに戻す道が無いと、
+   * 人はシートを直接いじりに行く（＝変更履歴に残らない）。
+   */
+  test('空を送ると、時刻を消せる', () => {
+    // すでに入っている状態から始める。
+    // 元から空だと adminUpdate_ は「変わらないので書かない」ので、検査にならない
+    const A = load({ inAt: '9:30' });
+    const r = bulk(A, { assign: [{ id: 'SB-0007', at: '' }] });
+    assert.strictEqual(r.ok, true, '空（時刻を消す）を断っています：' + JSON.stringify(r));
+    const w = WRITES.filter(x => x.header === '搬入予定時刻').pop();
+    assert.ok(w, '搬入予定時刻を書いていません');
+    assert.strictEqual(w.value, '');
+  });
+
+  /*
+   * 窓（9:30〜10:30）の外は**止めない**。
+   * 当日の事情で早く入れる社は現実にあり、止めると人は迂回路を探す。
+   * 混雑と窓外は画面が警告する——**報せるが、止めない**。
+   */
+  test('搬入の窓の外でも、止めない', () => {
+    const A = load();
+    const r = bulk(A, { assign: [{ id: 'SB-0007', at: '7:00' }] });
+    assert.strictEqual(r.ok, true,
+      '窓の外を断っています。ここは止めない約束です：' + JSON.stringify(r));
+  });
+
+  test('相手を1件も選んでいなければ、何もしない', () => {
+    const A = load();
+    const r = bulk(A, { assign: [] });
+    assert.strictEqual(r.ok, false, '相手が0件なのに通しています：' + JSON.stringify(r));
+    assert.strictEqual(HISTORY.length, 0);
+  });
+
+  /*
+   * 同じ相手が2回入っていると、2回書いて**変更履歴が二重に増える**。
+   * 画面では起きにくいが、通信を細工すれば起きる（守りはサーバー側だけ）。
+   */
+  test('同じ受付IDが2回入っていても、1回だけ入れる', () => {
+    const A = load();
+    const r = bulk(A, { assign: [{ id: 'SB-0007', at: '9:30' },
+                                 { id: 'SB-0007', at: '10:00' }] });
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.deepStrictEqual(r.done, ['SB-0007'],
+      '変更履歴が二重に増えています（同じ相手を2回入れています）：' + JSON.stringify(r.done));
+    assert.strictEqual(HISTORY.length, 1,
+      '変更履歴が二重に増えています：' + HISTORY.length);
+  });
+
+  test('見つからない相手は、入れた相手と分けて返す', () => {
+    const A = load();
+    const r = bulk(A, { assign: [{ id: 'SB-0007', at: '9:30' },
+                                 { id: 'SB-9999', at: '9:40' }] });
     assert.strictEqual(r.ok, true, JSON.stringify(r));
     assert.deepStrictEqual(r.done, ['SB-0007']);
     assert.deepStrictEqual((r.failed || []).map(x => x.id), ['SB-9999']);

@@ -36,6 +36,8 @@ const { TOKENS: T, icon } = require('./theme.js');
 const { linkifyDetail } = require('./linkify.js');
 // ②のずらし・共存・ロックの規則。**画面の中に書かない**（テストから呼べなくなる）
 const { rulesSource } = require('./timetable-rules.js');
+// 搬入の時間割の計算。**画面と検査が同じコードを呼ぶ**（写しを2つ持たない）
+const { loadinSource } = require('./loadin.js');
 
 const endpointPath = path.join(ROOT, 'src', 'endpoint.json');
 const ENDPOINT = fs.existsSync(endpointPath)
@@ -260,6 +262,29 @@ table.list td.wrapcell{white-space:normal;max-width:22em}
 .colopt{display:flex;align-items:center;gap:6px;font-size:12.5px;
   color:var(--ink);cursor:pointer;min-height:28px}
 .colbox #colReset{margin:0 14px 12px}
+/* 搬入の時間割。colbox と同じ見た目にそろえる（同じ「畳める箱」なので） */
+.loadinbox{margin:0 0 10px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.loadinbox>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:700;
+  list-style:none}
+.loadinbox>summary::-webkit-details-marker{display:none}
+.loadinbox>summary::before{content:'▸';margin-right:7px;color:var(--muted)}
+.loadinbox[open]>summary::before{content:'▾'}
+.loadinbox .cnum{margin-left:8px;font-weight:400;color:var(--muted)}
+.loadinbox>.pnote{margin:0;padding:10px 14px;border-top:1px solid var(--border)}
+.loadinbox #loadinRows{padding:4px 14px 10px}
+.lirow{display:flex;align-items:center;gap:10px;min-height:30px;padding:2px 6px;
+  border-radius:6px;cursor:pointer;font-size:12.5px}
+.lirow:hover{background:#f4f6f8}
+.lirow.on{background:#e8f1fb;box-shadow:inset 0 0 0 1px #9cc2ea}
+.lirow.out{cursor:default}
+.lirow.out:hover{background:transparent}
+.lit{flex:0 0 46px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.libarwrap{flex:1 1 auto;height:12px;background:#eef1f4;border-radius:6px;overflow:hidden}
+.libar{display:block;height:100%;background:#7ba7d4;border-radius:6px}
+.lirow.over .libar{background:#d98a5a}
+.lirow.undec .libar{background:#c9ced4}
+.lin{flex:0 0 92px;color:var(--ink);font-variant-numeric:tabular-nums}
+.liwarn{flex:0 0 auto;color:#a4500f;font-weight:700}
 /* 送る種類の切り替え。採択と不採択を取り違えないよう、はっきり分ける */
 .mailkind{display:flex;gap:18px;margin:0 0 12px}
 .mailkind label{display:flex;align-items:center;gap:7px;font-size:13.5px;
@@ -1557,6 +1582,28 @@ function filtered(){
     if (dy && (x['当日ステータス'] || '未着') !== dy) return false;
     if (mine && x['FC大阪担当社員'] !== S.person) return false;
     if (dup && !String(x['重複フラグ']||'').trim()) return false;
+    /*
+     * 搬入の時間割で押した枠。**検索欄は使わない。**
+     * 検索欄に時刻を入れると、搬入希望時刻がたまたま一致した社まで混ざり、
+     * 「その時間に来る社」を見ているつもりで別のものを見ることになる。
+     */
+    if (S.loadinAt != null){
+      /*
+       * **時間割が数えていない相手は、絞り込みでも出さない。**
+       * 時間割は来ない相手（不採択・辞退・キャンセル・重複）を数えていないので、
+       * ここで数えると「未定 0社」と出ている枠を押して1社出る、という形になる。
+       * 引き継ぎ書の一斉メールの事故と同じ——**報せる側と、実際にやる側がずれる。**
+       * （2026-09-09、画面で押して見つけた。検査は両方とも緑だった）
+       */
+      if (LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) >= 0) return false;
+      var lt = hhmmToMin(x['搬入予定時刻']);
+      if (S.loadinAt === ''){
+        if (lt !== null) return false;          // 「未定」の枠
+      } else {
+        var la = hhmmToMin(S.loadinAt);
+        if (lt === null || lt < la || lt >= la + LOADIN.step) return false;
+      }
+    }
     if (q){
       var hay = Object.keys(x).map(function(k){ return x[k]; }).join(' ').toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -1753,7 +1800,7 @@ function purgeCheck(){
     }).join('') + '</table></div>';
     $('#purgeWarn').textContent = 'この ' + items.length + ' 件を完全に消します（元に戻せません）。'
       + '出店確定情報・変更履歴・区画の割当・提出物のフォルダも一緒に消えます。'
-      + '消す直前に、台帳を丸ごと複製した控えをDriveに作ります。'
+      + '消す直前に、いまの記録をまるごと複製した控えをDriveに作ります。'
       + (r.ticketMin ? '（確かめてから' + r.ticketMin + '分を過ぎると、やり直しになります）' : '')
       + (r.tooMany ? '（一度に消せるのは ' + r.max + ' 件までです）' : '');
     $('#purgeCount').value = '';
@@ -1824,6 +1871,8 @@ function renderList(){
   if (!SHOW.length) loadShow();
   var rows = filtered();
   $('#count').textContent = rows.length + ' 件 / 全 ' + S.list.rows.length + ' 件';
+  // 時間割は**絞り込みに関係なく全件**を数える（絞った画面で「空いている」と読ませない）
+  renderLoadIn();
   var cols = SHOW.filter(function(c){ return S.list.columns.indexOf(c) >= 0; });
   $('#colCount').textContent = cols.length + ' / ' + S.list.columns.length + ' 列';
   /*
@@ -1993,6 +2042,195 @@ function renderPickBar(){
   // 文面を書き上げてから「40社までです」と言われるのでは遅い
   var over = $('#pickOver');
   if (over) over.hidden = n <= 40;
+}
+
+/* ─────────────────────────── 搬入の時間割（2026-09-09）
+ *
+ * ■ なぜ要るか
+ *   搬入は ${C.TIMES.loadInFrom}〜${C.TIMES.loadInTo} の**1時間**に最大50社。
+ *   1社ずつ詳細を開いて打つと、50回くり返しても**全体の混み具合が見えない**。
+ *
+ * ■ 数えるのは「絞り込み後」ではなく**全件**
+ *   絞り込んだ画面で「空いている」と読めてしまうのが、いちばん危ない形。
+ *
+ * ■ 時刻は src/content.js が正。ここに書き写さない
+ *   （test/times.test.js が全部の置き場所の一致を見張っている）
+ */
+var LOADIN = {
+  from: ${JSON.stringify(C.TIMES.loadInFrom)},
+  to:   ${JSON.stringify(C.TIMES.loadInTo)},
+  step: 10,   // きざみ（分）
+  cap:  8,    // 1枠に入れてよい車両の台数
+};
+
+/* 来ない相手は数えない。未確認・審査中は「まだ分からない」ので数に入れる */
+var LOADIN_SKIP = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+
+/*
+ * 下の塊は src/loadin.js から書き出したもの。
+ * **画面と検査が、同じコードを呼ぶ**（写しを2つ持つと必ずズレる）。
+ * 中身の検査は test/loadin.test.js。
+ */
+${loadinSource()}
+
+/* 画面から呼ぶときの、短い名前 */
+function hhmmToMin(t){ return loadinToMin(t); }
+function minToHhmm(n){ return loadinToHhmm(n); }
+function loadinCars(x){ return loadinCarsOf(x); }
+
+function loadinTargets(){
+  if (!S.list) return [];
+  return S.list.rows.filter(function(x){
+    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
+  });
+}
+
+function renderLoadIn(){
+  var box = $('#loadinRows');
+  if (!box) return;
+  var rows = loadinTargets();
+  var from = hhmmToMin(LOADIN.from), to = hhmmToMin(LOADIN.to);
+
+  // 数え方は src/loadin.js が持つ（検査は test/loadin.test.js）
+  var B = loadinBuckets(rows, from, to, LOADIN.step, LOADIN.cap);
+  var slots = B.slots, undecided = B.undecided, outside = B.outside;
+
+  var maxCars = 1;
+  slots.forEach(function(s){ if (s.cars > maxCars) maxCars = s.cars; });
+
+  var html = slots.map(function(s){
+    var over = s.over;
+    var w = Math.round((s.cars / maxCars) * 100);
+    var mine = (S.loadinAt === minToHhmm(s.at));
+    return '<div class="lirow' + (over ? ' over' : '') + (mine ? ' on' : '')
+      + '" data-at="' + esc(minToHhmm(s.at)) + '">'
+      + '<span class="lit">' + esc(minToHhmm(s.at)) + '</span>'
+      + '<span class="libarwrap"><span class="libar" style="width:' + w + '%"></span></span>'
+      + '<span class="lin">' + s.n + '社 ' + s.cars + '台</span>'
+      + (over ? '<span class="liwarn">多い</span>' : '')
+      + '</div>';
+  }).join('');
+
+  if (outside.n){
+    html += '<div class="lirow out"><span class="lit">窓の外</span>'
+      + '<span class="libarwrap"></span>'
+      + '<span class="lin">' + outside.n + '社 ' + outside.cars + '台</span>'
+      + '<span class="liwarn">' + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + ' の外です</span></div>';
+  }
+  // 「未定」は必ず一番下。ここが減っていくのが、この作業の進み具合そのもの
+  html += '<div class="lirow undec' + (S.loadinAt === '' ? ' on' : '') + '" data-at=""><span class="lit">未定</span>'
+    + '<span class="libarwrap"><span class="libar"></span></span>'
+    + '<span class="lin">' + undecided.n + '社</span></div>';
+
+  box.innerHTML = html;
+
+  /*
+   * **枠ごとの混雑だけ見せると、全体が無理でも気づけない。**
+   * のべ何台まで入るかと、いま何台あるかを、先に1行で出す。
+   */
+  var cap = slots.length * LOADIN.cap;
+  var have = 0;
+  slots.forEach(function(s){ have += s.cars; });
+  have += undecided.cars + outside.cars;
+  var sum = $('#loadinSum');
+  if (sum){
+    sum.innerHTML = '出店予定 <b>' + rows.length + '社</b>（およそ <b>' + have + '台</b>）。'
+      + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + ' は '
+      + slots.length + '枠 × ' + LOADIN.cap + '台 ＝ <b>のべ' + cap + '台</b>まで。'
+      + (have > cap
+          ? ' <b class="liwarn">全体で入りきりません。</b>搬入の時間を延ばすか、'
+            + '前日搬入をご相談ください。'
+          : '');
+  }
+  var num = $('#loadinNum');
+  if (num) num.textContent = undecided.n ? '未定 ' + undecided.n + ' 社' : 'すべて決まりました';
+}
+
+/**
+ * 選んだ相手に、搬入予定時刻をまとめて入れる。
+ *
+ * ■ 配る順は**区画番号の順**
+ *   搬入は会場の入口から順に埋めるのが現実の動き。受付ID順に配ると、
+ *   隣どうしの区画がばらばらの時間に来て、車両がすれ違う。
+ *
+ * ■ 押す前に、**誰が何時になるか**を必ず見せる
+ *   まとめて変えるものは、見えないまま入るのがいちばん怖い。
+ *
+ * ■ 既に入っている時刻は、既定では**上書きしない**
+ *   個別に調整した結果を、まとめ操作が黙って潰さないため。
+ */
+function bulkLoadIn(){
+  var ids = bcPickIds();
+  if (!ids.length) return;
+  var NL = String.fromCharCode(10);
+
+  var start = prompt('搬入予定時刻を、まとめて入れます。' + NL
+    + '始める時刻をご記入ください（例：' + LOADIN.from + '）。' + NL
+    + LOADIN.step + '分ごとに、1枠 ' + LOADIN.cap + '台まで詰めていきます。',
+    LOADIN.from);
+  if (start === null) return;
+  var from = hhmmToMin(start);
+  if (from === null){
+    toast('時刻は「9:30」の形でご記入ください', true);
+    return;
+  }
+
+  var byId = {};
+  (S.list ? S.list.rows : []).forEach(function(x){ byId[x['受付ID']] = x; });
+
+  var picked = ids.map(function(id){ return byId[id]; })
+                  .filter(function(x){ return !!x; });
+
+  var already = picked.filter(function(x){ return hhmmToMin(x['搬入予定時刻']) !== null; });
+  var overwrite = false;
+  if (already.length){
+    overwrite = confirm(already.length + '社には、すでに搬入予定時刻が入っています。' + NL
+      + '「OK」を押すと**上書き**します。' + NL
+      + '「キャンセル」を押すと、その ' + already.length + '社は**そのまま**にして、'
+      + '残りだけ入れます。');
+  }
+  var todo = overwrite ? picked
+    : picked.filter(function(x){ return hhmmToMin(x['搬入予定時刻']) === null; });
+  if (!todo.length){
+    toast('入れる相手がいません（全員すでに時刻が入っています）', true);
+    return;
+  }
+
+  // 区画の順に並べて、枠に詰める。中身は src/loadin.js
+  // （端の場合が多いので、形を見る検査ではなく test/loadin.test.js で見ている）
+  var assign = loadinPlan(todo, from, LOADIN.step, LOADIN.cap);
+
+  var last = assign.length ? assign[assign.length - 1].at : '';
+  var lines = assign.slice(0, 12).map(function(a){
+    return '　' + a.at + '　' + a.name;
+  }).join(NL);
+  var more = assign.length > 12 ? NL + '　…ほか ' + (assign.length - 12) + '社' : '';
+
+  if (!confirm(assign.length + '社に、搬入予定時刻を入れます。' + NL
+      + '最後の社は ' + last + ' です。' + NL + NL
+      + lines + more + NL + NL
+      + '変更履歴に前の値ごと残るので、あとから戻せます。' + NL + NL
+      + 'よろしいですか？')) return;
+
+  var btn = $('#pickLoadIn');
+  if (btn) btn.disabled = true;
+  api('adminBulkLoadIn', {
+    assign: assign.map(function(a){ return { id: a.id, at: a.at }; }),
+  }).then(function(r){
+    if (btn) btn.disabled = false;
+    if (!r || !r.ok){ toast((r && r.message) || '入れられませんでした', true); return; }
+    toast(r.message || '入れました');
+    if ((r.failed || []).length){
+      toast(r.failed.length + '社は入れられませんでした：'
+        + r.failed.map(function(f){ return f.id; }).join('、'), true);
+    }
+    // 入れたあとは選択を捨てる。**続けて押せる形にしない**
+    bcPickClear();
+    loadList();
+  }, function(e){
+    if (btn) btn.disabled = false;
+    netFail(e, '搬入予定時刻を入れられませんでした');
+  });
 }
 
 function jumpToList(spec){
@@ -3182,9 +3420,9 @@ function loadTemplate(keepMsg){
     // 「はじめの文面のまま」と出すと、保存した文面が消えたように見えるうえ、
     // 実際には既定の文面が送られる（2026-09-04 の点検で指摘）
     if (r.headBroken){
-      $('#tplState').textContent = '（台帳のシートが壊れています）';
+      $('#tplState').textContent = '（メール文面のシートが壊れています）';
       $('#tplErr').hidden = false;
-      $('#tplErr').innerHTML = '<b>台帳の「メール文面」シートを直してください。</b><ul><li>'
+      $('#tplErr').innerHTML = '<b>「メール文面」を直してください。</b><ul><li>'
         + mdBold(r.headBrokenMessage || '') + '</li></ul>';
     } else {
       $('#tplState').textContent = r.isDefault
@@ -3485,7 +3723,7 @@ function bcRenderTargets(r){
       + '<br>宛先は「出店者一覧」で行を開き、「応募内容を修正する」から直せます。</p>';
   }
   if ((r.missing || []).length){
-    bad += '<p class="pwarn"><b>台帳に見当たらない受付ID</b>：'
+    bad += '<p class="pwarn"><b>応募一覧に見当たらない受付ID</b>：'
       + r.missing.map(esc).join(' / ') + '</p>';
   }
   if (!rows.length){
@@ -3500,12 +3738,12 @@ function bcRenderTargets(r){
    */
   if (r.historyReady === false){
     // setup() は営業担当には実行できない。**人が取れる次の一手**を先に書く
-    bad += '<p class="perr"><b>台帳の準備ができていないため、いまは送信できません。</b>'
+    bad += '<p class="perr"><b>送信の記録を残す場所が、まだ用意できていないため、いまは送信できません。</b>'
       + '送った記録が残せない状態です。'
       + '<br><b>事務局にご連絡ください</b>'
       + '（連絡先は「設定」タブの「事務局の連絡先」に出ています）。'
       + '「一斉メールの準備をお願いします」とお伝えいただければ通じます。'
-      + '<br><small>［技術メモ：台帳の Apps Script から setup() を1回実行し、'
+      + '<br><small>［技術メモ：スプレッドシートの Apps Script から setup() を1回実行し、'
       + 'この画面を開き直してください］</small></p>';
   }
   if (r.tooMany){
@@ -3717,7 +3955,7 @@ function bcDoSend(){
       + (res.bookkeeping
           ? '<p class="pwarn"><b>ただし、記録の書き込みに失敗しました。</b>'
             + esc(res.bookkeeping) + '</p>'
-          : '<p class="pnote">送った内容は、台帳の「一斉メール履歴」シートに'
+          : '<p class="pnote">送った内容は、「一斉メール履歴」に'
             + '本文ごと残しています。</p>');
     $('#bcStep1').hidden = true;
     $('#bcStep2').hidden = true;
@@ -4419,6 +4657,17 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#pickMail').addEventListener('click', bcStart);
   $('#pickNone').addEventListener('click', function(){ bcPickClear(); renderList(); });
   $('#pickStatus').addEventListener('change', bulkStatus);
+  $('#pickLoadIn').addEventListener('click', bulkLoadIn);
+  // 時刻の行を押したら、その枠の出店者だけに絞る。
+  // 「混んでいる」と分かった直後に、**誰が混んでいるのか**へ行けるように
+  $('#loadinRows').addEventListener('click', function(e){
+    var row = e.target.closest ? e.target.closest('.lirow') : null;
+    if (!row || row.className.indexOf('out') >= 0) return;
+    var at = row.getAttribute('data-at');
+    // もう一度押したら解除。**入れたきり戻せない絞り込みを作らない**
+    S.loadinAt = (S.loadinAt === at) ? null : at;
+    renderList();
+  });
   $('#bcPreview').addEventListener('click', bcDoPreview);
   $('#bcSend').addEventListener('click', bcDoSend);
   // 文面を1文字でも直したら、確認と送信を隠してやり直させる。
@@ -4782,7 +5031,7 @@ function schImpGo(){
    * 「削除する」には確認があるのに、こちらには無かった（検証役 2026-09-07）。
    */
   if (c.update && !confirm(
-      '台帳に書き込みます。\\n\\n'
+      '制作スケジュールに書き込みます。\\n\\n'
     + '・新しく ' + c.add + '件 ふえます\\n'
     + '・いまある ' + c.update + '件を、Excelの内容で書き換えます\\n'
     + '　（書き換える前の中身は、変更履歴に残ります）\\n'
@@ -4855,7 +5104,7 @@ function schImpWhy(x){
           + '（ID列は、いまある行を見分けるための番号です。'
           + '行をコピーすると番号まで一緒にコピーされます）</p>'
         : '<p>直したら「この行を直す」を押してください。'
-          + 'この時点では、台帳にはまだ書き込まれません。</p>');
+          + 'この時点では、制作スケジュールにはまだ書き込まれません。</p>');
   box.hidden = false;
 }
 
@@ -7000,11 +7249,11 @@ const HOWTO = {
                      + '時刻と3本の列がそのまま表になった、A4・1枚の紙が出ます。'
                      + 'PDFにしたいときは、印刷の画面で「PDFに保存」を選んでください。'
                      + '**当日はこの紙を見ます。**この画面は前日までに組むためのものです。'],
-    ['保存のしかた', '画面の右上の「**保存する**」が、台帳に書き込むボタンです。'
+    ['保存のしかた', '画面の右上の「**保存する**」が、タイムスケジュールに書き込むボタンです。'
                   + '**数分おきに自動でも保存します。**'
                   + '左上に「たった今保存しました」「保存していません（変更◯件）」と出ます。'
                   + '**予定の窓にある「この予定を反映」は、表に反映するだけ**で、'
-                  + 'まだ台帳には書き込まれていません。'],
+                  + 'まだタイムスケジュールには書き込まれていません。'],
     ['「変更◯件」とは', '保存してからあとに、あなたが加えた**操作の数**です。'
                      + '「読み込み直す」を押すと、**この変更は消えます**（確認が出ます）。'
                      + '消したくないときは、先に「保存する」を押してください。'],
@@ -7070,7 +7319,7 @@ const HOWTO = {
     ['この画面', '当日、現場で開くための一覧です。印刷にも耐える形にしてあります。'],
     ['当日は電波が切れます', '**前日までに印刷して持ってください。**'],
     ['搬入・撤収', '**主催が決めた時刻**です（出店者一覧で行を開くと直せます）。'
-                 + 'まだ決めていないときは、事業者からの希望を「希望 9:30〜10:00」の形で出します。'],
+                 + 'まだ決めていないときは、事業者からの希望を「希望 9:30〜9:45」の形で出します。'],
     ['現場責任者・現場の携帯', '**当日その場にいる方**です。'
                           + '出店確定情報フォームでご記入いただいた内容で、'
                           + '未提出のときは「（未提出）」と出ます。'
@@ -7083,7 +7332,7 @@ const HOWTO = {
   history: ['変更履歴の見かた', [
     ['記録されるもの', '誰が・いつ・どの項目を・何から何に変えたか。'
                     + '事業者ご本人による修正も残ります。'],
-    ['消せません', 'あとから書き換えられない台帳です。'
+    ['消せません', 'あとから書き換えられない記録です。'
                  + '「言った・言わない」を防ぐためのものなので、編集機能は用意していません。'],
   ]],
   docs: ['資料置き場の見かた', [
@@ -7163,7 +7412,7 @@ const HOWTO = {
     ['一度に送れる数', '**40社までです。**41社以上を選ぶと、'
                     + '出店者一覧の下のバーにその場で赤く出ます。'
                     + '超えるときは、絞り込んで分けてお送りください。'],
-    ['送ったものの記録', '台帳の**「一斉メール履歴」シート**に、'
+    ['送ったものの記録', '**「一斉メール履歴」**に、'
                      + 'いつ・誰が・誰に・どんな文面を送ったかが**本文ごと**残ります。'
                      + '変更履歴にも1行残ります。'],
   ]],
@@ -7438,6 +7687,24 @@ function html() {
         <div class="colpick" id="colPick"></div>
         <button class="ghost" id="colReset">最初の並びに戻す</button>
       </details>
+
+      <!-- 搬入の時間割（2026-09-09）。
+           搬入は ${C.TIMES.loadInFrom}〜${C.TIMES.loadInTo} の**1時間**に最大50社。
+           1社ずつ詳細を開いて打つやり方では、50回くり返しても
+           **全体の混み具合が一度も見えない**。ここが、その唯一の見える場所。
+           絞り込みではなく**全件**を数える（絞り込んだ画面で
+           「空いている」と読めてしまうのが、いちばん危ない） -->
+      <details class="loadinbox" id="loadinBox">
+        <summary>搬入の時間割を見る<span class="cnum" id="loadinNum"></span></summary>
+        <p class="pnote" id="loadinSum"></p>
+        <div id="loadinRows"></div>
+        <p class="pnote">
+          棒の長さは<b>車両の台数</b>です（社数ではありません）。
+          大きい車が集まると、社数が少なくても現場は詰まります。<br>
+          時刻の行を押すと、その枠の出店者だけに絞り込みます（<b>もう一度押すと解除</b>）。
+          <b>混んでいても操作は止めません</b>——当日の事情で寄せることはあるためです。
+        </p>
+      </details>
       <div class="tablewrap">
         <table class="list"><thead id="listHead"></thead><tbody id="listBody"></tbody></table>
         <div class="empty" id="listEmpty">該当する応募はありません。</div>
@@ -7460,6 +7727,9 @@ function html() {
         <label class="picksel">ステータスを
           <select id="pickStatus"><option value="">選ぶ…</option></select>
         </label>
+        <!-- 搬入時刻も**一般に出す**。当日の誘導は一般権限の営業がやる仕事なので
+             （ステータス変更と同じ扱い。決定は decisions_pending I6 と別） -->
+        <button class="ghost" id="pickLoadIn">搬入時刻をまとめて入れる</button>
         <!-- 「メールを送る」だと、押した瞬間に飛ぶように読める。
              実際はタブを移って文面を書く画面に行くだけ -->
         <button class="print admin-only" id="pickMail">選んだ出店者へメールを書く</button>
@@ -7490,7 +7760,7 @@ function html() {
           <b>完全に消します</b>。<b>元に戻せません。</b>
           受付IDも SB-0001 から採り直しになります。
           公開前の掃除にだけお使いください。<br>
-          消す直前に、台帳を丸ごと複製した控えをDriveに作ります
+          消す直前に、いまの記録をまるごと複製した控えをDriveに作ります
           （控えを作れなかったときは、削除を行いません）。
         </p>
         <button class="ghost" id="purgeCheck">消える対象を確かめる</button>

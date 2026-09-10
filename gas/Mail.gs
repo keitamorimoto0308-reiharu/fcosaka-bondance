@@ -210,7 +210,7 @@ function sendNotifyMail(values, receiptId, duplicateFlag, adminUrl) {
   }
   if (adminUrl) {
     head.push('');
-    head.push('台帳・管理ページ：' + adminUrl);
+    head.push('管理ページ：' + adminUrl);
   }
 
   var body = head.concat([
@@ -258,7 +258,7 @@ function sendNotifyMail(values, receiptId, duplicateFlag, adminUrl) {
  */
 var ALERT_ = {
   ledgerWriteFailed: {
-    level: '至急', title: '応募を台帳に記録できませんでした',
+    level: '至急', title: '応募を記録できませんでした',
     what: '応募フォームから届いた内容を、応募一覧に書き込めませんでした。',
     impact: '応募者の画面には受付番号が出ていません。'
           + 'このまま放置すると、この応募は誰にも気づかれないまま消えます。',
@@ -268,7 +268,7 @@ var ALERT_ = {
   },
   receiptMailFailed: {
     level: '要確認', title: '応募者への受付確認メールを送れませんでした',
-    what: '応募は台帳に記録できましたが、応募者あての受付確認メールが送れませんでした。',
+    what: '応募は記録できましたが、応募者あての受付確認メールが送れませんでした。',
     impact: '応募者は「届いたのかどうか分からない」状態です。'
           + '同じ内容で二重に応募される原因になります。',
     todo: '応募一覧でこの受付IDの行を開き、メールアドレスをご確認のうえ、'
@@ -276,7 +276,7 @@ var ALERT_ = {
   },
   historyWriteFailed: {
     level: '至急', title: '変更履歴を残せませんでした',
-    what: '台帳の内容は書き換わりましたが、その記録を変更履歴に残せませんでした。',
+    what: '応募一覧の内容は書き換わりましたが、その記録を変更履歴に残せませんでした。',
     impact: '誰がいつ何を変えたかが追えません。'
           + '「言った・言わない」になったときに、こちらに根拠が残りません。',
     todo: '変更履歴シートが壊れていないかご確認ください。'

@@ -584,3 +584,80 @@ describe('入室画面：ブラウザのパスワード保存が働くこと', (
       'パスワードを消したあとに保存を頼んでいます（空の値が保存されます）');
   });
 });
+
+/**
+ * 搬入の時間割：**報せる側と、実際にやる側がずれていないか。**
+ *
+ * この案件は同じ形で一度事故を起こしている。
+ * 一斉メールのプレビューは「この行は消えます」と正しく警告していたのに、
+ * 本文では消えていなかった。**片方だけを見る検査では捕まらない。**
+ *
+ * ここでは「時間割が数える相手」と「枠を押したときに出る相手」が
+ * 同じ条件で絞られていることを見る。
+ * （2026-09-09、画面で押して見つけた。集計の検査も絞り込みの検査も緑だった）
+ *
+ * ⚠ 見るのは **src/build-admin.js**（生成物の admin.html ではない）。
+ *   壊し検査はソースを書き換えるので、生成物を見ると**何も検出できない**。
+ *   test/sched-page.test.js と同じ方式。
+ */
+describe('搬入の時間割：数える相手と、出す相手', () => {
+  const PAGE = read('src/build-admin.js');
+
+  /** 画面のコードから、関数の中身だけを切り出す（括弧の対応で数える） */
+  function bodyOf(src, head) {
+    const i = src.indexOf(head);
+    assert.ok(i >= 0, head + ' が見つかりません');
+    let depth = 0, started = false;
+    for (let k = i; k < src.length; k++) {
+      const c = src[k];
+      if (c === '{') { depth++; started = true; }
+      else if (c === '}') {
+        depth--;
+        if (started && depth === 0) return src.slice(i, k + 1);
+      }
+    }
+    assert.fail(head + ' の閉じ括弧が見つかりません');
+  }
+
+  test('来ない相手を外す一覧が、1か所だけにある', () => {
+    const n = PAGE.split('var LOADIN_SKIP').length - 1;
+    assert.strictEqual(n, 1,
+      'LOADIN_SKIP が ' + n + ' か所にあります（写しを持つと、片方だけ古くなる）');
+  });
+
+  test('時間割が数える相手を、その一覧で絞っている', () => {
+    const body = bodyOf(PAGE, 'function loadinTargets()');
+    assert.ok(body.includes('LOADIN_SKIP'),
+      '時間割が、来ない相手（不採択・辞退など）を数から外していません');
+  });
+
+  /*
+   * **ここが本体。**
+   * 枠を押したときの絞り込みが同じ条件で絞っていないと、
+   * 「未定 0社」と出ている枠を押して1社出る、という形になる。
+   */
+  test('枠を押したときの絞り込みも、同じ一覧で絞っている', () => {
+    const body = bodyOf(PAGE, 'function filtered()');
+    assert.ok(body.includes('S.loadinAt'),
+      '絞り込みが、時間割の枠を見ていません');
+    assert.ok(body.includes('LOADIN_SKIP'),
+      '枠の絞り込みが、来ない相手を外していません。'
+      + '時間割は数から外しているので、押すと件数が食い違います');
+  });
+
+  test('数え方と配り方を、画面に書き写していない', () => {
+    // src/loadin.js の塊を書き出して使う（写しを2つ持たない）
+    assert.ok(/require\('\.\/loadin\.js'\)/.test(PAGE),
+      '画面が src/loadin.js を読んでいません');
+    assert.ok(PAGE.includes('loadinSource()'),
+      '切り出した塊を画面に書き出していません');
+
+    const render = bodyOf(PAGE, 'function renderLoadIn()');
+    assert.ok(render.includes('loadinBuckets('),
+      '時間割が loadinBuckets を呼ばず、画面で数え直しています');
+
+    const bulk = bodyOf(PAGE, 'function bulkLoadIn()');
+    assert.ok(bulk.includes('loadinPlan('),
+      'まとめて入れるときに loadinPlan を呼ばず、画面で配り方を書き写しています');
+  });
+});

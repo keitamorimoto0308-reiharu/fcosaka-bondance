@@ -111,7 +111,7 @@ describe('警報：受け取った人が動ける文面か', () => {
     const m = sent[0];
     assert.strictEqual(m.to, 'ops@test.example');
     assert.ok(m.subject.startsWith('【至急】'), '深刻さが件名に出ていません：' + m.subject);
-    assert.ok(m.subject.includes('応募を台帳に記録できませんでした'), m.subject);
+    assert.ok(m.subject.includes('応募を記録できませんでした'), m.subject);
     assert.ok(m.body.includes('■ いま困ること'), '「いま困ること」がありません');
     assert.ok(m.body.includes('■ していただきたいこと'), '「すべきこと」がありません');
     assert.ok(m.body.includes('退避に保存済み'), '詳細が入っていません');
