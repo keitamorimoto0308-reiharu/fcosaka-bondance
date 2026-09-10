@@ -23,7 +23,10 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _guard import guard  # noqa: E402
 R = pathlib.Path(__file__).resolve().parent.parent
-TARGETS = ['test/notify-kinds.test.js', 'test/ledger-columns.test.js']
+TARGETS = ['test/notify-kinds.test.js', 'test/ledger-columns.test.js',
+           # 守りが立っている前提（既定値）を見る検査。
+           # **壊す場所と、落ちる検査を対にする**（失敗パターン7）
+           'test/preconditions.test.js']
 
 
 def build():
@@ -77,6 +80,21 @@ def case(label, edits, expect):
 
 
 CASES = [
+    # ── 守りが立っている「地面」を崩す（2026-09-10、検証役の指摘）──────
+    # 引き継ぎ書 §6：「リンクの無い通知は送らない」検査が効かなかった事故は、
+    # **自分で入れた既定値のURLで条件が常に偽**になったのが原因。
+    # その前提を見る検査が、2026-09-10 まで1件も無かった
+    ('確定情報フォームURLの既定値に、URLを入れる', [
+        ('gas/Config.gs', "  ['確定情報フォームURL',   '',",
+                          "  ['確定情報フォームURL',   'https://example.com/confirm.html',"),
+    ], '守りが二度と働きません'),
+
+    ('管理者パスワードの既定値を、埋める', [
+        ('gas/Config.gs', "  ['管理者パスワード',     '',",
+                          "  ['管理者パスワード',     'himitsu',"),
+    ], '既定値が入っています'),
+
+
     ('画面が件数だけを送る形に戻す', [
         ('src/build-admin.js', '    ids: rows.map(function(x){ return x.id; }),',
          '    expect: rows.length,'),

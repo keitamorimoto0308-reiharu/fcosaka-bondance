@@ -202,6 +202,33 @@ function confirmSave_(payload) {
       }
     });
 
+    /*
+     * **列が足りないまま保存すると、値が「エラーも出さずに消える」。**
+     *
+     * 下の headers.map は**シートにある列だけ**を書く。
+     * 定義にあってシートに無い列の値は、どこにも入らない。
+     * 出店者さまから見れば送信は成功しているので、誰も気づけない
+     * （2026-09-10、検証役の指摘）。
+     *
+     * ■ 止めない。**報せる。**
+     *   止めると出店者さまが入力できなくなる。
+     *   値そのものは「生データ(JSON)」に残るので**復元できる**。
+     *   足りないことに人が気づけさえすればよい。
+     *
+     * ■ 保存より先に報せる
+     *   あとに置くと、書き込みで落ちたときに報せが出ない。
+     */
+    try {
+      var want = confirmHeaders();
+      var lack = want.filter(function (h) { return headers.indexOf(h) < 0; });
+      if (lack.length) {
+        alertOperator_('confirmColumnsMissing', receiptId,
+          '足りない列：' + lack.join('、'));
+      }
+    } catch (e) {
+      logError_('confirmSave_:columns', e);
+    }
+
     var now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
     var line = headers.map(function (h) {
       if (h === '受付ID') return receiptId;
