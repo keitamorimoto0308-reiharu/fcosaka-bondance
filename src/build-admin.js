@@ -1595,7 +1595,7 @@ function filtered(){
        * 引き継ぎ書の一斉メールの事故と同じ——**報せる側と、実際にやる側がずれる。**
        * （2026-09-09、画面で押して見つけた。検査は両方とも緑だった）
        */
-      if (LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) >= 0) return false;
+      if (!loadinComing(x)) return false;
       var lt = hhmmToMin(x['搬入予定時刻']);
       if (S.loadinAt === ''){
         if (lt !== null) return false;          // 「未定」の枠
@@ -2078,11 +2078,21 @@ function hhmmToMin(t){ return loadinToMin(t); }
 function minToHhmm(n){ return loadinToHhmm(n); }
 function loadinCars(x){ return loadinCarsOf(x); }
 
+/**
+ * その社は、当日ほんとうに来るか。
+ *
+ * **判定は1か所だけに置く。**
+ * 時間割が数える相手・枠を押したときに出る相手・まとめて時刻を入れる相手は、
+ * 全部これを通す。写しを作ると、片方だけ古くなって
+ * 「12社に入れました」と出たのに合計が9社ぶんしか増えない、が起きる。
+ */
+function loadinComing(x){
+  return LOADIN_SKIP.indexOf(String((x || {})['ステータス'] || '')) < 0;
+}
+
 function loadinTargets(){
   if (!S.list) return [];
-  return S.list.rows.filter(function(x){
-    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
-  });
+  return S.list.rows.filter(loadinComing);
 }
 
 function renderLoadIn(){
@@ -2200,9 +2210,7 @@ function bulkLoadIn(){
    * 「12社に入れました」と出たのに合計が9社ぶんしか増えない、という
    * 説明のつかない状態になる。**黙って落とさず、件数を伝える。**
    */
-  var picked = all.filter(function(x){
-    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
-  });
+  var picked = all.filter(loadinComing);
   var skipped = all.length - picked.length;
   if (!picked.length){
     toast('選んだ相手は全員、不採択・辞退などのため入れられません', true);

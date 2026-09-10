@@ -1249,6 +1249,18 @@ function bulkTooMany(n) {
            + '絞り込んで、分けてお試しください。' };
 }
 
+/**
+ * 開くと動くファイルの一覧。**本番（gas/Drive.gs）から読む。**
+ * ここに書き写すと、本番だけ足したときに模擬が古いまま緩くなる。
+ */
+const DENY_EXT = (function () {
+  const src = rd('Drive.gs');
+  const i = src.indexOf('var DOCS_DENY_EXT = [');
+  if (i < 0) throw new Error('gas/Drive.gs に DOCS_DENY_EXT がありません');
+  const body = src.slice(src.indexOf('[', i) + 1, src.indexOf('];', i));
+  return body.split(',').map(x => x.trim().replace(/^'|'$/g, '')).filter(Boolean);
+})();
+
 function handle(payload) {
   const a = payload.action;
 
@@ -2635,6 +2647,27 @@ function handle(payload) {
         return { ok: false, error: 'bad_folder',
           message: '置き先をお選びください（出店者提出物には置けません）。' };
       }
+      /*
+       * **開くと動くファイルを断る（本番 gas/Docs.gs と同じ守り）。**
+       *
+       * 2026-09-10 まで、模擬にはこの守りが**無かった**。
+       * 本番は守れていたので実害は無かったが、
+       * **模擬で .exe を置いてみると通ってしまう**ので、
+       * 検証役が「守られている」と誤って報告する状態だった
+       * （この案件は過去にそれで報告2件が誤報になっている）。
+       *
+       * 一覧は本番（gas/Drive.gs の DOCS_DENY_EXT）から**読む**。
+       * ここに書き写すと、片方だけ古くなる。
+       */
+      const name0 = String(payload.name || '資料');
+      const ext = (name0.split('.').pop() || '').toLowerCase();
+      if (ext !== name0.toLowerCase() && DENY_EXT.indexOf(ext) >= 0) {
+        return { ok: false, error: 'type',
+          message: 'この種類のファイルは置けません（' + ext + '）。'
+                 + 'PDFや画像、Officeの書類でお願いします。' };
+      }
+      // 種類は本番と同じく blob に渡す値として受け取る（読み捨てない）
+      const mime = String(payload.mime || '');
       const data = String(payload.data || '');
       if (!data) return { ok: false, error: 'empty', message: 'ファイルを読み取れませんでした。' };
       const approx = Math.floor(data.length * 3 / 4);

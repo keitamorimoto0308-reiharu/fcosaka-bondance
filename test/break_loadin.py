@@ -120,13 +120,14 @@ CASES = [
     # 「この行は消えます」と正しく警告したのに、本文では消えていなかった）。
     # **片方だけを見る検査では捕まらない。**
     ('枠を押したときの絞り込みが、来ない相手を外さなくなる', [
-        (PAGE, "      if (LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) >= 0) return false;\n",
-               ''),
+        (PAGE, '      if (!loadinComing(x)) return false;\n', ''),
     ], '枠の絞り込みが、来ない相手を外していません'),
 
-    ('時間割が、来ない相手まで数えるようになる', [
-        (PAGE, "    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;",
-               '    return true;'),
+    # 判定は loadinComing の1か所だけ。ここを壊すと3つの経路すべてに効く。
+    # 2026-09-10 まで同じ判定が3か所に写されていて、目印が複数の場所に当たっていた
+    ('来ない相手かの判定そのものを、いつも真にする', [
+        (PAGE, "  return LOADIN_SKIP.indexOf(String((x || {})['ステータス'] || '')) < 0;",
+               '  return true;'),
     ], '来ない相手（不採択・辞退など）を数から外していません'),
 
     # 画面で数え直すと、src/loadin.js の検査（test/loadin.test.js）が

@@ -619,15 +619,23 @@ describe('搬入の時間割：数える相手と、出す相手', () => {
     assert.fail(head + ' の閉じ括弧が見つかりません');
   }
 
-  test('来ない相手を外す一覧が、1か所だけにある', () => {
+  test('来ない相手かの判定が、1か所だけにある', () => {
     const n = PAGE.split('var LOADIN_SKIP').length - 1;
     assert.strictEqual(n, 1,
       'LOADIN_SKIP が ' + n + ' か所にあります（写しを持つと、片方だけ古くなる）');
+    /*
+     * **判定そのものも1か所。**
+     * 2026-09-10 まで、同じ `LOADIN_SKIP.indexOf(...)` が3か所に写されていた。
+     * 写しがあると、壊し検査の目印も複数の場所に当たる（別の場所を壊す）。
+     */
+    const uses = PAGE.split('LOADIN_SKIP.indexOf').length - 1;
+    assert.strictEqual(uses, 1,
+      '判定が ' + uses + ' か所に写されています。loadinComing() に一本化してください');
   });
 
   test('時間割が数える相手を、その一覧で絞っている', () => {
     const body = bodyOf(PAGE, 'function loadinTargets()');
-    assert.ok(body.includes('LOADIN_SKIP'),
+    assert.ok(body.includes('loadinComing'),
       '時間割が、来ない相手（不採択・辞退など）を数から外していません');
   });
 
@@ -640,7 +648,7 @@ describe('搬入の時間割：数える相手と、出す相手', () => {
     const body = bodyOf(PAGE, 'function filtered()');
     assert.ok(body.includes('S.loadinAt'),
       '絞り込みが、時間割の枠を見ていません');
-    assert.ok(body.includes('LOADIN_SKIP'),
+    assert.ok(body.includes('loadinComing'),
       '枠の絞り込みが、来ない相手を外していません。'
       + '時間割は数から外しているので、押すと件数が食い違います');
   });
@@ -799,7 +807,7 @@ describe('搬入の時間割：取り返しのつかない2件', () => {
 
   test('まとめて入れる相手からも、来ない相手を外している', () => {
     const body = bodyOf(PAGE, 'function bulkLoadIn()');
-    assert.ok(body.includes('LOADIN_SKIP'),
+    assert.ok(body.includes('loadinComing'),
       '不採択・辞退の社にも搬入時刻を入れています。'
       + '時間割には現れないので、件数が説明のつかない形で食い違います');
   });
