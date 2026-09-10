@@ -18,7 +18,8 @@
     "build:confirm": "node src/build-confirm.js",
     "build:upload": "node src/build-upload.js",
     "break": "node tools/lock.js run break \"python test/break_all.py\"",
-    "lock": "node tools/lock.js check"
+    "lock": "node tools/lock.js check",
+    "release": "node tools/release.js"
   },
   "devDependencies": {
     "jsqr": "^1.4.0",
