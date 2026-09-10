@@ -103,6 +103,28 @@ function asText_(v) {
 }
 
 /**
+ * 時刻だけの列（搬入予定時刻・撤収予定時刻）を読むときの、専用の読み口。
+ *
+ * ■ なぜ asText_ を使ってはいけないか
+ *   あちらは Date を `yyyy-MM-dd HH:mm` にする。時刻だけの欄でそれをやると
+ *   **「1899-12-30 09:30」**になり、
+ *     - 搬入の時間割ではその社が「未定」に落ちる（＝混雑が見えない）
+ *     - **一斉メールの {{搬入予定時刻}} にそのまま差し込まれ、実在企業に届く**
+ *
+ * ■ 書式の固定（Setup.gs）と、両方要る
+ *   Setup.gs の `setNumberFormat('@')` は**これから打つ人**を守る。
+ *   こちらは**すでに化けて入っている値**を守る。片方だけでは足りない。
+ *   （②タイムスケジュールの `ttCellTime_` と同じ考え方）
+ */
+function timeText_(v) {
+  if (v == null || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, 'Asia/Tokyo', 'HH:mm');
+  }
+  return String(v).trim();
+}
+
+/**
  * ブラウザへ送らない列。
  *
  * 素材トークンは、公開の素材アップロードページ（§6-3）のアクセス鍵。
@@ -634,6 +656,34 @@ function EDITABLE_() {
 }
 
 /**
+ * まとめて変える操作の、1回あたりの上限。
+ *
+ * ■ なぜ要るか（2026-09-09、検証役が発見）
+ *   `adminUpdate_` は**1件ごとに**スクリプトロックを取り、応募一覧を全部読む。
+ *   応募の記録（gas/Ledger.gs）も**同じロック**を使うので、
+ *   細工した通信で2万件を送られると、GASの実行上限まで走り続けるあいだ
+ *   **応募フォームからの記録が「混み合っています」で弾かれ続ける。**
+ *   受付IDは連番なので、実在するIDを大量に並べるのも簡単。
+ *
+ *   `adminAssign_` には同じ趣旨の警告が元から書いてあったのに、
+ *   一括系（ステータス・搬入時刻）だけがその教訓から漏れていた。
+ *
+ * ■ 60 の根拠
+ *   会場は最大50社（設定の「区画総数」は暫定50）。実運用では届かない。
+ *   一斉メールは40（メールは取り消せないので、より厳しくてよい）、
+ *   一括削除は200（消す対象は行数なので別の数え方）。
+ */
+var BULK_MAX = 60;
+
+/** まとめて変える操作の入口で、件数を断る。文面は1か所にまとめる */
+function bulkTooMany_(n) {
+  return { ok: false, error: 'too_many',
+    message: '一度にまとめて変えられるのは ' + BULK_MAX + '社までです'
+           + '（いま ' + n + '社が選ばれています）。'
+           + '絞り込んで、分けてお試しください。' };
+}
+
+/**
  * 選んだ相手のステータスを、まとめて変える（けいた指示・2026-09-08）。
  *
  * ■ 規則を写さない
@@ -668,6 +718,8 @@ function adminBulkStatus_(auth, payload) {
   if (!list.length) {
     return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
   }
+  // 件数は、1件目に触る前に断る（ロックを握ったまま走り続けさせない）
+  if (list.length > BULK_MAX) return bulkTooMany_(list.length);
 
   if (STATUS_LIST_().indexOf(status) < 0) {
     return { ok: false, error: 'bad_value', message: 'ステータスの値が不正です' };
@@ -750,6 +802,8 @@ function adminBulkLoadIn_(auth, payload) {
   if (list.length === 0) {
     return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
   }
+  // 件数は、1件目に触る前に断る（ロックを握ったまま走り続けさせない）
+  if (list.length > BULK_MAX) return bulkTooMany_(list.length);
 
   /*
    * 書式は、1件目に触る前に全部見る。

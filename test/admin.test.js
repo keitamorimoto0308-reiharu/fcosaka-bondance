@@ -661,3 +661,178 @@ describe('搬入の時間割：数える相手と、出す相手', () => {
       'まとめて入れるときに loadinPlan を呼ばず、画面で配り方を書き写しています');
   });
 });
+
+/**
+ * 画面が呼ぶ action が、**本番と模擬の両方に登録されているか。**
+ *
+ * ■ なぜ要るか（2026-09-09、検証役が発見）
+ *   いまは `gas/Admin.gs` の振り分けから1行消しても、テスト1430件は
+ *   **全部緑のまま**。本番だけがボタンを押した瞬間に「不明な操作です」で落ちる。
+ *   テストは関数を**直接呼んで**いるので、振り分けを一度も通らないため。
+ *
+ *   同じ事故は 2026-09-07 に「設定の保存が丸ごと壊れていた」で実際に起きている
+ *   （型の分岐が無く、どの設定も1件も保存できない状態が数日続いた）。
+ *
+ * ■ 模擬も見る
+ *   模擬に無いと「本番では動くのに、模擬で試すと落ちる」。
+ *   検証役が模擬で確かめる運用なので、そこがずれると報告が誤報になる。
+ */
+describe('画面が呼ぶ action は、本番にも模擬にも登録されている', () => {
+  const PAGE = read('src/build-admin.js');
+
+  /** 画面のコードから api('...') の名前を全部拾う */
+  function actionsInPage(src) {
+    const found = new Set();
+    let i = 0;
+    for (;;) {
+      const k = src.indexOf("api('", i);
+      if (k < 0) break;
+      const end = src.indexOf("'", k + 5);
+      if (end < 0) break;
+      found.add(src.slice(k + 5, end));
+      i = end;
+    }
+    return [...found];
+  }
+
+  test('拾えている（この検査自体が空振りしていないこと）', () => {
+    const list = actionsInPage(PAGE);
+    assert.ok(list.length > 15,
+      'action を ' + list.length + ' 個しか拾えていません。拾い方が壊れています');
+    assert.ok(list.includes('adminBulkLoadIn'),
+      '今日足した adminBulkLoadIn を拾えていません');
+  });
+
+  /*
+   * 振り分けの書き方は2通りある。**両方を拾うこと。**
+   *   case '…'          … 認証を通ったあとの action
+   *   action === '…'    … 入室前に呼ぶもの（adminLogin / adminNames）。
+   *                       認証の関門より手前に置く必要があるので、case にできない
+   * 片方しか見ないと、**登録されているのに「無い」と言う**検査になる
+   * （2026-09-09、実際にそう外れた）。
+   */
+  const registered = (src, a) =>
+    src.includes("case '" + a + "'")
+    || src.includes("action === '" + a + "'")
+    || src.includes("a === '" + a + "'");
+
+  test('全部が gas/Admin.gs の振り分けに在る', () => {
+    const missing = actionsInPage(PAGE).filter(a => !registered(ADMIN_GS, a));
+    assert.deepStrictEqual(missing, [],
+      '画面が呼んでいるのに、本番の振り分けに無い action：' + missing.join('、')
+      + '（ボタンを押した瞬間に「不明な操作です」になります）');
+  });
+
+  test('全部が src/mock.js の振り分けにも在る', () => {
+    const missing = actionsInPage(PAGE).filter(a => !registered(MOCK, a));
+    assert.deepStrictEqual(missing, [],
+      '画面が呼んでいるのに、模擬に無い action：' + missing.join('、')
+      + '（模擬で試すと落ちるので、検証の報告が誤報になります）');
+  });
+});
+
+/**
+ * 検証役3体（2026-09-09）の指摘のうち、**取り消せない事故につながる2件**を
+ * 二度と戻さないための検査。
+ *
+ * ⚠ この2件は、直した直後は `npm run break` で「落ちず」だった。
+ *   **直しただけでは、次の人が同じ場所を壊してもテストは緑のまま。**
+ */
+describe('搬入の時間割：取り返しのつかない2件', () => {
+  const PAGE = read('src/build-admin.js');
+
+  function bodyOf(src, head) {
+    const i = src.indexOf(head);
+    assert.ok(i >= 0, head + ' が見つかりません');
+    let depth = 0, started = false;
+    for (let k = i; k < src.length; k++) {
+      const c = src[k];
+      if (c === '{') { depth++; started = true; }
+      else if (c === '}') {
+        depth--;
+        if (started && depth === 0) return src.slice(i, k + 1);
+      }
+    }
+    assert.fail(head + ' の閉じ括弧が見つかりません');
+  }
+
+  /*
+   * 枠を押すのも**絞り込み**。選択を捨てないと、
+   * 「10社選ぶ → 9:30 の枠で4社に絞る → 選んだ出店者へメールを書く」で
+   * **画面に出ていない6社にも送れる**。一斉メールは取り消せない。
+   * 引き継ぎ書が「この機能でいちばん危ない形」と名指ししているもの。
+   * しかも選択バーには「絞り込みを変えると消えます」と書いてある（＝嘘になる）。
+   */
+  test('枠を押したら、選んだ相手を解除している', () => {
+    const src = PAGE.slice(PAGE.indexOf("$('#loadinRows').addEventListener"));
+    const body = src.slice(0, src.indexOf('\n  });') + 6);
+    assert.ok(body.includes('bcPickClear()'),
+      '枠を押したときに、選んだ相手を解除していません。'
+      + '画面に出ていない相手にメールが飛びます');
+    assert.ok(body.includes('bcPickIds().length'),
+      '解除したことを人に伝えていません（黙って消さない）');
+  });
+
+  test('枠を押したら、他の絞り込みも外している', () => {
+    const src = PAGE.slice(PAGE.indexOf("$('#loadinRows').addEventListener"));
+    const body = src.slice(0, src.indexOf('\n  });') + 6);
+    for (const id of ['fQ', 'fStatus', 'fType', 'fSize', 'fDay', 'fMine', 'fDup']) {
+      assert.ok(body.includes("'#" + id + "'"),
+        '枠を押したときに ' + id + ' を外していません。'
+        + '時間割は全件を数えているので、件数が食い違います');
+    }
+  });
+
+  /*
+   * すでにその枠にいる社を数えないと、
+   * 「最後の社は10:00です」ときれいな計画を見せながら、
+   * 実際は9:30に上限の倍が来る。**押す前に見せる、という約束が嘘になる。**
+   */
+  test('配るとき、すでにその枠にいる社を数えている', () => {
+    const body = bodyOf(PAGE, 'function bulkLoadIn()');
+    assert.ok(body.includes('loadinOccupied('),
+      'すでにその枠にいる社を数えずに配っています。'
+      + '確認画面に出る計画と、実際の混み具合が食い違います');
+    assert.ok(/loadinPlan\([^)]*occupied/.test(body),
+      '数えた結果を loadinPlan に渡していません');
+  });
+
+  test('まとめて入れる相手からも、来ない相手を外している', () => {
+    const body = bodyOf(PAGE, 'function bulkLoadIn()');
+    assert.ok(body.includes('LOADIN_SKIP'),
+      '不採択・辞退の社にも搬入時刻を入れています。'
+      + '時間割には現れないので、件数が説明のつかない形で食い違います');
+  });
+
+  /*
+   * 素の確認窓は Markdown を解釈しない。** と書くと記号がそのまま出る。
+   * 取引先に見せる画面なので、ここは見た目の問題ではなく信用の問題。
+   */
+  test('素の確認窓に、強調の記号を書いていない', () => {
+    // **コメントは外す。** ここの説明文には ** を使うので、
+    // そのままだと検査自身が誤検出する（2026-09-09、実際にそう外れた）
+    const NL = String.fromCharCode(10);      // ヒアドキュメント経由で化けないように
+    /*
+     * コメントは全部外す。**行末のコメントも。**
+     * ここの説明文には ** を使うので、外さないと検査自身が誤検出する
+     * （2026-09-09、行頭だけ外して実際に外れた）。
+     */
+    const noComment = bodyOf(PAGE, 'function bulkLoadIn()')
+      .split(NL)
+      .filter(line => !line.trim().startsWith('*') && !line.trim().startsWith('/*'))
+      .map(line => {
+        const k = line.indexOf('//');
+        return k >= 0 ? line.slice(0, k) : line;
+      })
+      .join(NL);
+    const calls = noComment.split('confirm(').slice(1)
+      .concat(noComment.split('prompt(').slice(1));
+    for (const c of calls) {
+      const stop = c.indexOf('))');
+      const head = c.slice(0, stop >= 0 ? stop : 600);
+      assert.ok(!head.includes('**'),
+        '確認窓の文面に ** が入っています（記号がそのまま画面に出ます）：'
+        + head.slice(0, 120));
+    }
+  });
+});

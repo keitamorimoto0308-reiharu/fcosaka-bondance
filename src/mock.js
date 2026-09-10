@@ -489,6 +489,9 @@ const BC = (() => {
     G.cutFunction(authSrc, 'sha256_'), G.cutFunction(authSrc, 'safeEquals_'),
     G.cutFunction(adminSrc, 'indexOf_'), G.cutFunction(adminSrc, 'liveRows_'),
     G.cutFunction(adminSrc, 'cell_'), G.cutFunction(adminSrc, 'asText_'),
+    // 時刻だけの列の読み口。**asText_ で代用しない**
+    // （Date が日付つきに化けて、そのまま {{搬入予定時刻}} で実在企業へ飛ぶ）
+    G.cutFunction(adminSrc, 'timeText_'),
     // シートで数式として動く値を止める。**模擬でも本物を通す**
     // （ここを緩めると「模擬では通るのに本番で違う値が入る」が起きる）
     G.cutFunction(adminSrc, 'safeCellText_'),
@@ -1239,6 +1242,13 @@ function mockValidateConfirm(values) {
   return errs;
 }
 
+/** まとめて変える操作の上限。文面は本番 gas/Admin.gs の bulkTooMany_ と揃える */
+function bulkTooMany(n) {
+  return { ok: false, error: 'too_many',
+    message: '一度にまとめて変えられるのは 60社までです（いま ' + n + '社が選ばれています）。'
+           + '絞り込んで、分けてお試しください。' };
+}
+
 function handle(payload) {
   const a = payload.action;
 
@@ -1466,6 +1476,8 @@ function handle(payload) {
       if (!ids.length) {
         return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
       }
+      // 本番 gas/Admin.gs の BULK_MAX と同じ。緩いと「模擬で通るのに本番で落ちる」
+      if (ids.length > 60) return bulkTooMany(ids.length);
       const st = String(payload.status || '').trim();
       if (!STATUSES.includes(st)) {
         return { ok: false, error: 'bad_value', message: 'ステータスの値が不正です' };
@@ -1509,6 +1521,7 @@ function handle(payload) {
       if (!list.length) {
         return { ok: false, error: 'empty', message: '相手が選ばれていません。' };
       }
+      if (list.length > 60) return bulkTooMany(list.length);
       const bad = list.filter(x => x.at !== '' && !/^([0-9]|[01][0-9]|2[0-3]):[0-5][0-9]$/.test(x.at))
                       .map(x => x.id + '（' + x.at + '）');
       if (bad.length) {
@@ -1532,6 +1545,17 @@ function handle(payload) {
     case 'adminUpdate': {
       // 本番は検査を全部通してから1バイトも書かない。ここも同じ順序にする
       {
+        // **本番と同じ上限**（gas/Admin.gs の FIELD_TEXT_MAX / REASON_MAX）。
+        // ここが無いと「模擬では50社成功、本番では50社全部失敗」になる
+        for (const [k, v] of Object.entries(payload.patch || {})) {
+          if (typeof v === 'string' && v.length > 5000) {
+            return { ok: false, error: 'too_long',
+              message: '「' + k + '」が長すぎます（5000文字まで）' };
+          }
+        }
+        if (String(payload.reason || '').length > 500) {
+          return { ok: false, error: 'too_long', message: '理由が長すぎます（500文字まで）' };
+        }
         const bad = Object.keys(payload.patch || {}).filter(k => !EDITABLE.includes(k));
         if (bad.length) {
           return { ok: false, error: 'forbidden_field',

@@ -92,8 +92,18 @@ function load(opts) {
   box.globalThis = box;
 
   const src = read('Admin.gs');
+  /*
+   * 上限の値は**本物から読む**。ここに 60 と書き写すと、
+   * 本番だけ変えたときに代役が古いまま緑になる（この案件が繰り返し踏んだ形）。
+   */
+  {
+    const m = /var BULK_MAX = (\d+);/.exec(src);
+    assert.ok(m, 'gas/Admin.gs に BULK_MAX がありません');
+    box.BULK_MAX = Number(m[1]);
+  }
   for (const marker of ['function recordHistory_', 'function applicantEditable_', 'function adminApplicantFields_',
                         'function adminApplicantUpdate_', 'function adminUpdate_',
+                        'function bulkTooMany_',
                         'function adminBulkStatus_', 'function adminBulkLoadIn_']) {
     const start = src.indexOf(marker);
     assert.ok(start >= 0, 'gas/Admin.gs に ' + marker + ' がありません');

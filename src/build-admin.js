@@ -1439,7 +1439,7 @@ function renderAlerts(){
     var over = (S.todos || []).filter(function(t){
       return t.state !== '完了' && t.due && t.due < todayText();
     }).length;
-    if (over) todo.push(['期日を過ぎた確認事項（移行前）', over, 'scroll:todoList']);
+    if (over) todo.push(['期日を過ぎた確認事項（下の欄にある古いもの）', over, 'scroll:todoList']);
     var unreplied = ((S.inbox && S.inbox.rows) || []).filter(function(m){ return !m.replied; }).length;
     if (unreplied) todo.push(['未返信の問い合わせ', unreplied, 'scroll:inboxPanel']);
     $('#todo').innerHTML = todo.length
@@ -2112,15 +2112,18 @@ function renderLoadIn(){
   }).join('');
 
   if (outside.n){
-    html += '<div class="lirow out"><span class="lit">窓の外</span>'
+    // 「窓の外」はガラス窓に読める（検証役の指摘）。時刻で言う
+    html += '<div class="lirow out"><span class="lit">時間外</span>'
       + '<span class="libarwrap"></span>'
       + '<span class="lin">' + outside.n + '社 ' + outside.cars + '台</span>'
-      + '<span class="liwarn">' + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + ' の外です</span></div>';
+      + '<span class="liwarn">' + esc(LOADIN.from) + '〜' + esc(LOADIN.to)
+      + ' の外の時刻が入っています</span></div>';
   }
   // 「未定」は必ず一番下。ここが減っていくのが、この作業の進み具合そのもの
+  // 台数も出す。ここだけ社数しか無いと、棒の意味（台数）と噛み合わない
   html += '<div class="lirow undec' + (S.loadinAt === '' ? ' on' : '') + '" data-at=""><span class="lit">未定</span>'
     + '<span class="libarwrap"><span class="libar"></span></span>'
-    + '<span class="lin">' + undecided.n + '社</span></div>';
+    + '<span class="lin">' + undecided.n + '社 ' + undecided.cars + '台</span></div>';
 
   box.innerHTML = html;
 
@@ -2128,18 +2131,28 @@ function renderLoadIn(){
    * **枠ごとの混雑だけ見せると、全体が無理でも気づけない。**
    * のべ何台まで入るかと、いま何台あるかを、先に1行で出す。
    */
-  var cap = slots.length * LOADIN.cap;
-  var have = 0;
-  slots.forEach(function(s){ have += s.cars; });
-  have += undecided.cars + outside.cars;
+  // 数え直さない。**loadinBuckets が既に持っている**（写しを2つ持たない）
+  var cap = B.cap, have = B.cars;
   var sum = $('#loadinSum');
   if (sum){
-    sum.innerHTML = '出店予定 <b>' + rows.length + '社</b>（およそ <b>' + have + '台</b>）。'
-      + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + ' は '
-      + slots.length + '枠 × ' + LOADIN.cap + '台 ＝ <b>のべ' + cap + '台</b>まで。'
+    /*
+     * **初めて見る人が、この1行だけで意味を取れること。**
+     * 以前は「6枠 × 8台 ＝ のべ48台」と書いていたが、
+     * 「枠」が何かをどこにも書いていなかった（2026-09-09、検証役が発見）。
+     * 「出店予定」も、審査中・未確認を含むので誤解を招いていた。
+     */
+    sum.innerHTML =
+      '搬入は <b>' + esc(LOADIN.from) + '〜' + esc(LOADIN.to) + '</b>。'
+      + LOADIN.step + '分ごとに区切って、<b>1回に' + LOADIN.cap + '台</b>までお通しできます'
+      + '（この時間で合計 <b>' + cap + '台</b>まで）。<br>'
+      + 'いま数えているのは <b>' + rows.length + '社</b>'
+      + '（不採択・辞退などを除いた全部。およそ <b>' + have + '台</b>）。'
+      + (undecided.n
+          ? ' このうち <b>' + undecided.n + '社</b>は、まだ搬入時刻が決まっていません。'
+          : ' <b>全社の搬入時刻が決まりました。</b>')
       + (have > cap
-          ? ' <b class="liwarn">全体で入りきりません。</b>搬入の時間を延ばすか、'
-            + '前日搬入をご相談ください。'
+          ? '<br><b class="liwarn">この台数では、搬入の時間に入りきりません。</b>'
+            + '搬入の時間を延ばすか、前日搬入をご相談ください。'
           : '');
   }
   var num = $('#loadinNum');
@@ -2175,19 +2188,48 @@ function bulkLoadIn(){
     return;
   }
 
-  var byId = {};
+  // 素の {} にしない。'constructor' という受付IDで誤動作する（この案件の規約）
+  var byId = Object.create(null);
   (S.list ? S.list.rows : []).forEach(function(x){ byId[x['受付ID']] = x; });
 
-  var picked = ids.map(function(id){ return byId[id]; })
-                  .filter(function(x){ return !!x; });
+  var all = ids.map(function(id){ return byId[id]; })
+               .filter(function(x){ return !!x; });
+  /*
+   * **来ない相手（不採択・辞退・キャンセル・重複）には入れない。**
+   * 入れても時間割には現れないので（数から外しているため）、
+   * 「12社に入れました」と出たのに合計が9社ぶんしか増えない、という
+   * 説明のつかない状態になる。**黙って落とさず、件数を伝える。**
+   */
+  var picked = all.filter(function(x){
+    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
+  });
+  var skipped = all.length - picked.length;
+  if (!picked.length){
+    toast('選んだ相手は全員、不採択・辞退などのため入れられません', true);
+    return;
+  }
 
   var already = picked.filter(function(x){ return hhmmToMin(x['搬入予定時刻']) !== null; });
   var overwrite = false;
   if (already.length){
-    overwrite = confirm(already.length + '社には、すでに搬入予定時刻が入っています。' + NL
-      + '「OK」を押すと**上書き**します。' + NL
-      + '「キャンセル」を押すと、その ' + already.length + '社は**そのまま**にして、'
-      + '残りだけ入れます。');
+    /*
+     * ■ 星印を書かない
+     *   ここはブラウザの素の確認窓で、Markdown を解釈しない。
+     *   ** と書くと記号がそのまま出る（2026-09-09、検証役が発見）。
+     *
+     * ■ 「キャンセル」で**何も起きない**ようにする
+     *   以前は キャンセル＝「残りだけ入れる」だった。
+     *   人は「キャンセル＝やめる」と読むし、ESCキーも同じ扱いになる。
+     *   **押す前に予想できない動きを作らない。**
+     *   上書きするかどうかは、下の最終確認の文面に畳んだ。
+     */
+    overwrite = confirm(already.length + '社には、すでに搬入予定時刻が入っています。' + NL + NL
+      + '「OK」＝その ' + already.length + '社は今のままにして、残りにだけ入れます。' + NL
+      + '「キャンセル」＝何もしません。' + NL + NL
+      + '（すでに入っている時刻も入れ直したいときは、'
+      + 'いったんその社の時刻を消してから、もう一度お試しください）');
+    if (!overwrite) return;      // キャンセル＝中止。**残りを入れたりしない**
+    overwrite = false;           // 上書きはしない（この経路では常にそのまま）
   }
   var todo = overwrite ? picked
     : picked.filter(function(x){ return hhmmToMin(x['搬入予定時刻']) === null; });
@@ -2196,9 +2238,17 @@ function bulkLoadIn(){
     return;
   }
 
-  // 区画の順に並べて、枠に詰める。中身は src/loadin.js
-  // （端の場合が多いので、形を見る検査ではなく test/loadin.test.js で見ている）
-  var assign = loadinPlan(todo, from, LOADIN.step, LOADIN.cap);
+  /*
+   * 区画の順に並べて、枠に詰める。中身は src/loadin.js。
+   *
+   * **すでにその枠にいる社を数えてから詰める。**
+   * 数えないと、10社を9:30に入れたあと別の20社をまた9:30から詰めてしまい、
+   * 「最後の社は10:00です」ときれいな計画を見せながら、実際は9:30に上限の倍が来る。
+   * **押す前に見せる、という約束が嘘になる**（2026-09-09、検証役が発見）。
+   */
+  var occupied = loadinOccupied(loadinTargets(), from, LOADIN.step,
+                                todo.map(function(x){ return x['受付ID']; }));
+  var assign = loadinPlan(todo, from, LOADIN.step, LOADIN.cap, occupied);
 
   var last = assign.length ? assign[assign.length - 1].at : '';
   var lines = assign.slice(0, 12).map(function(a){
@@ -2206,8 +2256,25 @@ function bulkLoadIn(){
   }).join(NL);
   var more = assign.length > 12 ? NL + '　…ほか ' + (assign.length - 12) + '社' : '';
 
+  /*
+   * **窓からはみ出すなら、押す前に言う。**
+   * 「報せるが、止めない」の「報せる」が半分しか無かった。
+   * 言わないと、押した直後に時間割が「窓の外」と自分の操作結果を警告する
+   * （2026-09-09、検証役が発見）。
+   */
+  var over = assign.filter(function(a){
+    var t = hhmmToMin(a.at);
+    return t === null || t < hhmmToMin(LOADIN.from) || t >= hhmmToMin(LOADIN.to);
+  }).length;
+  var warn = over
+    ? NL + '⚠ このうち ' + over + '社は、搬入の時間（'
+      + LOADIN.from + '〜' + LOADIN.to + '）の外になります。' + NL
+    : '';
+  var skipMsg = skipped
+    ? NL + '（不採択・辞退などの ' + skipped + '社は、入れません）' + NL : '';
+
   if (!confirm(assign.length + '社に、搬入予定時刻を入れます。' + NL
-      + '最後の社は ' + last + ' です。' + NL + NL
+      + '最後の社は ' + last + ' です。' + warn + skipMsg + NL
       + lines + more + NL + NL
       + '変更履歴に前の値ごと残るので、あとから戻せます。' + NL + NL
       + 'よろしいですか？')) return;
@@ -2304,7 +2371,7 @@ function renderConfirmBlock(cf, status){
   if (!cf || !cf.ok){
     box.innerHTML = '<h4 class="dsec">採択後にいただいた情報</h4>'
       + '<p class="dnote warn">読み込めませんでした。'
-      + 'スプレッドシートの「出店確定情報」シートをご確認ください。</p>';
+      + '「出店確定情報」の記録をご確認ください。</p>';
     return;
   }
   if (!cf.submitted){
@@ -3743,7 +3810,7 @@ function bcRenderTargets(r){
       + '<br><b>事務局にご連絡ください</b>'
       + '（連絡先は「設定」タブの「事務局の連絡先」に出ています）。'
       + '「一斉メールの準備をお願いします」とお伝えいただければ通じます。'
-      + '<br><small>［技術メモ：スプレッドシートの Apps Script から setup() を1回実行し、'
+      + '<br><small>［技術メモ：記録用シートの Apps Script から setup() を1回実行し、'
       + 'この画面を開き直してください］</small></p>';
   }
   if (r.tooMany){
@@ -4666,7 +4733,29 @@ document.addEventListener('DOMContentLoaded', function(){
     var at = row.getAttribute('data-at');
     // もう一度押したら解除。**入れたきり戻せない絞り込みを作らない**
     S.loadinAt = (S.loadinAt === at) ? null : at;
+    /*
+     * **他の絞り込みは外す。**
+     * 時間割は全件を数えているので、他の絞り込みが残っていると
+     * 「9:30 に4社」と出ている枠を押して2件しか出ない、という食い違いになる。
+     * 説明文（「その枠の出店者だけに絞り込みます」）とも合わなくなる。
+     */
+    if (S.loadinAt != null){
+      $('#fQ').value = ''; $('#fStatus').value = ''; $('#fType').value = '';
+      $('#fSize').value = ''; $('#fDay').value = '';
+      $('#fMine').checked = false; $('#fDup').checked = false;
+    }
+    /*
+     * **これも絞り込みなので、選択を捨てる。**
+     * 捨てないと「10社選ぶ → 9:30 の枠で4社に絞る →
+     * 選んだ出店者へメールを書く」で、**画面に出ていない6社にも送れる**。
+     * 引き継ぎ書が「この機能でいちばん危ない形」と名指ししているもの。
+     * しかも選択バーには「絞り込みを変えると消えます」と書いてある（＝嘘になる）。
+     * （2026-09-09、検証役が発見。私はこの一覧に自分の絞り込みを登録し忘れた）
+     */
+    var had = bcPickIds().length;
+    bcPickClear();
     renderList();
+    if (had) toast('絞り込みが変わったので、選んでいた' + had + '社を解除しました');
   });
   $('#bcPreview').addEventListener('click', bcDoPreview);
   $('#bcSend').addEventListener('click', bcDoSend);
@@ -7209,8 +7298,11 @@ const HOWTO = {
     // 左端のチェック欄の説明がどこにも無く、初めて見る人は
     // 「印刷用？削除用？」と迷った（2026-09-08 の検証で指摘）。
     // 管理者にしか出ない欄なので、この項目も管理者向けの言い方にする
-    ['選ぶ（左端の欄・管理者のみ）', 'チェックを入れると、表の下に'
-                       + '「選んだ出店者へメールを書く」が出ます。'
+    ['選ぶ（左端の欄）', 'チェックを入れると、表の下に操作のバーが出ます。'
+                       + '**まとめてステータスを変える**・**まとめて搬入時刻を入れる**は、'
+                    + 'どなたでもお使いいただけます。'
+                    + '「選んだ出店者へメールを書く」は管理者だけに出ます。'
+                    + 'どれも、押した先で内容を確かめてから実行します。'
                        + '**押しても、まだメールは送りません。**'
                        + '文面を書く画面（メール送信タブ）に移るだけです。'
                        + '**検索や絞り込みを変えると、チェックは消えます**'
@@ -7288,7 +7380,8 @@ const HOWTO = {
     ['誰が触れるか', '**全員です。**制作スケジュールと同じで、'
                   + '追加も編集も削除もできます。保存のたびに、'
                   + '誰が何件にしたかが「変更履歴」タブに残ります。'
-                  + '**元に戻したいときは、スプレッドシートの「版の履歴」**から戻せます。'],
+                  + '**元に戻したいときは、事務局にご連絡ください。**'
+                  + '保存の前の状態に戻せます（連絡先は「設定」タブに出ています）。'],
   ]],
   map: ['出店エリアマップの見かた', [
     ['マス目', '1つが1区画（約2.7m×3.6m）です。'
@@ -7444,7 +7537,7 @@ const HOWTO = {
                        + '金額を変えると、紙を刷り直すまでフォームと紙で違う金額が出ます。'
                        + '食い違っているあいだは、レンタル備品の表の上に警告が出ます。'],
     ['レンタル備品', 'この画面の一番上の表で、品目・単価・上限をそのまま直せます。'
-                   + 'スプレッドシートを開く必要はありません。'
+                   + ''
                    + '単価を空欄にすると「調整中」になり、その品目は応募フォームに出ません。'],
     ['テストデータの一括削除', 'ONにすると、「出店者一覧」タブの下に削除の入口が出ます。'
                           + '**応募・確定情報・変更履歴を完全に消します（元に戻せません）。**'

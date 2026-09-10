@@ -61,11 +61,21 @@ describe('車両の台数', () => {
    * 0 にすると、確定情報がまだの社が多いあいだ「空いている」に見えてしまう。
    * 既定値は、混雑を多めに見せる側へ倒す。
    */
-  test('未提出は1台として数える', () => {
-    assert.strictEqual(L.loadinCarsOf(row('SB-0001')), 1);
-    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, '')), 1);
-    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, 0)), 1);
-    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, 'たくさん')), 1);
+  test('まだ答えていない社は、1台として数える', () => {
+    assert.strictEqual(L.loadinCarsOf(row('SB-0001')), 1, '欄そのものが無い');
+    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, '')), 1, '空欄');
+    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, 'たくさん')), 1, '読めない値');
+  });
+
+  /*
+   * **「0台と答えた」と「まだ答えていない」は別物。**
+   * 徒歩搬入は正当な回答（応募項目の既定値も 0）。
+   * それを1台に数えると「全体で入りきりません」が誤って点灯する
+   * （2026-09-09、検証役の指摘）。
+   */
+  test('0台と答えた社は、0台として数える', () => {
+    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, 0)), 0);
+    assert.strictEqual(L.loadinCarsOf(row('SB-0001', 1, '0')), 0);
   });
 
   test('出ていれば、その台数', () => {
@@ -258,5 +268,67 @@ describe('画面へ書き出す塊', () => {
     for (const bad of ['require(', 'module.', 'exports']) {
       assert.ok(!src.includes(bad), '書き出す塊が ' + bad + ' を参照しています');
     }
+  });
+});
+
+/**
+ * すでにその枠にいる社を数えてから配る（2026-09-09、検証役の指摘）。
+ *
+ * 数えないと、10社を9:30に入れたあと別の20社をまた9:30から詰めてしまい、
+ * **「押す前に見せた計画」と、実際の混み具合が食い違う。**
+ * 一斉メールの事故（報せる側と実際にやる側のずれ）と同じ形。
+ */
+describe('すでにいる社を数えて配る', () => {
+  const F = 570, STEP = 10, CAP = 8;
+
+  const at = (id, sp, cars, time) =>
+    Object.assign(row(id, sp, cars), { '搬入予定時刻': time });
+
+  test('埋まっている枠を飛ばす', () => {
+    const existing = [at('A', 1, 8, '9:30')];
+    const todo = [row('B', 2, 4)];
+    const occ = L.loadinOccupied(existing.concat(todo), F, STEP,
+                                 todo.map(r => r['受付ID']));
+    const plan = L.loadinPlan(todo, F, STEP, CAP, occ);
+    assert.strictEqual(plan[0].at, '9:40',
+      'すでに8台いる9:30に重ねています：' + plan[0].at);
+  });
+
+  test('数えないと重なる（この検査が意味を持つことの確認）', () => {
+    const todo = [row('B', 2, 4)];
+    const plan = L.loadinPlan(todo, F, STEP, CAP);   // occupied を渡さない
+    assert.strictEqual(plan[0].at, '9:30',
+      '渡さなければ先頭から詰めるはずです');
+  });
+
+  test('半端に埋まっている枠には、入る分だけ入れる', () => {
+    const existing = [at('A', 1, 5, '9:30')];
+    const todo = [row('B', 2, 3), row('C', 3, 3)];
+    const occ = L.loadinOccupied(existing.concat(todo), F, STEP,
+                                 todo.map(r => r['受付ID']));
+    const plan = L.loadinPlan(todo, F, STEP, CAP, occ);
+    assert.deepStrictEqual(plan.map(p => p.at), ['9:30', '9:40'],
+      '5台+3台=8台（ちょうど上限）まで入れて、次を送るはずです');
+  });
+
+  /*
+   * **これから入れる相手は、数に入れない。**
+   * 入れてしまうと、その社の分だけ枠が狭くなって、
+   * 押すたびに時刻がじりじり後ろへずれていく。
+   */
+  test('これから入れ直す社は、すでにいる数から外す', () => {
+    const rows = [at('A', 1, 8, '9:30')];
+    const occ = L.loadinOccupied(rows, F, STEP, ['A']);
+    assert.deepStrictEqual(occ, {}, '入れ直す社を数に入れています：' + JSON.stringify(occ));
+  });
+
+  test('枠の途中の時刻でも、その枠の数に入る', () => {
+    const occ = L.loadinOccupied([at('A', 1, 3, '9:35')], F, STEP, []);
+    assert.strictEqual(occ[570], 3, '9:35 が 9:30 の枠に入っていません：' + JSON.stringify(occ));
+  });
+
+  test('時刻が入っていない社は、どの枠にも数えない', () => {
+    const occ = L.loadinOccupied([row('A', 1, 3)], F, STEP, []);
+    assert.deepStrictEqual(occ, {});
   });
 });

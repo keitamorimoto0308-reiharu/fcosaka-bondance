@@ -30,7 +30,7 @@ R = pathlib.Path(__file__).resolve().parent.parent
 # **壊す場所と、落ちる検査を対にする**（引き継ぎ書 §3 の失敗パターン7）。
 #   gas/Admin.gs      → test/admin-edit.test.js
 #   src/build-admin.js → test/admin.test.js（画面の性質を見る）
-TARGETS = ['test/admin-edit.test.js', 'test/admin.test.js']
+TARGETS = ['test/admin-edit.test.js', 'test/admin.test.js', 'test/loadin.test.js']
 
 
 def run():
@@ -84,8 +84,37 @@ def case(label, edits, expect):
 
 ADMIN = 'gas/Admin.gs'
 PAGE = 'src/build-admin.js'
+CALC = 'src/loadin.js'
 
 CASES = [
+    # ── 検証役3体の指摘（2026-09-09）を、二度と戻さないための壊し方 ──────
+    # H-1：枠を押しても選択が残る＝**画面に出ていない相手にメールが飛ぶ**。
+    #      この案件が「いちばん危ない形」と名指ししているもの
+    ('枠を押しても、選んだ相手を解除しない', [
+        (PAGE, '    var had = bcPickIds().length;\n    bcPickClear();\n    renderList();',
+               '    var had = 0;\n    renderList();'),
+    ], '枠を押したときに、選んだ相手を解除していません'),
+
+    # 高3：既にいる社を数えないと、「押す前に見せた計画」が嘘になる
+    ('すでにその枠にいる社を、数えずに配る', [
+        (PAGE, '  var assign = loadinPlan(todo, from, LOADIN.step, LOADIN.cap, occupied);',
+               '  var assign = loadinPlan(todo, from, LOADIN.step, LOADIN.cap);'),
+    # 落ちるのは test/admin.test.js のほう（画面が渡しているかを見る検査）。
+    # test/loadin.test.js は loadinPlan を直接呼ぶので、画面を壊しても落ちない。
+    # なお loadinOccupied() の呼び出し自体は残るので、
+    # 反応するのは「渡しているか」を見る2つ目の assert
+    ], '数えた結果を loadinPlan に渡していません'),
+
+    ('入れ直す社まで「すでにいる」に数える', [
+        (CALC, "    if (skip[String(x['受付ID'])]) return;", '    if (false) return;'),
+    ], '入れ直す社を数に入れています'),
+
+    # 低2：0台と答えた社を1台に数えると、「入りきりません」が誤って点灯する
+    ('0台と答えた社も、1台として数える', [
+        (CALC, "  if (raw === '' || raw === null || raw === undefined) return 1;   // まだ答えていない",
+               "  if (raw === '' || raw === null || raw === undefined || Number(raw) === 0) return 1;"),
+    ], '0台と答えた社は、0台として数える'),
+
     # ── 報せる側と、実際にやる側がずれる ───────────────────
     # この案件は同じ形で一度事故を起こしている（一斉メールのプレビューは
     # 「この行は消えます」と正しく警告したのに、本文では消えていなかった）。

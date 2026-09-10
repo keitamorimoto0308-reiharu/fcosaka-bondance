@@ -136,6 +136,11 @@ describe('時刻が、すべての置き場所で揃っているか', () => {
       JSON.stringify(C.FACTS), JSON.stringify(C.OUTLINE),
       read('gas/Mail.gs'), read('gas/Notify.gs'),
       read('src/schema.js'),
+      // 7か所目（2026-09-09、検証役が発見）。src/mock.js は gas/Mail.gs の
+      // eventFactsBlock_ の写しを持っていて、メール文面の下見に出る。
+      // **6か所目を直したその日のうちに、7か所目が見つかった。**
+      // 「n か所」と数えるのをやめ、置き場所が増えたら網も広げること。
+      read('src/mock.js'),
     ].join('\n');
     ['8:30〜10:30', '17:30〜19:30', '16:30〜',
      '8:30〜9:00', '9:00〜9:30', '17:30より前'].forEach(old => {

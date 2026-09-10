@@ -125,7 +125,9 @@ function makeBox(opts) {
   const ADMIN = read('gas/Admin.gs');
   // indexOf_ は列が無ければ例外を投げる。**この厳しさごと**借りるのが要点
   // safeCellText_ は「シートで数式として動く値」を止める。**本物を借りる**
-  ['indexOf_', 'liveRows_', 'cell_', 'asText_', 'safeCellText_'].forEach(fn => {
+  // timeText_ … 時刻だけの列の読み口。asText_ で代用すると Date が日付つきに化け、
+  //             そのまま {{搬入予定時刻}} で実在企業へ飛ぶ（2026-09-09）
+  ['indexOf_', 'liveRows_', 'cell_', 'asText_', 'timeText_', 'safeCellText_'].forEach(fn => {
     vm.runInContext(GASBOX.cutFunction(ADMIN, fn), box);
   });
   vm.runInContext(ADMIN.slice(ADMIN.indexOf('var COL = {'),

@@ -29,6 +29,8 @@ const MARKERS = [
   { page: 'admin.html', published: 'admin.html', keys: [
     'data-tab="mail"',      // メール送信タブ
     'loadNotify',           // その動き
+    'pickLoadIn',           // まとめて搬入時刻を入れる（2026-09-09）
+    'loadinBox',            // 搬入の時間割
   ] },
   // 応募フォームは preview.html として公開されている
   { page: 'index.html', published: 'preview.html', keys: [

@@ -355,7 +355,9 @@ function broadcastRows_(L, ids) {
       email:    asText_(cell_(H, r, COL.email)).trim(),
       status:   asText_(cell_(H, r, COL.status)).trim(),
       block:    broadcastBlock_(cell_(H, r, COL.spaceStart), cell_(H, r, COL.spaceUnits)),
-      inAt:     asText_(cell_(H, r, COL.inAt)).trim(),
+      // **asText_ を使わない。** Date だと日付つきに化けて、
+      // それがそのまま {{搬入予定時刻}} で実在企業へ飛ぶ（取り消せない）
+      inAt:     timeText_(cell_(H, r, COL.inAt)),
     };
 
     if (BROADCAST_BLOCKED_STATUS.indexOf(rec.status) >= 0) { out.blocked.push(rec); return; }
