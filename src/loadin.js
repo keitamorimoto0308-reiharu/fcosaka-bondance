@@ -24,6 +24,30 @@
  * エラーも出さずに何にもマッチしなくなる**（引き継ぎ書 §8。実地で9回踏んでいる）。
  */
 
+/**
+ * その社は、当日ほんとうに来るか。
+ *
+ * ■ 判定は1か所だけ
+ *   時間割が数える相手・枠を押したときに出る相手・まとめて時刻を入れる相手は、
+ *   全部これを通す。写しを作ると片方だけ古くなり、
+ *   「12社に入れました」と出たのに合計が9社ぶんしか増えない、が起きる。
+ *
+ * ■ なぜ画面ではなく、ここに置くか（2026-09-10）
+ *   画面に置いていたときは「呼んでいるか」しか検査できず、
+ *   **判定を逆にしても、どのテストも落ちなかった**（壊し検査が暴いた）。
+ *   逆になると、不採択の社が時間割に出て、採択の社が消える。
+ *
+ * ■ 未確認・審査中は「まだ分からない」ので**数に入れる**
+ *   来ないと決まった相手（不採択・辞退・キャンセル・重複）だけを外す。
+ */
+function loadinSkipList() {
+  return ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+}
+
+function loadinComing(x) {
+  return loadinSkipList().indexOf(String((x || {})['ステータス'] || '')) < 0;
+}
+
 /** 「9:30」→ 570。読めなければ null（**空文字も null**） */
 function loadinToMin(t) {
   var s = String(t == null ? '' : t).trim();
@@ -196,13 +220,15 @@ function loadinOccupied(rows, fromMin, stepMin, exceptIds) {
  * `src/build-admin.js` がこれをテンプレートに埋め込む。
  */
 function loadinSource() {
-  return [loadinToMin, loadinAllDigits, loadinToHhmm, loadinCarsOf,
-          loadinBuckets, loadinPlan, loadinOccupied]
+  return [loadinSkipList, loadinComing, loadinToMin, loadinAllDigits,
+          loadinToHhmm, loadinCarsOf, loadinBuckets, loadinPlan, loadinOccupied]
     .map(function (fn) { return fn.toString(); })
     .join(String.fromCharCode(10) + String.fromCharCode(10));
 }
 
 module.exports = {
+  loadinSkipList: loadinSkipList,
+  loadinComing: loadinComing,
   loadinToMin: loadinToMin,
   loadinAllDigits: loadinAllDigits,
   loadinOccupied: loadinOccupied,

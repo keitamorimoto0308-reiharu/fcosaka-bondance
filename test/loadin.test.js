@@ -332,3 +332,55 @@ describe('すでにいる社を数えて配る', () => {
     assert.deepStrictEqual(occ, {});
   });
 });
+
+/**
+ * 当日ほんとうに来るか、の判定。
+ *
+ * ■ なぜ「呼べる形」で検査するか（2026-09-10）
+ *   以前は画面（src/build-admin.js）にあり、検査は
+ *   「loadinComing を**呼んでいるか**」しか見られなかった。
+ *   そのため**判定を逆にしても、どのテストも落ちなかった**（壊し検査が暴いた）。
+ *   逆になると、不採択の社が時間割に出て、**採択の社が消える**。
+ */
+describe('当日ほんとうに来るか', () => {
+
+  test('来ないと決まった相手は、外す', () => {
+    for (const st of ['不採択', '辞退', 'キャンセル', '重複（無効）']) {
+      assert.strictEqual(L.loadinComing({ 'ステータス': st }), false,
+        '「' + st + '」を数に入れています');
+    }
+  });
+
+  /*
+   * **未確認・審査中は「まだ分からない」ので数に入れる。**
+   * 外すと、選考前は時間割がほぼ空になり、混雑を見積もれない。
+   */
+  test('まだ決まっていない相手は、数に入れる', () => {
+    for (const st of ['未確認', '審査中', '採択']) {
+      assert.strictEqual(L.loadinComing({ 'ステータス': st }), true,
+        '「' + st + '」を数から外しています');
+    }
+  });
+
+  test('ステータスが空でも、数に入れる（外すのは来ないと決まった相手だけ）', () => {
+    assert.strictEqual(L.loadinComing({}), true);
+    assert.strictEqual(L.loadinComing({ 'ステータス': '' }), true);
+    assert.strictEqual(L.loadinComing(null), true);
+  });
+
+  test('外す一覧が、想定どおり4つ', () => {
+    // 増減したら、上の2つの検査も見直すこと
+    assert.deepStrictEqual(L.loadinSkipList(),
+      ['不採択', '辞退', 'キャンセル', '重複（無効）']);
+  });
+
+  test('数えるときも、この判定を通っている', () => {
+    // 時間割の集計が、来ないと決まった相手を数えていないこと
+    const rows = [
+      { '受付ID': 'A', 'ステータス': '採択', '搬入予定時刻': '9:30' },
+      { '受付ID': 'B', 'ステータス': '不採択', '搬入予定時刻': '9:30' },
+    ];
+    const coming = rows.filter(L.loadinComing);
+    assert.deepStrictEqual(coming.map(r => r['受付ID']), ['A']);
+  });
+});

@@ -619,18 +619,23 @@ describe('搬入の時間割：数える相手と、出す相手', () => {
     assert.fail(head + ' の閉じ括弧が見つかりません');
   }
 
-  test('来ない相手かの判定が、1か所だけにある', () => {
-    const n = PAGE.split('var LOADIN_SKIP').length - 1;
-    assert.strictEqual(n, 1,
-      'LOADIN_SKIP が ' + n + ' か所にあります（写しを持つと、片方だけ古くなる）');
+  test('来ない相手かの判定を、画面に書き写していない', () => {
     /*
-     * **判定そのものも1か所。**
-     * 2026-09-10 まで、同じ `LOADIN_SKIP.indexOf(...)` が3か所に写されていた。
-     * 写しがあると、壊し検査の目印も複数の場所に当たる（別の場所を壊す）。
+     * 判定は src/loadin.js（loadinComing）に置く。
+     *
+     * **画面に置くと、検査は「呼んでいるか」しか見られない。**
+     * 2026-09-10、判定を逆にしてもどのテストも落ちなかった
+     * （壊し検査が暴いた）。逆になると、不採択の社が時間割に出て、
+     * **採択の社が消える**。
      */
-    const uses = PAGE.split('LOADIN_SKIP.indexOf').length - 1;
-    assert.strictEqual(uses, 1,
-      '判定が ' + uses + ' か所に写されています。loadinComing() に一本化してください');
+    const copies = PAGE.split('var LOADIN_SKIP').length - 1;
+    assert.strictEqual(copies, 0,
+      '画面が来ない相手の一覧を持っています（' + copies + 'か所）。'
+      + 'src/loadin.js の loadinSkipList() に一本化してください');
+    assert.ok(PAGE.includes('loadinComing'),
+      '画面が loadinComing を使っていません');
+    assert.ok(PAGE.includes('loadinSource()'),
+      '切り出した塊を画面に書き出していません');
   });
 
   test('時間割が数える相手を、その一覧で絞っている', () => {

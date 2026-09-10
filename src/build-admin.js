@@ -2063,8 +2063,7 @@ var LOADIN = {
   cap:  8,    // 1枠に入れてよい車両の台数
 };
 
-/* 来ない相手は数えない。未確認・審査中は「まだ分からない」ので数に入れる */
-var LOADIN_SKIP = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+/* 来ない相手かの判定は src/loadin.js（loadinComing）。ここには写しを持たない */
 
 /*
  * 下の塊は src/loadin.js から書き出したもの。
@@ -2077,18 +2076,6 @@ ${loadinSource()}
 function hhmmToMin(t){ return loadinToMin(t); }
 function minToHhmm(n){ return loadinToHhmm(n); }
 function loadinCars(x){ return loadinCarsOf(x); }
-
-/**
- * その社は、当日ほんとうに来るか。
- *
- * **判定は1か所だけに置く。**
- * 時間割が数える相手・枠を押したときに出る相手・まとめて時刻を入れる相手は、
- * 全部これを通す。写しを作ると、片方だけ古くなって
- * 「12社に入れました」と出たのに合計が9社ぶんしか増えない、が起きる。
- */
-function loadinComing(x){
-  return LOADIN_SKIP.indexOf(String((x || {})['ステータス'] || '')) < 0;
-}
 
 function loadinTargets(){
   if (!S.list) return [];
