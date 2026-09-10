@@ -2325,7 +2325,7 @@ function filtered(){
        * 引き継ぎ書の一斉メールの事故と同じ——**報せる側と、実際にやる側がずれる。**
        * （2026-09-09、画面で押して見つけた。検査は両方とも緑だった）
        */
-      if (LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) >= 0) return false;
+      if (!loadinComing(x)) return false;
       var lt = hhmmToMin(x['搬入予定時刻']);
       if (S.loadinAt === ''){
         if (lt !== null) return false;          // 「未定」の枠
@@ -2793,14 +2793,21 @@ var LOADIN = {
   cap:  8,    // 1枠に入れてよい車両の台数
 };
 
-/* 来ない相手は数えない。未確認・審査中は「まだ分からない」ので数に入れる */
-var LOADIN_SKIP = ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+/* 来ない相手かの判定は src/loadin.js（loadinComing）。ここには写しを持たない */
 
 /*
  * 下の塊は src/loadin.js から書き出したもの。
  * **画面と検査が、同じコードを呼ぶ**（写しを2つ持つと必ずズレる）。
  * 中身の検査は test/loadin.test.js。
  */
+function loadinSkipList() {
+  return ['不採択', '辞退', 'キャンセル', '重複（無効）'];
+}
+
+function loadinComing(x) {
+  return loadinSkipList().indexOf(String((x || {})['ステータス'] || '')) < 0;
+}
+
 function loadinToMin(t) {
   var s = String(t == null ? '' : t).trim();
   var i = s.indexOf(':');
@@ -2929,9 +2936,7 @@ function loadinCars(x){ return loadinCarsOf(x); }
 
 function loadinTargets(){
   if (!S.list) return [];
-  return S.list.rows.filter(function(x){
-    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
-  });
+  return S.list.rows.filter(loadinComing);
 }
 
 function renderLoadIn(){
@@ -3049,9 +3054,7 @@ function bulkLoadIn(){
    * 「12社に入れました」と出たのに合計が9社ぶんしか増えない、という
    * 説明のつかない状態になる。**黙って落とさず、件数を伝える。**
    */
-  var picked = all.filter(function(x){
-    return LOADIN_SKIP.indexOf(String(x['ステータス'] || '')) < 0;
-  });
+  var picked = all.filter(loadinComing);
   var skipped = all.length - picked.length;
   if (!picked.length){
     toast('選んだ相手は全員、不採択・辞退などのため入れられません', true);
