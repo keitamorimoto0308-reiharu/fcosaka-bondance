@@ -759,7 +759,7 @@ var FIELDS = [
     "stage": "confirm",
     "type": "radio",
     "required": false,
-    "label": "18:00より前の撤収",
+    "label": "営業終了（17:30）より前の撤収",
     "sheet": "早期撤収希望",
     "options": [
       "希望しない",
