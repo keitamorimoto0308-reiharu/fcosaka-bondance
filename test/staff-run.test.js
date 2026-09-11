@@ -104,10 +104,10 @@ test('名前を直しても、メール・役割・管理ページ利用は消�
   assert.strictEqual(r[6], '管理者', '役割が消えました');
 });
 
-test('足りない4人が、メール空で登録される', () => {
+test('足りない6人が、メール空で登録される', () => {
   const { grid } = run(NOW);
   const p = byName(grid);
-  ['成田', '田中', '木口', '阿部'].forEach(n => {
+  ['成田', '田中', '木口', '阿部', '佐藤', '奥村'].forEach(n => {
     const r = p[n + '@FC大阪'];
     assert.ok(r, n + ' が登録されていません');
     assert.strictEqual(r[1], 'FC大阪');
@@ -126,12 +126,31 @@ test('FC大阪の田中と、LOPの田中が別人として並ぶ', () => {
   assert.strictEqual(p['田中　浩弥@LOP'][3], 'tanaka@lop.test', 'LOPの田中のメールが消えました');
 });
 
-test('フォームに出るのは、FC大阪の5名だけ', () => {
+test('フォームに出るのは、FC大阪の7名だけ', () => {
+  // 2026-09-11 けいた指示で佐藤・奥村が加わった（5名 → 7名）
   const { grid } = run(NOW);
   const shown = grid.slice(1).filter(r => String(r[4]).trim() === '有効')
                     .map(r => String(r[0]).trim()).sort();
-  assert.deepStrictEqual(shown, ['小谷', '成田', '木口', '田中', '阿部'].sort(),
+  assert.deepStrictEqual(shown,
+    ['小谷', '成田', '木口', '田中', '阿部', '佐藤', '奥村'].sort(),
     'フォームに出る人が想定と違います：' + shown.join('／'));
+});
+
+test('管理ページで先に登録した人は、行を足さずにフォームへ出し、メールを残す', () => {
+  // 2026-09-11 の本番がこの形：佐藤・奥村は管理ページの「FC大阪の担当者」タブで
+  // 先に登録した（メールあり・フォームには「出さない」）。
+  // そのあと setup() が走っても、**2人目の佐藤を足したり、メールを消したり**してはいけない
+  const rows = NOW.concat([
+    ['佐藤', 'FC大阪', '', 'sato@fcosaka.test', '無効', '無', '一般', 'OFF'],
+    ['奥村', 'FC大阪', '', 'okumura@fcosaka.test', '無効', '無', '一般', 'OFF'],
+  ]);
+  const { grid } = run(rows);
+  [['佐藤', 'sato@fcosaka.test'], ['奥村', 'okumura@fcosaka.test']].forEach(([n, mail]) => {
+    const hits = grid.slice(1).filter(r => String(r[0]).trim() === n);
+    assert.strictEqual(hits.length, 1, n + ' が ' + hits.length + ' 行になりました');
+    assert.strictEqual(hits[0][3], mail, n + ' のメールが消えました');
+    assert.strictEqual(hits[0][4], '有効', n + ' がフォームに出ません');
+  });
 });
 
 test('外した人も、行は消さない（1クリックで戻せる）', () => {
