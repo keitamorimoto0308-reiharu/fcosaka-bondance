@@ -32,6 +32,11 @@ var SECTIONS = [
     "desc": ""
   },
   {
+    "id": "co2",
+    "title": "CO2の算定（カーボンオフセット）",
+    "desc": "このイベントで出るCO2は、主催者がカーボン・オフセット（埋め合わせ）します。その算定に使う数字を伺います。排出量の多い少ないで、出店をお断りすることはありません。正確に分からない項目は、空欄にせず「多めの見込み」でご記入ください。"
+  },
+  {
     "id": "consent",
     "title": "ご確認",
     "desc": ""
@@ -112,7 +117,7 @@ var FIELDS = [
     "required": true,
     "label": "出店の形態",
     "sheet": "出店形態",
-    "help": "当てはまるものをすべてお選びください。",
+    "help": "当てはまるものをすべてお選びください。**飲食でご出店の場合は、出店料として売上の10%を申し受けます**（そのほかの形態は無料です）。",
     "options": [
       "飲食",
       "ワークショップ",
@@ -502,7 +507,7 @@ var FIELDS = [
     "section": "consent",
     "type": "consent",
     "required": true,
-    "label": "上記の出店条件（営業時間・車両の進入・ごみの持ち帰り・包材・天候・各種届出）を確認し、ご記入いただいた情報を本イベントの運営および告知・実施報告での紹介に使用することに同意します",
+    "label": "上記の出店条件（出店料・営業時間・車両の進入・ごみの持ち帰り・包材・天候・各種届出）を確認し、ご記入いただいた情報を本イベントの運営および告知・実施報告での紹介に使用することに同意します",
     "sheet": "同意"
   },
   {
@@ -850,6 +855,367 @@ var FIELDS = [
       "雨天でも出店する",
       "雨天の場合は出店を辞退する"
     ]
+  },
+  {
+    "key": "co2Power",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "checkboxes",
+    "required": true,
+    "label": "当日、会場で使う電源",
+    "sheet": "使用電源",
+    "help": "あてはまるものをすべてお選びください。",
+    "options": [
+      "系統電力（会場コンセント）",
+      "ガソリン発電機",
+      "軽油発電機",
+      "車両アイドリングで給電",
+      "バッテリー／ポータブル電源",
+      "ソーラー",
+      "電気は使わない",
+      "その他"
+    ]
+  },
+  {
+    "key": "co2PowerOther",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "text",
+    "label": "電源（その他の内容）",
+    "sheet": "使用電源その他",
+    "maxLength": 100,
+    "showIf": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "その他"
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "その他"
+    }
+  },
+  {
+    "key": "co2GenModel",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "text",
+    "label": "発電機のメーカー・型式",
+    "sheet": "発電機型式",
+    "maxLength": 60,
+    "help": "本体のシールに書かれています。分かる範囲で結構です。機種の違う発電機が複数ある場合は、いちばん大きいものをご記入のうえ、残りは最後の「その他 ご連絡事項」にご記入ください。",
+    "showIf": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    }
+  },
+  {
+    "key": "co2GenFuel",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "radio",
+    "label": "発電機の燃料",
+    "sheet": "発電機燃料種類",
+    "options": [
+      "ガソリン",
+      "軽油"
+    ],
+    "showIf": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    }
+  },
+  {
+    "key": "co2GenCount",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "発電機の台数",
+    "sheet": "発電機台数",
+    "min": 1,
+    "max": 20,
+    "showIf": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    }
+  },
+  {
+    "key": "co2GenHours",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "発電機の稼働時間の合計（時間）",
+    "sheet": "発電機稼働時間",
+    "min": 0,
+    "max": 24,
+    "help": "設営から撤収までで、実際に回す見込みの時間です。分からない場合は多めに。",
+    "showIf": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    }
+  },
+  {
+    "key": "co2GenLiters",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "発電機の燃料の使用量（L）",
+    "sheet": "発電機燃料使用量(L)",
+    "min": 0,
+    "max": 500,
+    "help": "当日使う見込みの量です。給油した量でも構いません。分からない場合は、持ち込む燃料の量（満タン＋携行缶）をご記入ください。",
+    "showIf": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    }
+  },
+  {
+    "key": "co2GenMethod",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "radio",
+    "label": "燃料の使用量の出し方",
+    "sheet": "発電機把握方法",
+    "help": "どのくらい確かな数字かを知るために伺っています。推計でも構いません。",
+    "options": [
+      "実際に測った",
+      "給油した量から",
+      "型式の仕様（L/時）と時間から計算した",
+      "多めの見込み（最大想定量）"
+    ],
+    "showIf": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includesAny",
+      "value": [
+        "ガソリン発電機",
+        "軽油発電機"
+      ]
+    }
+  },
+  {
+    "key": "co2IdleModel",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "text",
+    "label": "給電に使う車両の車種・型式",
+    "sheet": "給電車両型式",
+    "maxLength": 60,
+    "help": "車検証に書かれています。分かる範囲で結構です。",
+    "showIf": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    }
+  },
+  {
+    "key": "co2IdleFuel",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "radio",
+    "label": "給電に使う車両の燃料",
+    "sheet": "給電車両燃料",
+    "options": [
+      "ガソリン",
+      "軽油"
+    ],
+    "showIf": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    }
+  },
+  {
+    "key": "co2IdleHours",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "アイドリングの時間の合計（時間）",
+    "sheet": "給電車両アイドリング時間",
+    "min": 0,
+    "max": 24,
+    "showIf": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    }
+  },
+  {
+    "key": "co2IdleLiters",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "アイドリングで使う燃料の量（L）",
+    "sheet": "給電車両燃料使用量(L)",
+    "min": 0,
+    "max": 200,
+    "help": "分からない場合は、空欄にせず多めの見込みをご記入ください（車種と時間から、こちらで推計することもできます）。",
+    "showIf": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    }
+  },
+  {
+    "key": "co2IdleMethod",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "radio",
+    "label": "アイドリングの燃料の量の出し方",
+    "sheet": "給電車両把握方法",
+    "options": [
+      "実際に測った",
+      "給油した量から",
+      "車の燃費と時間から計算した",
+      "多めの見込み（最大想定量）"
+    ],
+    "showIf": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    },
+    "required": {
+      "field": "co2Power",
+      "op": "includes",
+      "value": "車両アイドリングで給電"
+    }
+  },
+  {
+    "key": "co2Lpg",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "LPG（プロパン）の合計（kg）",
+    "sheet": "LPG合計(kg)",
+    "min": 0,
+    "max": 500,
+    "help": "ボンベの規格 × 本数です。例：20kgのボンベを2本なら 40。使わない場合は 0。",
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    }
+  },
+  {
+    "key": "co2Cassette",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "カセットガス（本）",
+    "sheet": "カセットガス(本)",
+    "min": 0,
+    "max": 200,
+    "help": "使わない場合は 0。",
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    }
+  },
+  {
+    "key": "co2Charcoal",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "number",
+    "label": "炭・薪（kg）",
+    "sheet": "炭・薪(kg)",
+    "min": 0,
+    "max": 500,
+    "help": "使わない場合は 0。炭・薪は化石燃料とは扱いが異なるため、数量のみ伺います。",
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    }
+  },
+  {
+    "key": "co2FuelOther",
+    "section": "co2",
+    "stage": "confirm",
+    "type": "text",
+    "label": "その他の燃料",
+    "sheet": "その他の燃料",
+    "maxLength": 100,
+    "help": "上に当てはまらない燃料を使う場合に、種類と量をご記入ください。",
+    "showIf": {
+      "field": "boothTypes",
+      "op": "includes",
+      "value": "飲食"
+    }
   },
   {
     "key": "notes",

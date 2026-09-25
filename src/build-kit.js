@@ -149,7 +149,7 @@ h1 b{ display:block; font-size:44pt; font-weight:900; letter-spacing:.02em;
       <div class="note">${esc(C.EVENT.venueShort)}</div></div>
     <div class="fact"><div class="lab">出店料</div>
       <div><span class="big">¥0</span></div>
-      <div class="note">売上歩合なし／備品は別途</div></div>
+      <div class="note">飲食は売上の10%／備品は別途</div></div>
   </div>
   <div class="qrblk">
     ${await qrSvg(C.SITE.url)}

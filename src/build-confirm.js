@@ -107,6 +107,7 @@ function renderSections() {
     return `
     <section class="form-section" data-section="${esc(sec.id)}">
       <h2>${esc(sec.title)}</h2>
+      ${sec.desc ? `<p class="sec-desc">${esc(sec.desc)}</p>` : ''}
       ${fields.map(f => FORM.fieldHtml(f)).join('\n      ')}
     </section>`;
   }).join('');

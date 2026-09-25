@@ -1457,12 +1457,12 @@ function page() {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="format-detection" content="telephone=no">
 <title>出店者募集｜${esc(C.EVENT.name)}</title>
-<meta name="description" content="${esc(C.EVENT.date)}、${esc(C.EVENT.venue)}で開催する${esc(C.EVENT.name)}の出店者募集ページです。出店料無料。">
+<meta name="description" content="${esc(C.EVENT.date)}、${esc(C.EVENT.venue)}で開催する${esc(C.EVENT.name)}の出店者募集ページです。出店料無料（飲食は売上の10%）。">
 <meta name="robots" content="noindex">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(C.EVENT.name)}">
 <meta property="og:title" content="${esc(C.EVENT.name)}｜出店者募集">
-<meta property="og:description" content="${esc(C.EVENT.date)}／${esc(C.EVENT.venueShort)}。出店料無料。FC大阪のホームゲーム開催日にあわせた場外イベントです。">
+<meta property="og:description" content="${esc(C.EVENT.date)}／${esc(C.EVENT.venueShort)}。出店料無料（飲食は売上の10%）。FC大阪のホームゲーム開催日にあわせた場外イベントです。">
 <meta property="og:image" content="${esc(C.SITE.url)}assets/ogp.png">
 <meta property="og:url" content="${esc(C.SITE.url)}">
 <meta name="twitter:card" content="summary_large_image">

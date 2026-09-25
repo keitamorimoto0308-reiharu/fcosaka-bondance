@@ -99,6 +99,68 @@ describe('電源の条件分岐', () => {
   });
 });
 
+describe('CO2の算定（カーボンオフセット・採択後に聞く）', () => {
+  // 2026-09-25 追加。UPDATER のヒアリングシート（Part B）を、**確定情報として**聞く。
+  // 応募フォームには出さない（応募の負担を増やさない・けいた確定）。
+  // 条件が効かないと、電気を使わない方にまで発電機の欄が必須で出て、**提出できなくなる**。
+
+  test('CO2の項目は、すべて採択後（確定情報）にだけ聞く', () => {
+    const co2 = S.FIELDS.filter(f => f.section === 'co2');
+    assert.ok(co2.length >= 10, 'CO2の項目が足りません：' + co2.length);
+    const onApply = co2.filter(f => f.stage !== 'confirm').map(f => f.key);
+    assert.deepStrictEqual(onApply, [], '応募フォームに出てしまいます：' + onApply.join('／'));
+  });
+
+  test('発電機を選ぶと、台数・稼働時間・燃料の量・出し方が必須になる', () => {
+    const v = { co2Power: ['ガソリン発電機'], boothTypes: [] };
+    for (const key of ['co2GenFuel', 'co2GenCount', 'co2GenHours', 'co2GenLiters', 'co2GenMethod']) {
+      assert.equal(S.isVisible(field(key), v), true, key + ' が表示されていません');
+      assert.equal(S.isRequired(field(key), v), true, key + ' が必須になっていません');
+    }
+  });
+
+  test('軽油の発電機でも、同じように聞く', () => {
+    const v = { co2Power: ['軽油発電機'], boothTypes: [] };
+    assert.equal(S.isVisible(field('co2GenLiters'), v), true);
+    assert.equal(S.isRequired(field('co2GenMethod'), v), true);
+  });
+
+  test('電気を使わないなら、発電機も車両も聞かない', () => {
+    const v = { co2Power: ['電気は使わない'], boothTypes: [] };
+    for (const key of ['co2GenFuel', 'co2GenCount', 'co2GenHours', 'co2GenLiters', 'co2GenMethod',
+                       'co2IdleFuel', 'co2IdleHours', 'co2IdleLiters', 'co2IdleMethod']) {
+      assert.equal(S.isVisible(field(key), v), false, key + ' が表示されています');
+      assert.equal(S.isRequired(field(key), v), false, key + ' が必須になっています');
+    }
+  });
+
+  test('車両アイドリングを選んだときだけ、車両の欄を聞く', () => {
+    const off = { co2Power: ['ソーラー'], boothTypes: [] };
+    const on  = { co2Power: ['車両アイドリングで給電'], boothTypes: [] };
+    assert.equal(S.isVisible(field('co2IdleHours'), off), false, '選んでいないのに出ています');
+    assert.equal(S.isVisible(field('co2IdleHours'), on), true, '選んだのに出ていません');
+    assert.equal(S.isRequired(field('co2IdleLiters'), on), true);
+  });
+
+  test('調理用の燃料は、飲食の方にだけ聞く（どれも任意）', () => {
+    const food  = { co2Power: ['電気は使わない'], boothTypes: ['飲食'] };
+    const other = { co2Power: ['電気は使わない'], boothTypes: ['展示'] };
+    for (const key of ['co2Lpg', 'co2Cassette', 'co2Charcoal', 'co2FuelOther']) {
+      assert.equal(S.isVisible(field(key), food), true, key + ' が飲食で出ていません');
+      assert.equal(S.isVisible(field(key), other), false, key + ' が飲食以外で出ています');
+      assert.equal(S.isRequired(field(key), food), false, key + ' が必須になっています（任意のはず）');
+    }
+  });
+
+  test('電源の選択は必須。ただし「電気は使わない」を選べば答えられる', () => {
+    // 必須にしておかないと、いちばん大事な1問が空のまま提出され、
+    // 誰が電気を使うのか分からなくなる
+    assert.equal(S.isRequired(field('co2Power'), { boothTypes: [] }), true);
+    assert.ok(field('co2Power').options.includes('電気は使わない'),
+      '「電気は使わない」が無いと、電気を使わない方が答えられません');
+  });
+});
+
 describe('その他の自由記述', () => {
   test('出店形態で「その他」を選ぶと自由記述が必須になる', () => {
     const v = baseValues({ boothTypes: ['その他'] });

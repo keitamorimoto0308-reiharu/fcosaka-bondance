@@ -290,7 +290,10 @@ describe('入力の型を、実際に送って確かめる', () => {
     parkingRequest: '希望する', loadInSlot1: '9:30〜9:45', staffCount: 2,
     // 数を集める項目（2026-09-03 追加）。必須なので、通る例には必ず入れる
     passCount: 2, parkingPassCount: 1, ticketCount: 0,
-    rainPolicy: '雨天でも出店する', boothTypes: [] };
+    rainPolicy: '雨天でも出店する', boothTypes: [],
+    // CO2の算定（2026-09-25 追加）。必須なので、通る例には必ず入れる。
+    // 「電気は使わない」を選べば、発電機・車両の欄は出ない（＝条件つき必須も立たない）
+    co2Power: ['電気は使わない'] };
   const run = over => JSON.parse(JSON.stringify(
     vfl(confirmFields(), Object.assign({}, OK, over))));
 
