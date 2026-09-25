@@ -233,11 +233,19 @@ describe('募集要項PDF：値が二重管理になっていないか', () => {
     // 「9/30（火）」と書かれていたが、2026年9月30日は水曜日だった。
     // 曜日は必ず日付から導出する。
     const src = fs.readFileSync(path.join(ROOT, 'src', 'content.js'), 'utf8');
-    const hardcoded = src.match(/9月30日（[月火水木金土日]）/g) || [];
+    // 2026-09-25 に締切を 10/9 へ延ばした。日付を直書きで見張ると、
+    // 締切が動くたびにこの検査が空振りするので、いまの締切の月日から探す
+    // （開催日「10月24日（土）」は直書きでよいので、全部の日付は見ない）
+    const md = C.DEADLINE.label.match(/^(\d+)月(\d+)日/);
+    const hardcoded = src.match(new RegExp(md[1] + '月' + md[2] + '日（[月火水木金土日]）', 'g')) || [];
     assert.strictEqual(hardcoded.length, 0,
       '締切の曜日が直書きされています: ' + hardcoded.join(', ')
       + '（DEADLINE.full / DEADLINE.label を使ってください）');
-    assert.ok(C.DEADLINE.full.includes('（水）'), '締切の曜日が導出できていません');
+    // 期待する曜日は、content.js とは別の道（Intl）で出す
+    const dow = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' })
+      .format(C.DEADLINE.at);
+    assert.ok(C.DEADLINE.full.includes('（' + dow + '）'),
+      '締切の曜日が導出できていません: ' + C.DEADLINE.full + '（正しくは ' + dow + '）');
   });
 
   test('紙面に締切の完全な表記がある', async () => {

@@ -2803,11 +2803,16 @@ function renderMap(){
         && r.owners[id].status !== '重複（無効）';
   });
   $('#unassignedN').textContent = rest.length ? '（' + rest.length + '社）' : '';
+  // 名前を押すと割り当ての相手に選ぶ。一般は割り当てられないので、ただの文字にする
+  var canAssign = (S.role === '管理者');
   $('#unassigned').innerHTML = rest.length
     ? rest.map(function(id){
         var o = r.owners[id];
         var units = String(o.size).indexOf('3間') >= 0 ? 2 : 1;
-        return '<div class="r"><span><a href="#" data-pick="'+esc(id)+'">'+esc(o.name)+'</a></span>'
+        var nm = canAssign
+          ? '<a href="#" data-pick="'+esc(id)+'">'+esc(o.name)+'</a>'
+          : esc(o.name);
+        return '<div class="r"><span>'+nm+'</span>'
              + '<span style="font-size:11.5px;color:var(--muted)">'+units+'区画</span></div>';
       }).join('')
     : '<p style="margin:0;font-size:12.5px;color:var(--muted)">全員の区画が決まっています。</p>';
@@ -2829,6 +2834,16 @@ function renderMap(){
 }
 
 function onSpaceClick(no, id){
+  // 一般は見るだけ。「左で選んでから押して」と案内すると、できない操作に誘ってしまう
+  if (S.role !== '管理者'){
+    if (id){
+      var ow = S.spaces.owners[id];
+      toast(no + '番：' + id + '　' + (ow ? ow.name : ''));
+    } else {
+      toast(no + '番は未割当です。');
+    }
+    return;
+  }
   var who = $('#aWho').value;
   if (!who){
     if (id){
@@ -3045,6 +3060,9 @@ function applyRole(){
     if (el.id === 'purgeBox') return;
     el.hidden = !isAdmin;
   });
+  // 区画の割り当ては管理者だけ。一般には「見るだけ」と書いた札を出す
+  var ro = document.getElementById('aReadOnly');
+  if (ro) ro.hidden = isAdmin;
   // 役割が分かるのは入室したあと。**それまでに開いていたタブ**を閉じ直す。
   // people だけを見ていたので、#settings や #mail は開いたままだった
   if (!isAdmin){
@@ -7382,7 +7400,8 @@ const HOWTO = {
     ['マス目', '1つが1区画（約2.7m×3.6m）です。'
             + '数は設定の「区画の総数」で決まります。'],
     ['割り当て', '**右の「区画の割り当て」で**出店者を選んでから、マスを押すと決まります。'
-              + '2区画の事業者は、続いた2マスを使います。'],
+              + '2区画の事業者は、続いた2マスを使います。'
+              + '**割り当てと解除は管理者だけ**ができます（一般の方は見るだけです）。'],
     // 「解除できない」と思われていた（2026-09-03 の検証で指摘）。
     // ボタンは割当済みの出店者を選んだときだけ出るので、見つからない
     ['やめるとき', '**右でその出店者を選ぶ**と、下に「この出店者の割当を解除」が出ます。'
@@ -7896,11 +7915,17 @@ function html() {
         </div>
         <div class="assignbox">
           <h3>区画の割り当て</h3>
+          <!-- 割り当てと解除は管理者のみ（けいた確定・2026-09-25・I6）。
+               守りはサーバー側（Admin.gs の adminOnly）。ここは見た目だけ -->
+          <p class="hint" id="aReadOnly">区画の割り当て・解除は、管理者だけができます。
+          変えたいときは事務局にご連絡ください。マップと下の一覧は、どなたでも見られます。</p>
+          <div class="admin-only" id="aCtl" hidden>
           <select id="aWho"></select>
           <div class="cur" id="aCur" style="display:none"></div>
           <p class="hint">出店者を選び、マップの区画を押すと、希望の区画数ぶんを連続で押さえます。
           最後の番号と1番はつながっています。すでに割り当てられている区画は選べません。</p>
           <button class="danger" id="aDel" style="display:none">この出店者の割当を解除</button>
+          </div>
           <h3 style="margin-top:18px">まだ割り当てていない出店者 <span id="unassignedN"></span></h3>
           <div class="rows2" id="unassigned"></div>
           <h3 style="margin-top:18px">区画順の割当</h3>

@@ -297,7 +297,7 @@ p{ margin:1.2mm 0 }
     <div class="c"><div class="k">02</div><div class="t">対面のときはQRを見せる</div>
       <div class="d">名刺サイズのQRカードと、A4の掲示用をご用意しています。その場で読み取っていただけます。</div></div>
     <div class="c"><div class="k">03</div><div class="t">締切前にひと声かける</div>
-      <div class="d">リマインドの短文も用意しています。9月23日ごろの送付を想定しています。</div></div>
+      <div class="d">リマインドの短文も用意しています。10月2日ごろの送付を想定しています。</div></div>
   </div>
 
   <h2><span class="n">03</span>応募があったあとの流れ</h2>

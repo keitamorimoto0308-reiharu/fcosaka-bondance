@@ -223,7 +223,7 @@ const DB = {
     { state: '確認中', text: '来場者数の表記をFC大阪と調整する', owner: 'けいた',
       due: '2026-08-25', author: '山田 太郎', createdAt: '2026-08-20', doneAt: '', memo: '期日を過ぎた例' },
   ],
-  settings: { '締切日時': '2026-09-30 18:00', '区画総数': '50', '目標出店社数': '',
+  settings: { '締切日時': '2026-10-09 18:00', '区画総数': '50', '目標出店社数': '',
               '要対応_経過日数': '3', 'スケジュールの警告日数': '3',
               '進行表の日付': '2026-10-24', '進行表の自動保存分': '3',
               '担当社員への結果通知': 'ON',
@@ -923,7 +923,7 @@ function summary(auth) {
   });
 
   revenue += PRICES.tentT1 * rental.tentT1 + PRICES.tentT2 * rental.tentT2;
-  const deadline = new Date('2026-09-30T18:00:00+09:00');
+  const deadline = new Date('2026-10-09T18:00:00+09:00');
   const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / 86400000);
 
   // 要対応。本番 gas/Admin.gs と同じものを返す。
@@ -982,7 +982,7 @@ function summary(auth) {
                missingMore: Math.max(missingNames.length - 5, 0),
                stage: f.stage === 'confirm' ? 'confirm' : 'apply' };
     }),
-    deadline: '2026年9月30日（水）18:00', daysLeft,
+    deadline: '2026年10月9日（金）18:00', daysLeft,
     todo: {
       unconfirmed,
       stale: rows.filter(r => r['ステータス'] === '審査中').slice(0, 2)
@@ -1643,6 +1643,9 @@ function handle(payload) {
                background: '', total: DB.spaces.length };
     }
     case 'adminAssign': {
+      // 本番（gas/Admin.gs の adminOnly）と同じく管理者のみ。文言も合わせる
+      if (auth.role !== '管理者') return { ok: false, error: 'forbidden',
+        message: 'この操作は管理者のみです。' };
       const r = DB.rows.find(x => x['受付ID'] === payload.id);
       if (!r) return { ok: false, error: 'not_found' };
       const units = (payload.units == null)
@@ -1669,6 +1672,8 @@ function handle(payload) {
       return { ok: true, spaces: want };
     }
     case 'adminUnassign': {
+      if (auth.role !== '管理者') return { ok: false, error: 'forbidden',
+        message: 'この操作は管理者のみです。' };
       const r = DB.rows.find(x => x['受付ID'] === payload.id);
       if (!r) return { ok: false, error: 'not_found' };
       DB.spaces.forEach(s => { if (s.id === payload.id) s.id = ''; });

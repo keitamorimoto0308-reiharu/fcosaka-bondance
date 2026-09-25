@@ -46,7 +46,7 @@ const NOTICE = 'このページは、FC大阪およびUPDATERよりご案内を�
  * 食い違ったらビルドを止める（src/build-pdf.js の verifyConfig）。
  */
 const DEADLINE = (function () {
-  const at = new Date('2026-09-30T18:00:00+09:00');
+  const at = new Date('2026-10-09T18:00:00+09:00');
   const jst = new Date(at.getTime() + 9 * 3600 * 1000);   // UTC基準で日本時間の暦を読む
   const dow = '日月火水木金土'[jst.getUTCDay()];
   const m = jst.getUTCMonth() + 1, d = jst.getUTCDate();
@@ -448,7 +448,7 @@ const KIT = {
       '',
       '【署名】',
     ],
-    note: '締切の1週間前（9/23頃）に送る想定です。',
+    note: '締切の1週間前（10/2頃）に送る想定です。',
   },
 
   /** ③ 対面・電話で紹介したあと、その場で送る短文 */

@@ -17,7 +17,7 @@
  *   1. npm run push            テストを通してから GAS へ（鍵を取って走る）
  *   2. clasp create-version    版を作り、**出力から番号を自動で拾う**
  *   3. clasp update-deployment 公開中のURLをその版に切り替える
- *   4. deploy.js preview       公開ページを出し直す（モードは必ず付ける）
+ *   4. deploy.js <MODE>        公開ページを出し直す（モードは必ず付ける。下の MODE）
  *   5. 反映後、外から健康を確かめる
  *
  * ── 送信先の取り出し ──
@@ -29,7 +29,9 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const MODE = 'preview';          // CP3で本番公開したら 'live'
+// 2026-09-25 けいた指示で受付開始（CP3）。応募フォームはサイトの入口（index.html）に出る。
+// test/deployed.test.js もこの値を読んで、どのページを突き合わせるかを決める
+const MODE = 'live';
 
 function say(s) { process.stdout.write(s + '\n'); }
 function head(n, s) { say(''); say('── ' + n + '/5 ' + s + ' ' + '─'.repeat(Math.max(2, 48 - s.length))); }
@@ -117,6 +119,9 @@ function main() {
       say('  応募の受付      : ' + (j.ok ? 'OK' : '⛔ 落ちています'));
       say('  応募一覧の列    : ' + (j.ledgerReady ? 'OK' : '⛔ setup() が要ります'));
       say('  確定情報の列    : ' + (j.confirmReady ? 'OK' : '⛔ setup() が要ります'));
+      // 締切は設定シートが正（コードでは変わらない）。反映のたびに目で見る
+      say('  応募の締切      : ' + (j.deadline || '⛔ 読めません（設定シートの「締切日時」）'));
+      say('  いま受け付けるか : ' + (j.closed ? '⚠ 受付終了（締切を過ぎているか、締切が読めない）' : '受付中'));
       say('');
       if (!j.ok || !j.ledgerReady || !j.confirmReady) {
         say('⛔ 本番が正常ではありません。Apps Script から setup() を1回実行してください。');

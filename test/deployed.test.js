@@ -24,6 +24,16 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const BASE = 'https://bondance.kreha-c.com/';
 
+/*
+ * 応募フォームが公開されている場所は、公開モードで変わる。
+ *   preview … preview.html（入口は準備中ページ）
+ *   live    … index.html（2026-09-25 に受付開始）
+ * モードは tools/release.js が正。ここに写すと、切り替えたときに片方だけ古くなる
+ */
+const RELEASE_MODE = (fs.readFileSync(path.join(ROOT, 'tools', 'release.js'), 'utf8')
+  .match(/const MODE = '(\w+)'/) || [])[1];
+const FORM_PAGE = RELEASE_MODE === 'live' ? 'index.html' : 'preview.html';
+
 /** 公開中のページと手元で、必ず一致しているべき目印 */
 const MARKERS = [
   { page: 'admin.html', published: 'admin.html', keys: [
@@ -32,8 +42,7 @@ const MARKERS = [
     'pickLoadIn',           // まとめて搬入時刻を入れる（2026-09-09）
     'loadinBox',            // 搬入の時間割
   ] },
-  // 応募フォームは preview.html として公開されている
-  { page: 'index.html', published: 'preview.html', keys: [
+  { page: 'index.html', published: FORM_PAGE, keys: [
     'logo-stack',           // 新ロゴ（picture の中）
     'btn-outline-brand',    // 白地の枠線ボタン
   ] },
@@ -64,7 +73,7 @@ describe('公開中のページが、手元のビルドとずれていないか'
       assert.deepStrictEqual(missing, [],
         m.published + ' が古いままです。手元にあって公開中に無いもの：'
         + missing.join(', ')
-        + '\n→ node src/deploy.js preview で公開し直してください'
+        + '\n→ npm run release で公開し直してください'
         + '（GASの反映とページの公開は別の操作です）');
     });
   }

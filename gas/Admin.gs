@@ -1986,7 +1986,12 @@ function adminDispatch_(payload) {
                    // 一斉メール。仕様書 §6-2 の権限表で管理者のみ。
                    // **プレビューも管理者のみ**にする。あれは選んだ全社の
                    // 氏名と宛先を返すので、送信を止めても名簿がそのまま出る
-                   'adminBroadcastPreview', 'adminBroadcastSend'];
+                   'adminBroadcastPreview', 'adminBroadcastSend',
+                   // 区画の割り当て・解除。けいた確定（2026-09-25・I6）：一般からは外す。
+                   // 共催者アカウントで誤って動かす事故のほうが怖い（UPDATER の指摘）。
+                   // **見る（adminSpaces）は一般にも残す**。当日、マップを見て回るため。
+                   // 搬入時刻（adminBulkLoadIn）も一般に残す（当日の誘導は営業の仕事）
+                   'adminAssign', 'adminUnassign'];
   if (adminOnly.indexOf(action) >= 0 && auth.role !== '管理者') {
     return { ok: false, error: 'forbidden', message: 'この操作は管理者のみです。' };
   }

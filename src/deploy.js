@@ -98,6 +98,13 @@ copy('assets', 'assets');
 
 if (MODE === 'live') {
   copy('index.html', 'index.html');
+  // 受付開始前に preview.html の URL を伝えた相手がいる（FC大阪・テストの手引き）。
+  // live では preview.html を置かないので、そのままだと 404 になる。
+  // **中身は写さず、入口へ送るだけ**にする（応募フォームが2つあると、片方だけ古くなる）
+  fs.writeFileSync(path.join(WT, 'preview.html'),
+    '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex">'
+    + '<meta http-equiv="refresh" content="0; url=./">'
+    + '<title>移動しました</title><p><a href="./">応募フォームはこちらです</a></p>');
 } else {
   copy('holding.html', 'index.html');
 }
