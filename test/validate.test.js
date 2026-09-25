@@ -24,6 +24,7 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const S = require('../src/schema.js');
+const { validApplication } = require('./_application');
 
 /** 改行コードを揃えて読む。CRLF のままだと目印が見つからず切り出しに失敗する */
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8').split('\r\n').join('\n');
@@ -67,27 +68,6 @@ function loadValidate(staffLabels) {
   return values => JSON.parse(JSON.stringify(fn(values)));
 }
 
-/** 応募段階の必須をすべて満たした、通るはずの応募 */
-function validApplication(over) {
-  return Object.assign({
-    companyName: '株式会社テスト',
-    boothName: 'テスト出店',
-    contactName: 'テスト太郎',
-    contactEmail: 'test@example.com',
-    contactPhone: '06-1234-5678',
-    fcosakaStaff: 'その他',
-    boothTypes: ['展示'],
-    boothDescription: '展示の内容です。',
-    boothSize: 'S1',
-    power: '不要',
-    tentChoice: '持ち込む',
-    tentOwnWidth: 2.5,          // 1区画は約2.7m。これを超えると収まらない
-    tentOwnDepth: 3,
-    tentWeight: '持参する',
-    rentalItems: {},          // 数量で頼む備品は台帳の「レンタル品目」シートで決まる
-    agreeAll: true,
-  }, over || {});
-}
 
 describe('応募の検証（サーバー側を実際に動かす）', () => {
 
