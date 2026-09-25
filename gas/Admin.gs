@@ -1912,6 +1912,8 @@ function adminTodoSave_(auth, payload) {
  */
 var INBOX_MAX = 30;
 var INBOX_DAYS = 60;
+// 検索で読む件数。警報を外すと減るので、画面に出す件数より多く読む
+var INBOX_SCAN = 100;
 
 function adminInbox_(auth) {
   var addr = configText('問い合わせメール', '');
@@ -1923,12 +1925,22 @@ function adminInbox_(auth) {
   var q = 'to:' + addr + ' newer_than:' + INBOX_DAYS + 'd';
   var threads;
   try {
-    threads = GmailApp.search(q, 0, INBOX_MAX);
+    // 警報を外したあとで INBOX_MAX 件残るよう、多めに取る
+    threads = GmailApp.search(q, 0, INBOX_SCAN);
   } catch (e) {
     logError_('adminInbox_', e);
     return { ok: false, error: 'gmail_failed',
       message: 'メールを読み取れませんでした。権限の承認が必要な可能性があります。' };
   }
+
+  // システムの警報（gas/Mail.gs の alertOperator_）は問い合わせではないので出さない。
+  // 警報は**すべての1通が**システムから出たスレッドとして届く。
+  // 問い合わせにこちらが返信したスレッドには相手の1通が入るので、外れない
+  threads = threads.filter(function (th) {
+    return !th.getMessages().every(function (m) {
+      return String(m.getFrom() || '').indexOf(ALERT_SENDER_NAME_) >= 0;
+    });
+  }).slice(0, INBOX_MAX);
 
   var rows = threads.map(function (th) {
     var msgs = th.getMessages();

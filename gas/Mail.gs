@@ -341,6 +341,14 @@ var ALERT_ = {
 };
 
 /**
+ * 警報メールの差出人名。**ダッシュボードの「問い合わせメール」から警報を外す目印**
+ * にも使う（gas/Admin.gs の adminInbox_）。警報は問い合わせと同じ宛先に届くので、
+ * 目印が無いと、出店者からの問い合わせが警報に埋もれる（けいた指摘・2026-09-25）。
+ * 送る側と読む側で**同じ定数**を見ること。片方だけ変えると、黙って混ざり始める
+ */
+var ALERT_SENDER_NAME_ = 'サステナ盆踊り 応募システム';
+
+/**
  * 運用者（設定シートの「障害通知先」、既定は問い合わせメール）に警報を送る。
  * 通知が飛ばない事故は、通知が飛ばないので誰も気づかない。その輪を断つための最後の一本。
  *
@@ -377,7 +385,7 @@ function alertOperator_(key, receiptId, extra) {
     ]);
 
     GmailApp.sendEmail(to, '【' + a.level + '】サステナ盆踊り｜' + a.title,
-      body.join('\n'), { name: 'サステナ盆踊り 応募システム' });
+      body.join('\n'), { name: ALERT_SENDER_NAME_ });
   } catch (e) {
     console.error('[alertOperator_] 通知にも失敗: ' + e);
   }
